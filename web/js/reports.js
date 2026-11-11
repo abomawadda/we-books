@@ -42,7 +42,7 @@ Router.add("/a/reports", view => {
 on("pickRep", v => { Rep.sel = v; Shell.rerender(); });
 on("printRep", () => {
   const c = $("#repArea").cloneNode(true);
-  $$(".md\\:hidden", c).forEach(x => x.remove());
+  $$(".lg\\:hidden", c).forEach(x => x.remove());
   $$("[style*=max-height]", c).forEach(x => x.style.maxHeight = "none");
   openPrint((REPORTS.find(r => r[0] === Rep.sel) || [])[2] || "تقرير", c.innerHTML);
 });
