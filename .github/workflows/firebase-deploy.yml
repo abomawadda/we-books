@@ -1,0 +1,53 @@
+# نشر خادم Firebase تلقائياً (الدوال + قواعد Firestore) عند أي تغيير في firebase/ أو Code.gs
+# يحتاج سراً واحداً في GitHub: FIREBASE_SERVICE_ACCOUNT (محتوى ملف مفتاح حساب الخدمة JSON)
+name: نشر Firebase
+on:
+  push:
+    branches: [main, claude/lucid-dirac-8quhon]
+    paths: ['firebase/**', 'apps-script/Code.gs', '.github/workflows/firebase-deploy.yml']
+  workflow_dispatch:
+concurrency: firebase-deploy
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      PROJECT: we-books-9d3a0
+      HAS_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+    steps:
+      - name: التحقق من وجود المفتاح
+        if: env.HAS_KEY != 'true'
+        run: echo "::warning::لم يُضف السر FIREBASE_SERVICE_ACCOUNT بعد — تم تخطي النشر."
+      - uses: actions/checkout@v4
+        if: env.HAS_KEY == 'true'
+      - uses: actions/setup-node@v4
+        if: env.HAS_KEY == 'true'
+        with: { node-version: 22 }
+      - name: الاختبارات قبل النشر (61 سيناريو)
+        if: env.HAS_KEY == 'true'
+        run: cd firebase/functions && npm ci && npm test
+      - uses: google-github-actions/auth@v2
+        if: env.HAS_KEY == 'true'
+        with: { credentials_json: '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' }
+      - uses: google-github-actions/setup-gcloud@v2
+        if: env.HAS_KEY == 'true'
+      - name: تفعيل الخدمات اللازمة (مرة واحدة، آمن للتكرار)
+        if: env.HAS_KEY == 'true'
+        run: >
+          gcloud services enable --project $PROJECT cloudfunctions.googleapis.com cloudbuild.googleapis.com
+          artifactregistry.googleapis.com run.googleapis.com eventarc.googleapis.com cloudscheduler.googleapis.com
+          firestore.googleapis.com iamcredentials.googleapis.com pubsub.googleapis.com
+      - name: النشر
+        if: env.HAS_KEY == 'true'
+        run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force
+      - name: صلاحية إصدار رموز الدخول للدالة
+        if: env.HAS_KEY == 'true'
+        run: |
+          NUM=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+          SA="$NUM-compute@developer.gserviceaccount.com"
+          gcloud iam service-accounts add-iam-policy-binding $SA --project $PROJECT \
+            --member="serviceAccount:$SA" --role="roles/iam.serviceAccountTokenCreator" --quiet
+      - name: فحص الدالة بعد النشر
+        if: env.HAS_KEY == 'true'
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' -d '{"data":{"action":"GET_PUBLIC_INIT_DATA"}}' \
+            https://europe-west1-$PROJECT.cloudfunctions.net/api | tee /dev/stderr | grep -q '"success":true'
