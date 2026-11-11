@@ -57,7 +57,13 @@ jobs:
           done
       - name: النشر
         if: env.HAS_KEY == 'true'
-        run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force --debug 2>&1 | tail -150; test ${PIPESTATUS[0]} -eq 0
+        run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force
+      - name: سجل آخر بناء فاشل (للتشخيص)
+        if: failure() && env.HAS_KEY == 'true'
+        run: |
+          B=$(gcloud builds list --region europe-west1 --project $PROJECT --filter='status=FAILURE' --limit 1 --format='value(id)')
+          [ -n "$B" ] && gcloud builds log $B --region europe-west1 --project $PROJECT | grep -iE "error|denied|permission|fail" | tail -25 || true
+          for FN in api daily; do gcloud functions describe $FN --region europe-west1 --project $PROJECT --format='value(state,stateMessages)' 2>&1 | tail -3; done
       - name: صلاحية إصدار رموز الدخول للدالة
         if: env.HAS_KEY == 'true'
         run: |
