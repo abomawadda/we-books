@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Tajawal", system-ui, sans-serif;
+  --color-we: #5B308C;
+  --color-we-dark: #432267;
+  --color-we-light: #EFE8F6;
+}
+
+body { @apply bg-gray-50 text-gray-900 font-sans; }
