@@ -15,18 +15,27 @@ cd firebase/functions && npm i && npm test        # الـ 61 سيناريو ع�
 ```
 ```bash
 cd firebase && firebase emulators:exec --only firestore --project demo-we-books "node test/emulator.test.js"
+firebase emulators:exec --only firestore --project demo-we-books "node test/load.test.js 200"
 ```
 
 ## خطوات التشغيل (تحتاج حسابك)
 1. Firebase Console: أنشئ مشروعاً (Blaze)، فعّل Firestore (Native, `eur3` أو `europe-west1`) و Authentication، وأضف Web App.
 2. ضع تنبيه ميزانية شهري صغيراً (Billing ← Budgets & alerts).
 3. امنح حساب خدمة الدوال دور **Service Account Token Creator** على نفسه (لازم لـ `createCustomToken`).
-4. `cp .firebaserc.example .firebaserc` وضع معرّف المشروع، ثم `firebase deploy --only functions,firestore`.
+4. `cp .firebaserc.example .firebaserc` (المشروع: `we-books-9d3a0`)، ثم `firebase deploy --only functions,firestore`.
 5. الهجرة: `node scripts/migrate-from-sheet.js --dry` ثم بدون `--dry` (والكتابة في الشيت موقوفة).
-6. املأ `FIREBASE` في `web/config.js` وانشر الواجهة.
+6. في `web/config.js` اجعل `FIREBASE: window.FIREBASE_READY` (الإعدادات موجودة) وانشر الواجهة.
 
-## المتبقي (المرحلة 2)
-- **ضغط يوم الحجز:** الحجز حالياً يقرأ مجموعات كاملة داخل الـ transaction، فالحجوزات المتزامنة تتسلسل مع إعادة محاولات. الخطوة التالية: قراءة بيانات الموظف والكتب فقط في `SUBMIT_OR_UPDATE_RESERVATION` + عدّاد تسلسلي للأسبقية، ثم اختبار حمل.
+## المرحلة 2: ضغط يوم الحجز (منفّذة)
+- `SUBMIT_OR_UPDATE_RESERVATION` يحمّل صفوف الموظف وحده من الموظفين والحجوزات والفواتير والأقساط.
+- القراءة عبر **فهرس الموظف** `_emp_index/{Emp_ID}` (معرّفات مستنداته لكل جدول) ثم قراءة المستندات بمعرّفاتها — بلا استعلامات داخل الـ transaction، لأن الاستعلام يقفل نطاقاً يتعارض مع إضافات الآخرين (أثبتناه: 30 عملية باستعلام = 266 محاولة، وبالمعرّف = 30).
+- الفهرس يُحدَّث تلقائياً مع كل كتابة (arrayUnion/arrayRemove)، وسكربت الهجرة يبنيه.
+- `overwriteTableData` يكتب الفروق فقط ويحافظ على نفس المستند لنفس المفتاح.
+- قائمة الجداول للحجز محمَّلة مسبقاً فلا يعيد كل طلب متزامن اكتشافها.
+- **الأسبقية:** ختم بالملّي ثانية من ساعة خادم Google داخل الـ transaction. لم نضف عدّاداً تسلسلياً عاماً لأنه مستند واحد تتزاحم عليه كل الحجوزات فيعيد عنق الزجاجة نفسه.
+- اختبار الحمل (`test/load.test.js`): **200 حجز متزامن في ~2.6 ث على المحاكي، 210 محاولة لـ 203 عملية**، بلا بنود مكررة أو ضائعة، وتعديل متزامن لنفس الموظف يُسلسَل صحيحاً.
+
+## المتبقي
 - حدّ محاولات الدخول الخاطئة في ذاكرة كل نسخة خادم فقط ← نقله إلى Firestore.
 - إيقاف حساب إداري لا يُلغي جلسته الحالية حتى انتهاء الـ 12 ساعة (يمكن إضافة `revokeRefreshTokens`).
 - تصدير ليلي من Firestore إلى الشيت كنسخة تقارير (Scheduled Function).

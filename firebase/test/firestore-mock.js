@@ -13,7 +13,12 @@ function makeContext(clock) {
   const run = (key, fn) => rt.runSync(store, key, fn, { commitOnFailure: process.env.COMMIT_ON_FAILURE === '1' });
   const ctx = {
     __S: rt.S,
-    __api: (a, p, t) => run(a, g => g.callServerApi(a, p, t)),
+    __api: (a, p, t) => {
+      // نفس النطاق المحدود المستخدم في الإنتاج (الجلسة من ذاكرة الجلسات)
+      const e = t && rt.cache.get(t);
+      const scope = rt.scopeFor(a, p, e ? JSON.parse(e.v) : null);
+      return rt.runSync(store, a, g => g.callServerApi(a, p, t), { commitOnFailure: process.env.COMMIT_ON_FAILURE === '1', scope });
+    },
     __init: () => run('INIT', g => { g.seedInitialData_(); return { success: true }; }),
     __job: () => run('JOB', g => g.dailyMaintenanceJob()),
     __DB: {

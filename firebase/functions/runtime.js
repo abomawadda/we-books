@@ -103,11 +103,30 @@ function createRuntime(opts = {}) {
       uow.writes.set(name + '/' + rec.id, { table: name, id: rec.id, data: rec.data, ord: rec.ord });
       return true;
     },
+    // يمس فقط المستندات المحمَّلة (في النطاق المحدود: صفوف الموظف وحده). يعيد استخدام المستند
+    // نفسه لنفس المفتاح ويتجاهل غير المتغيّر، فلا تُكتب إلا الفروق.
     overwriteTableData(name, arr) {
       const t = need(name);
-      t.forEach(r => uow.writes.set(name + '/' + r.id, { table: name, id: r.id, del: true }));
-      uow.tables[name] = [];
-      this.insertRecordsBatch(name, arr || []);
+      const pk = HEADERS[name][0];
+      const old = new Map();
+      t.forEach(r => { const k = String(r.data[pk]); if (!old.has(k)) old.set(k, r); else uow.writes.set(name + '/' + r.id, { table: name, id: r.id, del: true, prev: r.data }); });
+      const next = [];
+      (arr || []).forEach(o => {
+        const k = String(o[pk]);
+        const prev = old.get(k);
+        if (prev) {
+          old.delete(k);
+          const data = clean(name, o);
+          if (JSON.stringify(data) !== JSON.stringify(prev.data)) uow.writes.set(name + '/' + prev.id, { table: name, id: prev.id, data, ord: prev.ord });
+          next.push({ id: prev.id, ord: prev.ord, data });
+        } else {
+          const rec = { id: newDocId(), ord: nextOrd(), data: clean(name, o) };
+          uow.writes.set(name + '/' + rec.id, { table: name, id: rec.id, data: rec.data, ord: rec.ord });
+          next.push(rec);
+        }
+      });
+      old.forEach(r => uow.writes.set(name + '/' + r.id, { table: name, id: r.id, del: true, prev: r.data }));
+      uow.tables[name] = next;
     },
     // العزل والتسلسل تضمنهما transaction في Firestore (أو التسلسل في مخزن الذاكرة)
     executeWithLock(fn) { return fn(); }
@@ -117,6 +136,23 @@ function createRuntime(opts = {}) {
 
   // ---------------- تشغيل وحدة عمل ----------------
   const hints = new Map(); // اسم العملية ← الجداول التي احتاجتها سابقاً (لتقليل إعادة التشغيل)
+
+  // ---------------- النطاق المحدود (ضغط يوم الحجز) ----------------
+  // عمليات لا تحتاج إلا صفوف موظف واحد من هذه الجداول: نحمّل صفوفه فقط (استعلام Emp_ID ==)
+  // فلا تتعارض transactions الموظفين المختلفين ولا تُقرأ آلاف المستندات في كل حجز.
+  const EMP_SCOPED = {
+    SUBMIT_OR_UPDATE_RESERVATION: [S.EMPLOYEES, S.RES_HEADER, S.RES_ITEMS, S.EMP_INVOICES, S.INSTALLMENTS]
+  };
+  function scopeFor(action, payload, session) {
+    const tables = EMP_SCOPED[action];
+    if (!tables || !session) return null;
+    const empId = String(session.userType === 'EMPLOYEE' ? session.empId : (payload && payload.empId) || '').trim();
+    if (!empId) return null;
+    return { field: 'Emp_ID', value: empId, tables };
+  }
+  // تحميل مسبق معروف لعمليات يوم الحجز (حتى لا يكتشف كل طلب متزامن جداوله بإعادة التشغيل)
+  hints.set('SUBMIT_OR_UPDATE_RESERVATION', [S.SETTINGS, S.EMPLOYEES, S.PHASES, S.BOOKS, S.RES_HEADER, S.RES_ITEMS, S.EMP_INVOICES, S.INSTALLMENTS]);
+  const filterOf = (scope, name) => (scope && scope.tables.indexOf(name) !== -1) ? { field: scope.field, value: scope.value } : null;
 
   function attempt(key, tables, fn) {
     uow = { tables, writes: new Map(), missing: new Set() };
@@ -129,13 +165,13 @@ function createRuntime(opts = {}) {
   }
 
   /** نسخة متزامنة لمخزن متزامن (الاختبارات) */
-  function runSync(store, key, fn, { commitOnFailure = false } = {}) {
+  function runSync(store, key, fn, { commitOnFailure = false, scope = null } = {}) {
     const want = new Set(hints.get(key) || []);
     for (let i = 0; i < 30; i++) {
       const tables = {};
-      want.forEach(n => { tables[n] = store.loadSync(n); });
+      want.forEach(n => { tables[n] = store.loadSync(n, filterOf(scope, n)); });
       const r = attempt(key, tables, fn);
-      if (r.missing) { r.missing.forEach(n => want.add(n)); continue; }
+      if (r.missing) { r.missing.forEach(n => want.add(n)); hints.set(key, [...new Set([...(hints.get(key) || []), ...want])]); continue; }
       hints.set(key, [...want]);
       if (commitOnFailure || !(r.result && r.result.success === false)) store.commitSync(r.writes);
       return r.result;
@@ -144,20 +180,21 @@ function createRuntime(opts = {}) {
   }
 
   /** نسخة غير متزامنة: store.transact(async tx => …) حيث tx.load(name) و tx.commit(writes) */
-  async function run(store, key, fn, { commitOnFailure = false, readOnly = false } = {}) {
+  async function run(store, key, fn, { commitOnFailure = false, readOnly = false, scope = null } = {}) {
     const want = new Set(hints.get(key) || []);
     for (let i = 0; i < 30; i++) {
+      (hints.get(key) || []).forEach(n => want.add(n));
       const r = await store.transact(async tx => {
         const tables = {};
         const names = [...want];
-        const loaded = await Promise.all(names.map(n => tx.load(n)));
+        const loaded = await Promise.all(names.map(n => tx.load(n, filterOf(scope, n))));
         names.forEach((n, j) => { tables[n] = loaded[j]; });
         const a = attempt(key, tables, fn);
         if (a.missing) return a;
         if (!readOnly && (commitOnFailure || !(a.result && a.result.success === false))) tx.commit(a.writes);
         return a;
       }, { readOnly });
-      if (r.missing) { r.missing.forEach(n => want.add(n)); continue; }
+      if (r.missing) { r.missing.forEach(n => want.add(n)); hints.set(key, [...new Set([...(hints.get(key) || []), ...want])]); continue; }
       hints.set(key, [...want]);
       return r.result;
     }
@@ -174,20 +211,21 @@ function createRuntime(opts = {}) {
     };
   }
 
-  return { ctx, G, S, TABLES, HEADERS, run, runSync, apiFn, cache };
+  const EMP_INDEXED = [...new Set([].concat(...Object.values(EMP_SCOPED)))];
+  return { ctx, G, S, TABLES, HEADERS, run, runSync, apiFn, cache, scopeFor, EMP_INDEXED, hints };
 }
 
 /** مخزن في الذاكرة (للاختبارات) بنفس واجهة مخزن Firestore */
 function memoryStore() {
   const data = {}; // table -> Map(id -> {ord, data})
   const tbl = n => (data[n] = data[n] || new Map());
-  const loadSync = n => [...tbl(n).entries()].map(([id, v]) => ({ id, ord: v.ord, data: Object.assign({}, v.data) })).sort((a, b) => a.ord - b.ord);
+  const loadSync = (n, f) => [...tbl(n).entries()].filter(([, v]) => !f || String(v.data[f.field]) === String(f.value)).map(([id, v]) => ({ id, ord: v.ord, data: Object.assign({}, v.data) })).sort((a, b) => a.ord - b.ord);
   const commitSync = writes => writes.forEach(w => { if (w.del) tbl(w.table).delete(w.id); else tbl(w.table).set(w.id, { ord: w.ord, data: Object.assign({}, w.data) }); });
   let chain = Promise.resolve();
   return {
     data, loadSync, commitSync,
     transact(fn) { // تسلسل كامل
-      const p = chain.then(() => { let pending = null; return fn({ load: async n => loadSync(n), commit: w => { pending = w; } }).then(r => { if (pending) commitSync(pending); return r; }); });
+      const p = chain.then(() => { let pending = null; return fn({ load: async (n, f) => loadSync(n, f), commit: w => { pending = w; } }).then(r => { if (pending) commitSync(pending); return r; }); });
       chain = p.catch(() => {});
       return p;
     }

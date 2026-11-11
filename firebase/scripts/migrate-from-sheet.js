@@ -25,6 +25,7 @@ const WIPE = process.argv.includes('--wipe');
   admin.initializeApp();
   const db = admin.firestore();
   let total = 0;
+  const empIndex = {}; // Emp_ID -> {table: [docIds]} (فهرس الموظف لعمليات يوم الحجز)
   for (let i = 0; i < rt.TABLES.length; i++) {
     const name = rt.TABLES[i];
     const values = (data.valueRanges[i] && data.valueRanges[i].values) || [];
@@ -45,12 +46,20 @@ const WIPE = process.argv.includes('--wipe');
     total += docs.length;
     if (DRY) continue;
     const col = db.collection(name);
-    if (WIPE) { const old = await col.listDocuments(); for (let k = 0; k < old.length; k += 400) { const b = db.batch(); old.slice(k, k + 400).forEach(d => b.delete(d)); await b.commit(); } }
+    if (WIPE) { for (const ix of await db.collection('_emp_index').listDocuments()) { if (i === 0) await ix.delete(); } const old = await col.listDocuments(); for (let k = 0; k < old.length; k += 400) { const b = db.batch(); old.slice(k, k + 400).forEach(d => b.delete(d)); await b.commit(); } }
     for (let k = 0; k < docs.length; k += 400) {
       const b = db.batch();
-      docs.slice(k, k + 400).forEach(d => b.set(col.doc(), d));
+      docs.slice(k, k + 400).forEach(d => {
+        const ref = col.doc(); b.set(ref, d);
+        if (rt.EMP_INDEXED.includes(name) && d.Emp_ID) { const e = (empIndex[d.Emp_ID] = empIndex[d.Emp_ID] || {}); (e[name] = e[name] || []).push(ref.id); }
+      });
       await b.commit();
     }
+  }
+  if (!DRY) {
+    const ids = Object.keys(empIndex);
+    for (let k = 0; k < ids.length; k += 400) { const b = db.batch(); ids.slice(k, k + 400).forEach(id => b.set(db.collection('_emp_index').doc(id), empIndex[id])); await b.commit(); }
+    console.log('فهرس الموظفين: ' + ids.length);
   }
   console.log((DRY ? '[تجربة] ' : '') + 'الإجمالي: ' + total + ' صف');
 })().catch(e => { console.error(e); process.exit(1); });

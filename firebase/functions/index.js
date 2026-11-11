@@ -12,8 +12,8 @@ const { firestoreStore } = require('./store');
 admin.initializeApp();
 setGlobalOptions({ region: 'europe-west1', maxInstances: 20 });
 const db = admin.firestore();
-const store = firestoreStore(db);
 const rt = createRuntime();
+const store = firestoreStore(db, { indexed: rt.EMP_INDEXED });
 
 const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT']);
 const ADMIN_SESSION_SEC = 12 * 3600; // جلسة الإدارة 12 ساعة؛ الموظف تبقى جلسته على الجهاز
@@ -40,7 +40,7 @@ exports.api = onCall({ memory: '512MiB', timeoutSeconds: 120, concurrency: 40, c
       session = tok.s;
       if (session.userType === 'ADMIN' && Date.now() / 1000 - tok.auth_time > ADMIN_SESSION_SEC) return EXPIRED;
     }
-    return await rt.run(store, action, rt.apiFn(action, payload, session), { readOnly: READ_ONLY.has(action) });
+    return await rt.run(store, action, rt.apiFn(action, payload, session), { readOnly: READ_ONLY.has(action), scope: rt.scopeFor(action, payload, session) });
   } catch (err) {
     console.error(action, err);
     return { success: false, message: 'حدث خطأ في الخادم أثناء تنفيذ العملية. حاول مرة أخرى.' };

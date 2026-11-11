@@ -8,8 +8,8 @@ const { createRuntime } = require('../functions/runtime');
 const { firestoreStore } = require('../functions/store');
 
 admin.initializeApp({ projectId: 'demo-we-books' });
-const store = firestoreStore(admin.firestore());
 const rt = createRuntime();
+const store = firestoreStore(admin.firestore(), { indexed: rt.EMP_INDEXED });
 const api = (a, p, s) => rt.run(store, a, rt.apiFn(a, p, s), { readOnly: /^GET_/.test(a) });
 let n = 0;
 const ok = r => { assert.ok(r && r.success, JSON.stringify(r && r.message)); n++; return r; };
