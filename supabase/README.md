@@ -18,7 +18,12 @@ cd test && node ../supabase/run-scenarios.mjs     # الـ 61 سيناريو ع�
 node ../supabase/live.test.mjs                     # اختبار حي على الخادم (دخول، حجز متزامن، صلاحيات)
 ```
 
+## المهمة اليومية
+- `pg_cron` يشغّل `books.run_daily_job()` يومياً 23:00 UTC (1 صباحاً بالقاهرة شتاءً): تستدعي الدالة بالعملية `DAILY_JOB`
+  ← `dailyMaintenanceJob` من Code.gs (إغلاق المراحل المنتهية، وتحديث حالة الأقساط المتأخرة).
+- محمية بمفتاح `cron_key` في `books.config` لا يغادر قاعدة البيانات. التشغيل يدوياً: `select books.run_daily_job();`
+- النتيجة في `net._http_response`. ملف الإعداد: `supabase/migrations/books_daily_job.sql`.
+
 ## المتبقي
-- المهمة اليومية (إغلاق المراحل المنتهية وتحديث الأقساط المتأخرة) عبر pg_cron.
 - نسخة تقارير ليلية إلى Google Sheet.
 - تغيير كلمات مرور الإدارة المؤقتة وحذف البيانات التجريبية قبل التشغيل الفعلي.
