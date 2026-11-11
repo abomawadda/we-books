@@ -90,6 +90,13 @@ const reply = (o: any, status = 200) => new Response(JSON.stringify(o), { status
 async function handle(action: string, payload: any, token: string) {
   const rt = await runtime();
   if (action === 'LOGOUT') return { success: true };
+  // المهمة اليومية (pg_cron): محمية بمفتاح في books.config لا يعرفه إلا قاعدة البيانات
+  if (action === 'DAILY_JOB') {
+    const k = await sql`select value from books.config where key = 'cron_key'`;
+    if (!k.length || !payload || typeof payload.key !== 'string' || payload.key !== k[0].value) return { success: false, message: 'غير مصرح.' };
+    await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; });
+    return { success: true, message: 'تم تنفيذ المهمة اليومية.' };
+  }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const res = await rt.run(store, action, rt.apiFn(action, payload, null), { readOnly: READ_ONLY.has(action) });
     if (res && res.success) res.sessionToken = await issue(res.user);
