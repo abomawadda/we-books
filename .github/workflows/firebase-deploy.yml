@@ -47,9 +47,17 @@ jobs:
             done
           done
           sleep 30
+      - name: حذف أي دالة عالقة من محاولة نشر فاشلة سابقة
+        if: env.HAS_KEY == 'true'
+        run: |
+          for FN in api daily; do
+            ST=$(gcloud functions describe $FN --region europe-west1 --project $PROJECT --format='value(state)' 2>/dev/null || true)
+            echo "$FN: ${ST:-غير موجودة}"
+            if [ -n "$ST" ] && [ "$ST" != "ACTIVE" ]; then gcloud functions delete $FN --region europe-west1 --project $PROJECT --quiet; fi
+          done
       - name: النشر
         if: env.HAS_KEY == 'true'
-        run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force
+        run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force --debug 2>&1 | tail -150; test ${PIPESTATUS[0]} -eq 0
       - name: صلاحية إصدار رموز الدخول للدالة
         if: env.HAS_KEY == 'true'
         run: |
