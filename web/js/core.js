@@ -150,7 +150,7 @@ const UI = {
     const cell = (c, r) => { const v = typeof c.v === "function" ? c.v(r) : esc(r[c.v]); return v === undefined || v === null || v === "" ? `<span class="text-slate-300">—</span>` : v; };
     const head = `<thead><tr>${cols.map(c => `<th class="${c.cls || ""}">${c.t}</th>`).join("")}</tr></thead>`;
     const body = `<tbody>${rows.map(r => `<tr>${cols.map(c => `<td class="${c.cls || ""}">${cell(c, r)}</td>`).join("")}</tr>`).join("")}</tbody>`;
-    const tableHtml = `<div class="${opts.cardsOnMobile === false ? "" : "hidden md:block"} overflow-auto rounded-xl ring-1 ring-slate-200/70 ${opts.maxH ? "" : ""}" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="tbl" ${opts.id ? `id="${opts.id}"` : ""}>${head}${body}</table></div>`;
+    const tableHtml = `<div class="${opts.cardsOnMobile === false ? "" : "hidden lg:block"} overflow-auto rounded-xl ring-1 ring-slate-200/70 ${opts.maxH ? "" : ""}" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="tbl" ${opts.id ? `id="${opts.id}"` : ""}>${head}${body}</table></div>`;
     if (opts.cardsOnMobile === false) return tableHtml;
     const card = opts.card || (r => {
       const [first, ...rest] = cols.filter(c => !c.noCard);
@@ -159,7 +159,7 @@ const UI = {
         <dl class="grid grid-cols-2 gap-x-3 gap-y-2 mt-2.5">${rest.filter(c => !c.actions).map(c => `<div><dt class="text-[11px] font-semibold text-slate-400">${c.t}</dt><dd class="text-[13.5px] text-slate-800 num">${cell(c, r)}</dd></div>`).join("")}</dl>
         ${act ? `<div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">${cell(act, r)}</div>` : ""}</div>`;
     });
-    return tableHtml + `<div class="md:hidden space-y-2.5">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
+    return tableHtml + `<div class="lg:hidden grid gap-2.5 sm:grid-cols-2">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
   },
   progress(pct, tone) {
     return `<div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full ${tone || "bg-brand-600"} transition-all" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
