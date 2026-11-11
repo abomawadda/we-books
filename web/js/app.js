@@ -222,7 +222,7 @@ const Shell = {
 async function logout(silent) {
   if (APP.token && !silent) call("LOGOUT");
   APP.token = null; APP.user = null; APP.emp = null; APP.adm = null; APP.cart = {}; APP.phaseId = null;
-  store.set("session", null);
+  store.set("session", null); store.set("cache", null);
   while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true);
   Shell.type = null;
   if (silent) toast("انتهت الجلسة، سجّل الدخول مرة أخرى.", "warning");
@@ -287,7 +287,16 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 // ---------------------------------------------------------------- الإقلاع
 window.addEventListener("DOMContentLoaded", async () => {
   const s = store.get("session");
-  if (s && s.token) { APP.token = s.token; APP.user = s.user; Router.render(); reloadData(); }
+  if (s && s.token) {
+    APP.token = s.token; APP.user = s.user;
+    // عرض فوري من آخر بيانات محفوظة في هذه الجلسة، ثم تحديثها من الخادم
+    const c = store.get("cache");
+    if (c && c.t === (s.user.userType === "ADMIN" ? "ADMIN" : "EMP")) {
+      if (c.t === "ADMIN") { APP.adm = c.d; APP.phaseId = c.p || null; if (!APP.phaseId && c.d.phases.length) APP.phaseId = c.d.phases[c.d.phases.length - 1].Phase_ID; }
+      else { APP.emp = c.d; if (c.d.activePhase) APP.phaseId = c.d.activePhase.Phase_ID; Emp.resetCart(); }
+    }
+    Router.render(); reloadData();
+  }
   else Shell.renderLogin();
   const r = await call("GET_PUBLIC_INIT_DATA");
   if (r.success && r.settings && r.settings.INITIATIVE_TITLE) {

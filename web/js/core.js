@@ -274,6 +274,7 @@ const UI = {
     });
   }
 };
+document.addEventListener("keydown", e => { if (e.key === "Escape" && UI._stack.length) UI.close(UI._stack[UI._stack.length - 1]); });
 /** إغلاق النافذة الحالية ثم الانتقال لصفحة */
 function closeAndGo(path) { const top = UI._stack[UI._stack.length - 1]; if (top) { UI._afterPop = path; UI.close(top); } else Router.go(path); }
 window.addEventListener("popstate", () => { if (UI._ignorePop > 0) { UI._ignorePop--; if (!UI._ignorePop) { while (UI._pendingPush > 0) { UI._pendingPush--; try { history.pushState({ sheet: 1 }, ""); } catch (e) { /* */ } } } if (UI._afterPop && !UI._stack.length) { const p = UI._afterPop; UI._afterPop = null; Router.go(p); } return; } const top = UI._stack[UI._stack.length - 1]; if (top) UI.close(top, true); else Router.render(); });

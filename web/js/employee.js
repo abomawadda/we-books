@@ -13,7 +13,7 @@ const Emp = {
     const r = await call("GET_EMPLOYEE_PORTAL_DATA", { phaseId: APP.phaseId });
     if (!r.success) { toast(r.message, "danger"); return; }
     const samePhase = APP.emp && r.activePhase && APP.phaseId === r.activePhase.Phase_ID;
-    APP.emp = r;
+    APP.emp = r; store.set("cache", { t: "EMP", d: r });
     if (r.activePhase) APP.phaseId = r.activePhase.Phase_ID;
     if (!(samePhase && Emp.dirty)) Emp.resetCart();
     Shell.rerender();
@@ -74,7 +74,7 @@ Router.add("/e/home", view => {
   const stepIdx = !reqQty ? 0 : !alloc && !inv ? 1 : deliv < alloc ? 2 : inv && n(inv.Remaining_Balance) > 0 ? 3 : 4;
   const steps = [["shopping-bag", "الحجز"], ["truck", "التوريد"], ["list-ordered", "التخصيص"], ["package-check", "الاستلام"], ["circle-check", "السداد"]];
   const journey = `<ol class="flex items-start justify-between relative">${steps.map((s, i) => `<li class="flex-1 flex flex-col items-center text-center relative">
-      ${i ? `<span class="absolute top-5 right-1/2 w-full h-0.5 ${i <= stepIdx ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
+      ${i ? `<span class="absolute top-5 left-1/2 w-full h-0.5 ${i <= stepIdx ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
       <span class="relative z-[1] w-10 h-10 rounded-full flex items-center justify-center text-[17px] ${i < stepIdx ? "bg-brand-600 text-white" : i === stepIdx ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(i < stepIdx ? "check" : s[0])}</span>
       <span class="mt-2 text-[11.5px] font-semibold ${i <= stepIdx ? "text-slate-800" : "text-slate-400"}">${s[1]}</span></li>`).join("")}</ol>`;
 
@@ -141,11 +141,11 @@ function bookCard(b) {
     <div class="shrink-0 w-[76px] sm:w-full h-[100px] sm:h-28 rounded-xl sm:rounded-none flex flex-col justify-between p-2.5 text-white relative overflow-hidden" style="background:linear-gradient(140deg,${c1},${c2})">
       <span class="absolute -left-4 -bottom-6 text-[86px] opacity-15">${ic("book-open")}</span>
       <span class="text-[10.5px] font-bold bg-white/20 rounded-md px-1.5 py-0.5 self-start backdrop-blur">${esc(b.Subject || "")}</span>
-      <span class="text-[11px] font-semibold opacity-90 truncate">${esc(b.Grade || "")}</span>
+      <span class="text-[22px] opacity-90">${ic("book-open")}</span>
     </div>
     <div class="flex-1 min-w-0 flex flex-col sm:p-3.5 sm:pt-3">
       <h3 class="font-bold text-slate-900 leading-snug text-[14.5px] line-clamp-2">${esc(b.Book_Name)}</h3>
-      <div class="text-[11.5px] text-slate-400 mt-0.5 num">${esc(b.Book_ID)}</div>
+      <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} <span class="text-slate-300">·</span> <span class="num text-slate-400">${esc(b.Book_ID)}</span></div>
       <div class="flex flex-wrap gap-1 mt-1.5">${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
         <div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>

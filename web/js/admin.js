@@ -6,7 +6,7 @@ const Admin = {
   async load() {
     const r = await call("GET_ADMIN_DASHBOARD_DATA");
     if (!r.success) { toast(r.message, "danger"); return; }
-    APP.adm = r;
+    APP.adm = r; store.set("cache", { t: "ADMIN", d: r, p: APP.phaseId });
     if (!APP.phaseId || !r.phases.find(p => p.Phase_ID === APP.phaseId)) {
       const op = r.phases.filter(p => p.Phase_Status !== "Completed");
       APP.phaseId = (op[op.length - 1] || r.phases[r.phases.length - 1] || {}).Phase_ID;
