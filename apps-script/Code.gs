@@ -20,7 +20,7 @@ const DB_SPREADSHEET_ID = "1gvbF2BhoHMeektLSEFZFqFMWjUQPvEZuQsXdGuVJGiM";
 
 const SYSTEM_CONFIG = {
   APP_TITLE: "منظومة إدارة مبادرة الكتب المدرسية بالتخفيض والتقسيط",
-  VERSION: "2.2.0",
+  VERSION: "2.3.0",
   LOCK_TIMEOUT_MS: 25000,
   SESSION_TTL_SEC: 21600, // 6 ساعات
   LOGIN_MAX_FAILS: 5,
@@ -73,12 +73,9 @@ function doGet(e) {
   if (e && e.parameter && e.parameter.diag === "1") {
     return ContentService.createTextOutput(JSON.stringify(runDiagnostics_(), null, 2)).setMimeType(ContentService.MimeType.JSON);
   }
-  ensureDatabaseInitialized_();
-  // ملف HTML يُخدَّم كما هو بدون محرك القوالب، والكود بداخله مغلَّف بـ Base64
-  return HtmlService.createHtmlOutputFromFile('Index')
-    .setTitle(SYSTEM_CONFIG.APP_TITLE)
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  // الواجهة مستضافة على Vercel؛ هذا الرابط واجهة برمجية فقط
+  return ContentService.createTextOutput(JSON.stringify({ ok: true, app: SYSTEM_CONFIG.APP_TITLE, version: SYSTEM_CONFIG.VERSION, api: "POST" }))
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -119,11 +116,6 @@ function runDiagnostics_() {
       employees: DB_Engine.getAllRecords(S.EMPLOYEES).length, books: DB_Engine.getAllRecords(S.BOOKS).length, phases: DB_Engine.getAllRecords(S.PHASES).length };
   });
   add("استدعاء الخادم من الواجهة", () => { const res = callServerApi("GET_PUBLIC_INIT_DATA", {}, null); if (!res.success) throw new Error(res.message); return res.settings.INITIATIVE_TITLE; });
-  add("ملف الواجهة Index", () => {
-    const html = HtmlService.createHtmlOutputFromFile('Index').getContent();
-    const m = html.match(/v(\d+\.\d+\.\d+)<\/small>/);
-    return { size: html.length, uiVersion: m ? m[1] : "غير معروف", base64Wrapped: html.indexOf('atob("') !== -1 };
-  });
   return out;
 }
 
