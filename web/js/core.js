@@ -72,38 +72,6 @@ function toast(msg, type) {
 }
 
 // ---------------------------------------------------------------- الاتصال بالخادم
-// ---- خادم Firebase (Cloud Functions: api) — يُفعَّل بوجود FIREBASE في config.js ----
-const FB_CONFIG = (window.APP_CONFIG && window.APP_CONFIG.FIREBASE) || null;
-const FB_SDK = "https://www.gstatic.com/firebasejs/10.12.2/";
-let _fb = null;
-function fbInit() {
-  if (_fb) return _fb;
-  _fb = Promise.all(["firebase-app", "firebase-auth", "firebase-functions"].map(m => import(FB_SDK + m + ".js"))).then(async ([A, Au, F]) => {
-    const app = A.initializeApp(FB_CONFIG);
-    const auth = Au.getAuth(app); // الجلسة تبقى على الجهاز (IndexedDB)
-    await auth.authStateReady();
-    const fn = F.httpsCallable(F.getFunctions(app, FB_CONFIG.region || "europe-west1"), "api", { timeout: 60000 });
-    return { auth, Au, fn };
-  });
-  _fb.catch(() => { _fb = null; });
-  return _fb;
-}
-async function fbCall(action, payload) {
-  try {
-    const fb = await fbInit();
-    if (action === "LOGOUT") { await fb.Au.signOut(fb.auth); return { success: true }; }
-    if (!/^LOGIN_|^GET_PUBLIC/.test(action) && !fb.auth.currentUser) return { success: false, message: "انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى." };
-    const r = (await fb.fn({ action, payload: payload || {} })).data;
-    if (r && r.success && r.firebaseToken) {
-      await fb.Au.signInWithCustomToken(fb.auth, r.firebaseToken);
-      delete r.firebaseToken; r.sessionToken = "FIREBASE";
-    }
-    return r;
-  } catch (err) {
-    return { success: false, message: err && err.code === "functions/deadline-exceeded" ? "انتهت مهلة الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى." : "تعذر الاتصال بالخادم. تحقق من الإنترنت." };
-  }
-}
-
 function call(action, payload, opts) {
   opts = opts || {};
   busy(true, opts.block ? true : undefined);
@@ -112,7 +80,6 @@ function call(action, payload, opts) {
     if (r && !r.success && /الجلسة/.test(r.message || "") && APP.token) { logout(true); }
     return r;
   };
-  if (FB_CONFIG) return fbCall(action, payload).then(done);
   if (!API_URL) return Promise.resolve(done({ success: false, message: "لم يُضبط رابط الخادم في config.js" }));
   const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = setTimeout(() => ctrl && ctrl.abort(), 60000);

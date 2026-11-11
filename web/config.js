@@ -1,18 +1,7 @@
-// إعداد الخادم. غيّره هنا فقط.
-// - API_URL: رابط نشر Apps Script (الخادم الحالي).
-// - FIREBASE: عند ملئه تنتقل الواجهة تلقائياً إلى Cloud Functions (الدالة api) بدلاً من Apps Script.
-//   انسخ القيم من Firebase Console ← Project settings ← Your apps ← Web app (هذه القيم عامة وليست أسراراً).
+// رابط الخادم. غيّره هنا فقط.
+// الخادم الحالي: Supabase Edge Function (books-api) في مشروع mynekaba.
+// للرجوع مؤقتاً إلى Apps Script ضع رابط النشر القديم:
+// https://script.google.com/macros/s/AKfycbzhHbydK9xxwh5mqR7Zjmz7bGknNysp60j0GWcmjAwk6oPYs4pMyfuETzybBrZ1wm2G3g/exec
 window.APP_CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbzhHbydK9xxwh5mqR7Zjmz7bGknNysp60j0GWcmjAwk6oPYs4pMyfuETzybBrZ1wm2G3g/exec",
-  // إعدادات مشروع we-books-9d3a0 (قيم عامة لتطبيق الويب، ليست أسراراً؛ الحماية في قواعد Firestore والدالة api)
-  // للرجوع إلى Apps Script: اجعل FIREBASE: null
-  FIREBASE: {
-  apiKey: "AIzaSyA_BsheQXqb5G2R1-sbPepc0iVK6GjvZCc",
-  authDomain: "we-books-9d3a0.firebaseapp.com",
-  projectId: "we-books-9d3a0",
-  storageBucket: "we-books-9d3a0.firebasestorage.app",
-  messagingSenderId: "87013398050",
-  appId: "1:87013398050:web:52539567a1d6eaf52adc7b",
-  region: "europe-west1"
-  }
+  API_URL: "https://bulfwclnhbwpzqwnxjie.supabase.co/functions/v1/books-api"
 };
