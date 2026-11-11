@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>منظومة مبادرة الكتب الخارجية بالتقسيط</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --we: #5B308C; --we-dark: #3d1f60; --bg: #f5f3f8; --radius: 14px; }
+    body { font-family: 'Cairo', sans-serif; background: var(--bg); color: #1e293b; }
+    .topbar { background: linear-gradient(135deg, var(--we-dark), var(--we)); }
+    .card-x { border: none; border-radius: var(--radius); box-shadow: 0 3px 12px rgba(30, 15, 50, .07); background: #fff; }
+    .btn-we { background: var(--we); color: #fff; border: none; } .btn-we:hover { background: var(--we-dark); color: #fff; }
+    .nav-pills .nav-link { color: #475569; font-weight: 600; border-radius: 10px; text-align: right; }
+    .nav-pills .nav-link.active { background: var(--we); color: #fff; }
+    .tbl thead th { background: #2b1a40; color: #fff; font-weight: 700; white-space: nowrap; font-size: .85rem; }
+    .tbl td { font-size: .88rem; }
+    .kpi { border-right: 5px solid var(--we); }
+    .kpi.warn { border-right-color: #d97706; } .kpi.bad { border-right-color: #e11d48; } .kpi.good { border-right-color: #0d9488; }
+    .price-emp { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; font-weight: 700; }
+    .num { font-variant-numeric: tabular-nums; }
+    #loading { position: fixed; inset: 0; background: rgba(30, 15, 50, .6); z-index: 9999; display: none; align-items: center; justify-content: center; color: #fff; flex-direction: column; }
+    #toastBox { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 10000; width: min(640px, 94vw); }
+    @media print { .no-print { display: none !important; } body { background: #fff; } .card-x { box-shadow: none; } }
+  </style>
+</head>
+<body>
+<div id="loading"><div class="spinner-border mb-3" style="width:3rem;height:3rem"></div><div class="fw-bold">جاري التنفيذ...</div></div>
+<div id="toastBox"></div>
+
+<nav class="navbar topbar navbar-dark py-3 no-print">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand fw-bold d-flex align-items-center gap-2">
+      <i class="bi bi-journal-bookmark-fill fs-3 text-warning"></i>
+      <span><span id="appTitle">مبادرة الكتب الخارجية بالتقسيط</span><br><small class="text-white-50" style="font-size:.72rem">الحجز · التوريد · التوزيع بالأسبقية · التحصيل · التصفية</small></span>
+    </span>
+    <div id="userArea" class="d-none align-items-center gap-2 text-white">
+      <span class="badge bg-light text-dark px-3 py-2" id="userBadge"></span>
+      <button class="btn btn-sm btn-outline-light d-none" id="btnChangePw" onclick="openChangePw()"><i class="bi bi-key"></i></button>
+      <button class="btn btn-sm btn-outline-light" onclick="logout()"><i class="bi bi-box-arrow-left"></i> خروج</button>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-3 px-md-4 py-4">
+
+<!-- ======================= الدخول ======================= -->
+<div id="loginView" class="row justify-content-center">
+  <div class="col-lg-10"><div class="row g-4">
+    <div class="col-md-6"><div class="card-x p-4 h-100 border-top border-4" style="border-color:var(--we)!important">
+      <h4 class="fw-bold"><i class="bi bi-person-badge ms-1" style="color:var(--we)"></i> بوابة الموظف</h4>
+      <p class="text-muted small">احجز كتب أبنائك وتابع التسليم والأقساط</p>
+      <label class="form-label fw-bold">الرقم الوظيفي</label><input id="lgEmp" class="form-control form-control-lg mb-2" inputmode="numeric">
+      <label class="form-label fw-bold">آخر 4 أرقام من الرقم القومي</label><input id="lgNat" type="password" maxlength="4" class="form-control form-control-lg mb-2" inputmode="numeric">
+      <label class="form-label fw-bold">رقم الموبايل المسجل</label><input id="lgMob" type="tel" class="form-control form-control-lg mb-3" inputmode="tel">
+      <button class="btn btn-we btn-lg w-100 fw-bold" onclick="loginEmployee()">دخول</button>
+    </div></div>
+    <div class="col-md-6"><div class="card-x p-4 h-100 border-top border-4 border-dark">
+      <h4 class="fw-bold"><i class="bi bi-sliders ms-1"></i> بوابة الإدارة</h4>
+      <p class="text-muted small">المدير · مسؤول المبادرة · أمين الصندوق · أمين المخزن</p>
+      <label class="form-label fw-bold">اسم المستخدم</label><input id="lgUser" class="form-control form-control-lg mb-2" autocomplete="username">
+      <label class="form-label fw-bold">كلمة المرور</label><input id="lgPass" type="password" class="form-control form-control-lg mb-3" autocomplete="current-password" onkeydown="if(event.key==='Enter')loginAdmin()">
+      <button class="btn btn-dark btn-lg w-100 fw-bold" onclick="loginAdmin()">دخول لوحة الإدارة</button>
+    </div></div>
+  </div></div>
+</div>
+
+<!-- ======================= بوابة الموظف ======================= -->
+<div id="empView" class="d-none">
+  <div class="card-x p-3 mb-3 border-start border-5" style="border-color:var(--we)!important">
+    <div class="row g-2 align-items-center">
+      <div class="col-md-5"><h5 class="fw-bold mb-0" id="empName"></h5><div class="small text-muted" id="empMeta"></div></div>
+      <div class="col-md-4"><label class="small fw-bold">المرحلة</label><select id="empPhase" class="form-select form-select-sm fw-bold" onchange="APP.phaseId=this.value;loadEmp()"></select></div>
+      <div class="col-md-3 text-md-end"><span class="badge bg-success fs-6 px-3 py-2">خصم الموظف <span id="empDisc"></span>%</span><div class="small mt-1" id="empPhaseState"></div></div>
+    </div>
+  </div>
+  <ul class="nav nav-pills mb-3 gap-2 no-print" id="empTabs">
+    <li><button class="nav-link active" onclick="tab('emp','eBook',this)"><i class="bi bi-cart-plus"></i> الحجز</button></li>
+    <li><button class="nav-link" onclick="tab('emp','eStatus',this)"><i class="bi bi-receipt"></i> التخصيص والفاتورة</button></li>
+    <li><button class="nav-link" onclick="tab('emp','eInst',this)"><i class="bi bi-calendar2-check"></i> الأقساط والإيصالات</button></li>
+  </ul>
+  <div id="eBook" class="emp-pane">
+    <div class="row g-3">
+      <div class="col-lg-7"><div class="card-x p-3">
+        <div class="row g-2 mb-2">
+          <div class="col-md-4"><select id="fStage" class="form-select form-select-sm" onchange="renderCatalog()"><option value="">كل المراحل الدراسية</option></select></div>
+          <div class="col-md-4"><select id="fGrade" class="form-select form-select-sm" onchange="renderCatalog()"><option value="">كل الصفوف</option></select></div>
+          <div class="col-md-4"><input id="fSearch" class="form-control form-control-sm" placeholder="بحث بالاسم أو المادة أو الكود" oninput="renderCatalog()"></div>
+        </div>
+        <div class="table-responsive" style="max-height:540px"><table class="table table-hover align-middle tbl">
+          <thead><tr><th>الكتاب</th><th>الغلاف</th><th>سعرك</th><th></th></tr></thead><tbody id="catBody"></tbody></table></div>
+      </div></div>
+      <div class="col-lg-5"><div class="card-x p-3 border-top border-4 border-success">
+        <h5 class="fw-bold"><i class="bi bi-bag-check text-success"></i> استمارة الحجز</h5>
+        <div class="alert alert-light border small py-2">الأسبقية تُحسب لكل نسخة بوقت حجزها. زيادة الكمية تضيف نسخاً بوقت جديد ولا تؤخر النسخ السابقة، والتخفيض يحذف أحدث نسخة أولاً.</div>
+        <table class="table table-sm align-middle"><thead class="table-light"><tr><th>الكتاب</th><th style="width:80px">العدد</th><th>الإجمالي</th><th></th></tr></thead><tbody id="cartBody"></tbody></table>
+        <div class="bg-light rounded p-2 mb-2 small">
+          <div class="d-flex justify-content-between"><span>بسعر الغلاف</span><span class="text-decoration-line-through num" id="cCover">0</span></div>
+          <div class="d-flex justify-content-between text-success"><span>توفيرك</span><span class="num" id="cSave">0</span></div>
+          <div class="d-flex justify-content-between fw-bold fs-5" style="color:var(--we)"><span>الإجمالي</span><span class="num" id="cNet">0</span></div>
+        </div>
+        <label class="form-label fw-bold small">طريقة السداد</label>
+        <select id="pMethod" class="form-select form-select-sm mb-2" onchange="recalcPlan()">
+          <option value="INSTALLMENT">تقسيط: مقدم عند الاستلام + أقساط شهرية</option>
+          <option value="CASH">دفع كامل نقداً عند الاستلام</option>
+          <option value="INSTAPAY">دفع كامل عبر إنستاباي</option>
+          <option value="WALLET">دفع كامل عبر محفظة إلكترونية</option>
+        </select>
+        <div id="planBox" class="border rounded p-2 mb-2">
+          <div class="row g-2">
+            <div class="col-4"><label class="small">المقدم</label><select id="pDownType" class="form-select form-select-sm" onchange="recalcPlan()"><option value="PERCENTAGE">نسبة %</option><option value="FIXED">مبلغ</option></select></div>
+            <div class="col-4"><label class="small">القيمة</label><input id="pDown" type="number" class="form-control form-control-sm" value="25" oninput="recalcPlan()"></div>
+            <div class="col-4"><label class="small">عدد الأقساط</label><select id="pCount" class="form-select form-select-sm" onchange="recalcPlan()"></select></div>
+          </div>
+          <div class="small mt-2" id="planPreview"></div>
+        </div>
+        <div id="payNote" class="small text-muted mb-2"></div>
+        <button id="btnSubmitRes" class="btn btn-success w-100 fw-bold" onclick="submitReservation()"><i class="bi bi-check2-circle"></i> حفظ الاستمارة</button>
+      </div></div>
+    </div>
+  </div>
+  <div id="eStatus" class="emp-pane d-none"><div class="card-x p-3" id="empInvoiceArea"></div></div>
+  <div id="eInst" class="emp-pane d-none"><div class="row g-3">
+    <div class="col-md-6"><div class="card-x p-3"><h6 class="fw-bold">جدول الأقساط</h6><div id="empInstArea"></div></div></div>
+    <div class="col-md-6"><div class="card-x p-3"><h6 class="fw-bold">إيصالات السداد</h6><div id="empPayArea"></div></div></div>
+  </div></div>
+</div>
+
+<!-- ======================= لوحة الإدارة ======================= -->
+<div id="admView" class="d-none"><div class="row g-3">
+  <div class="col-lg-3 col-xl-2 no-print"><div class="card-x p-2 sticky-top" style="top:12px">
+    <div class="nav flex-column nav-pills" id="admNav">
+      <button class="nav-link active" data-pane="aDash" onclick="tab('adm','aDash',this)"><i class="bi bi-speedometer2 ms-1"></i> لوحة القيادة</button>
+      <button class="nav-link" data-pane="aCat" onclick="tab('adm','aCat',this)"><i class="bi bi-book ms-1"></i> الكتب والمراحل</button>
+      <button class="nav-link" data-pane="aEmp" onclick="tab('adm','aEmp',this)"><i class="bi bi-people ms-1"></i> الموظفون</button>
+      <button class="nav-link" data-pane="aPO" onclick="tab('adm','aPO',this)"><i class="bi bi-clipboard-data ms-1"></i> الحصر وطلب التوريد</button>
+      <button class="nav-link" data-pane="aSup" onclick="tab('adm','aSup',this)"><i class="bi bi-truck ms-1"></i> فاتورة المكتبة والجرد</button>
+      <button class="nav-link" data-pane="aAlloc" onclick="tab('adm','aAlloc',this)"><i class="bi bi-sort-numeric-down ms-1"></i> التوزيع بالأسبقية</button>
+      <button class="nav-link" data-pane="aDel" onclick="tab('adm','aDel',this)"><i class="bi bi-box2-heart ms-1"></i> التسليم والمرتجعات</button>
+      <button class="nav-link" data-pane="aFin" onclick="tab('adm','aFin',this)"><i class="bi bi-cash-coin ms-1"></i> التحصيل والخزينة</button>
+      <button class="nav-link" data-pane="aSupFin" onclick="tab('adm','aSupFin',this)"><i class="bi bi-bank ms-1"></i> حساب المكتبة والمصروفات</button>
+      <button class="nav-link" data-pane="aRep" onclick="tab('adm','aRep',this)"><i class="bi bi-printer ms-1"></i> التقارير والتصفية</button>
+    </div>
+  </div></div>
+
+  <div class="col-lg-9 col-xl-10">
+    <div class="card-x p-2 mb-3 no-print"><div class="row g-2 align-items-end">
+      <div class="col-md-5"><label class="small fw-bold text-muted">المرحلة</label><select id="admPhase" class="form-select form-select-sm fw-bold" onchange="APP.phaseId=this.value;renderAdmin()"></select></div>
+      <div class="col-md-4"><span class="small text-muted">حالة المرحلة: </span><span id="admPhaseStatus" class="badge bg-secondary"></span></div>
+      <div class="col-md-3 text-md-end"><button class="btn btn-sm btn-we" onclick="loadAdmin()"><i class="bi bi-arrow-clockwise"></i> تحديث</button></div>
+    </div></div>
+
+    <div id="aDash" class="adm-pane">
+      <div class="row g-3 mb-3" id="kpis"></div>
+      <div class="row g-3">
+        <div class="col-md-7"><div class="card-x p-3 h-100"><h6 class="fw-bold">دورة المرحلة</h6><div id="phaseFlow"></div></div></div>
+        <div class="col-md-5"><div class="card-x p-3 h-100"><h6 class="fw-bold">تنبيهات تحتاج إجراء</h6><div id="alertsBox" class="small"></div></div></div>
+      </div>
+    </div>
+
+    <div id="aCat" class="adm-pane d-none">
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6"><div class="card-x p-3 h-100">
+          <h6 class="fw-bold" style="color:var(--we)">إضافة / تعديل كتاب</h6>
+          <div class="row g-2">
+            <div class="col-4"><label class="small">الكود</label><input id="bkId" class="form-control form-control-sm"></div>
+            <div class="col-8"><label class="small">اسم الكتاب</label><input id="bkName" class="form-control form-control-sm"></div>
+            <div class="col-4"><label class="small">المرحلة الدراسية</label><select id="bkStage" class="form-select form-select-sm"><option>المرحلة الابتدائية</option><option>المرحلة الإعدادية</option><option>المرحلة الثانوية</option><option>رياض الأطفال</option></select></div>
+            <div class="col-4"><label class="small">الصف</label><input id="bkGrade" class="form-control form-control-sm"></div>
+            <div class="col-4"><label class="small">المادة</label><input id="bkSubject" class="form-control form-control-sm"></div>
+            <div class="col-6"><label class="small">المكتبة</label><select id="bkSup" class="form-select form-select-sm sup-select" onchange="previewPrice()"></select></div>
+            <div class="col-6"><label class="small">الحالة</label><select id="bkStatus" class="form-select form-select-sm"><option value="Available">متاح</option><option value="Not_Yet_Printed">لم يُطبع بعد (يقبل الحجز)</option><option value="Suspended">موقوف مؤقتاً</option><option value="Discontinued">ملغى</option></select></div>
+            <div class="col-3"><label class="small">سعر الغلاف</label><input id="bkCover" type="number" class="form-control form-control-sm" oninput="previewPrice()"></div>
+            <div class="col-3"><label class="small">خصم المكتبة %</label><input id="bkSupDisc" type="number" class="form-control form-control-sm" oninput="previewPrice()"></div>
+            <div class="col-3"><label class="small">خصم الكمية %</label><input id="bkVol" type="number" class="form-control form-control-sm" placeholder="من العقد" oninput="previewPrice()"></div>
+            <div class="col-3"><label class="small">خصم الموظف %</label><input id="bkEmpD" type="number" class="form-control form-control-sm" placeholder="الموحد" oninput="previewPrice()"></div>
+          </div>
+          <div class="bg-light rounded p-2 mt-2 small" id="pricePreview"></div>
+          <button class="btn btn-we btn-sm w-100 mt-2" onclick="saveBook()">حفظ الكتاب</button>
+          <hr><h6 class="fw-bold small">استيراد كتالوج (لصق من Excel)</h6>
+          <p class="small text-muted mb-1">الأعمدة بالترتيب: الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، سعر الغلاف، خصم المكتبة %</p>
+          <textarea id="bulkBooks" class="form-control form-control-sm" rows="3"></textarea>
+          <button class="btn btn-outline-dark btn-sm mt-1" onclick="importBooks()">استيراد</button>
+        </div></div>
+        <div class="col-lg-6">
+          <div class="card-x p-3 mb-3"><h6 class="fw-bold">المراحل</h6>
+            <div class="row g-2">
+              <div class="col-4"><input id="phId" class="form-control form-control-sm" placeholder="الكود (فارغ = جديد)"></div>
+              <div class="col-8"><input id="phName" class="form-control form-control-sm" placeholder="اسم المرحلة"></div>
+              <div class="col-6"><label class="small">بداية الحجز</label><input id="phStart" type="date" class="form-control form-control-sm"></div>
+              <div class="col-6"><label class="small">نهاية الحجز</label><input id="phEnd" type="date" class="form-control form-control-sm"></div>
+              <div class="col-6"><label class="small">بداية التسليم (أساس جدول الأقساط)</label><input id="phDel" type="date" class="form-control form-control-sm"></div>
+              <div class="col-6"><label class="small">الصفوف المتاحة (ALL أو مفصولة بفاصلة)</label><input id="phGrades" class="form-control form-control-sm" value="ALL"></div>
+            </div>
+            <button class="btn btn-success btn-sm mt-2" onclick="savePhase()">حفظ المرحلة</button>
+            <div class="mt-2" id="phasesTbl"></div>
+          </div>
+          <div class="card-x p-3 mb-3"><h6 class="fw-bold">المكتبات المتعاقدة</h6>
+            <div class="row g-2">
+              <div class="col-5"><input id="supName" class="form-control form-control-sm" placeholder="اسم المكتبة"></div>
+              <div class="col-4"><input id="supPhone" class="form-control form-control-sm" placeholder="الهاتف"></div>
+              <div class="col-3"><input id="supVol" type="number" class="form-control form-control-sm" placeholder="خصم كمية %"></div>
+            </div>
+            <button class="btn btn-dark btn-sm mt-2" onclick="saveSupplier()">إضافة مكتبة</button>
+          </div>
+          <div class="card-x p-3" id="settingsCard"><h6 class="fw-bold">الإعدادات (للمدير)</h6><div id="settingsTbl"></div></div>
+        </div>
+      </div>
+      <div class="card-x p-3"><h6 class="fw-bold">الكتالوج وهيكل التكلفة</h6><div id="catalogTbl"></div></div>
+    </div>
+
+    <div id="aEmp" class="adm-pane d-none">
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6"><div class="card-x p-3 h-100"><h6 class="fw-bold">استيراد الموظفين (لصق من Excel)</h6>
+          <p class="small text-muted mb-1">الأعمدة: الرقم الوظيفي، الاسم، آخر 4 قومي، الموبايل، الإدارة، الوظيفة، الحد الائتماني (اختياري)</p>
+          <textarea id="bulkEmp" class="form-control form-control-sm" rows="4"></textarea>
+          <button class="btn btn-we btn-sm mt-1" onclick="importEmployees()">استيراد وتحديث</button></div></div>
+        <div class="col-lg-6"><div class="card-x p-3 h-100"><h6 class="fw-bold">حجز نيابة عن موظف (بدون هاتف)</h6>
+          <div class="row g-2">
+            <div class="col-4"><input id="obEmp" class="form-control form-control-sm" placeholder="الرقم الوظيفي"></div>
+            <div class="col-8"><input id="obItems" class="form-control form-control-sm" placeholder="BK-101:2, BK-201:1"></div>
+            <div class="col-6"><select id="obMethod" class="form-select form-select-sm"><option value="CASH">دفع كامل</option><option value="INSTALLMENT">تقسيط 25% + 2</option></select></div>
+            <div class="col-6"><button class="btn btn-outline-dark btn-sm w-100" onclick="reserveOnBehalf()">حفظ الحجز</button></div>
+          </div><p class="small text-muted mt-1 mb-0">تُسجَّل الأسبقية بوقت الحفظ، ويُوثَّق اسم من أدخلها.</p></div></div>
+      </div>
+      <div class="card-x p-3"><input id="empSearch" class="form-control form-control-sm mb-2" placeholder="بحث" oninput="renderEmployees()"><div id="empTbl"></div></div>
+    </div>
+
+    <div id="aPO" class="adm-pane d-none"><div class="card-x p-3">
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-2">
+        <div><h6 class="fw-bold mb-0">الحصر التجميعي وطلب التوريد</h6><div class="small text-muted">يُخصم المخزون الحر والنواقص المستحقة على المكتبة بعد أن يأخذ المنتظرون من المراحل السابقة نصيبهم</div></div>
+        <div class="d-flex gap-2"><button class="btn btn-warning btn-sm fw-bold" onclick="act('GENERATE_PO_SNAPSHOT',{phaseId:APP.phaseId},'تجميد الحصر سيُغلق الحجز لهذه المرحلة. متابعة؟')">تجميد الحصر</button>
+        <button class="btn btn-outline-success btn-sm" onclick="exportTable('poTbl','طلب_توريد')">تصدير Excel</button></div>
+      </div>
+      <div id="poLive" class="mb-3"></div>
+      <div id="poTbl"></div>
+    </div></div>
+
+    <div id="aSup" class="adm-pane d-none"><div class="card-x p-3 mb-3">
+      <h6 class="fw-bold" style="color:var(--we)">إدخال فاتورة المكتبة ونتيجة الجرد</h6>
+      <div class="row g-2 mb-2">
+        <div class="col-md-3"><label class="small">المكتبة</label><select id="siSup" class="form-select form-select-sm sup-select" onchange="draftInvoice()"></select></div>
+        <div class="col-md-2"><label class="small">رقم الفاتورة</label><input id="siNo" class="form-control form-control-sm"></div>
+        <div class="col-md-2"><label class="small">التاريخ</label><input id="siDate" type="date" class="form-control form-control-sm"></div>
+        <div class="col-md-2"><label class="small">خصم الكمية %</label><input id="siVol" type="number" class="form-control form-control-sm" oninput="recalcDraft()"></div>
+        <div class="col-md-3"><label class="small">الصافي المكتوب بفاتورة المكتبة</label><input id="siStated" type="number" class="form-control form-control-sm" placeholder="للمطابقة"></div>
+      </div>
+      <div class="table-responsive"><table class="table table-sm table-bordered align-middle tbl"><thead><tr><th>الكتاب</th><th>المطلوب</th><th>سليم</th><th>تالف</th><th>لم يُطبع</th><th>الغلاف</th><th>خصم %</th><th>تكلفة الوحدة</th><th>الإجمالي</th><th>الفرق</th></tr></thead><tbody id="siBody"></tbody></table></div>
+      <div class="d-flex flex-wrap gap-3 bg-light rounded p-2 small"><span>بعد خصم الأصناف: <b id="siAfter" class="num"></b></span><span>خصم الكمية: <b id="siVolAmt" class="num"></b></span><span class="fs-6">الصافي: <b id="siNet" class="num" style="color:var(--we)"></b></span><span class="text-danger">مطالبة تالف: <b id="siDmg" class="num"></b></span></div>
+      <button class="btn btn-success btn-sm mt-2" onclick="submitInvoice()">اعتماد الفاتورة وإدخال السليم للمخزن</button>
+    </div>
+    <div class="card-x p-3"><h6 class="fw-bold">فواتير المكتبة المسجلة</h6><div id="supInvTbl"></div></div></div>
+
+    <div id="aAlloc" class="adm-pane d-none"><div class="card-x p-3 mb-3">
+      <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-2">
+        <h6 class="fw-bold mb-0">التوزيع حسب أسبقية كل نسخة</h6>
+        <button class="btn btn-success btn-sm fw-bold" onclick="act('RUN_ALLOCATION_ENGINE',{phaseId:APP.phaseId})"><i class="bi bi-play-circle"></i> تشغيل التوزيع</button>
+      </div>
+      <div class="row g-2 mb-2 small align-items-end">
+        <div class="col-md-4"><label>ترحيل المنتظرين إلى مرحلة</label><select id="carryTo" class="form-select form-select-sm"></select></div>
+        <div class="col-md-3"><button class="btn btn-outline-dark btn-sm w-100" onclick="act('CARRY_WAITLIST_TO_PHASE',{fromPhaseId:APP.phaseId,toPhaseId:val('carryTo')},'سيُنقل كل غير المخصص بأسبقيته الأصلية. متابعة؟')">ترحيل بأسبقيتهم</button></div>
+        <div class="col-md-5"><input id="allocSearch" class="form-control form-control-sm" placeholder="تصفية بالكتاب أو الموظف" oninput="renderAlloc()"></div>
+      </div>
+      <div id="allocTbl"></div>
+    </div></div>
+
+    <div id="aDel" class="adm-pane d-none">
+      <div class="card-x p-3 mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4"><label class="small fw-bold">الرقم الوظيفي</label><input id="delEmp" class="form-control" oninput="renderDelivery()" placeholder="ابحث بالرقم أو الاسم"></div>
+          <div class="col-md-4"><label class="small fw-bold">المستلم (إن لم يكن الموظف)</label><input id="delBy" class="form-control" placeholder="الاسم وصلة القرابة"></div>
+          <div class="col-md-4 small text-muted">لا يتم التسليم قبل سداد المقدم أو كامل القيمة، ولمن ليس عليه متأخرات.</div>
+        </div>
+      </div>
+      <div id="delArea"></div>
+      <div class="card-x p-3 mt-3"><h6 class="fw-bold">مستندات التسليم والمرتجعات</h6><div id="docsTbl"></div></div>
+    </div>
+
+    <div id="aFin" class="adm-pane d-none">
+      <div class="card-x p-3 mb-3"><div class="d-flex justify-content-between align-items-center mb-2"><h6 class="fw-bold mb-0">فواتير الموظفين</h6><input id="finSearch" class="form-control form-control-sm w-auto" placeholder="بحث" oninput="renderFinance()"></div><div id="finTbl"></div></div>
+      <div class="row g-3">
+        <div class="col-lg-7"><div class="card-x p-3"><h6 class="fw-bold">الإيصالات</h6><div id="rcptTbl"></div></div></div>
+        <div class="col-lg-5"><div class="card-x p-3"><h6 class="fw-bold">إقفال الخزينة اليومي</h6>
+          <div class="row g-2 small">
+            <div class="col-6"><label>اليوم</label><input id="clsDate" type="date" class="form-control form-control-sm" onchange="renderCashDay()"></div>
+            <div class="col-6"><label>النقدية الفعلية بالخزينة</label><input id="clsCash" type="number" class="form-control form-control-sm"></div>
+            <div class="col-6"><label>رصيد المحفظة الوارد اليوم</label><input id="clsWallet" type="number" class="form-control form-control-sm"></div>
+            <div class="col-6"><label>وارد إنستاباي اليوم</label><input id="clsIP" type="number" class="form-control form-control-sm"></div>
+          </div>
+          <div id="cashDayPreview" class="small my-2"></div>
+          <button class="btn btn-dark btn-sm w-100" onclick="closeDay()">إقفال اليوم</button>
+          <div id="closingsTbl" class="mt-2"></div>
+        </div></div>
+      </div>
+    </div>
+
+    <div id="aSupFin" class="adm-pane d-none"><div class="row g-3">
+      <div class="col-lg-6"><div class="card-x p-3 h-100"><h6 class="fw-bold">دفعة للمكتبة</h6>
+        <div class="row g-2">
+          <div class="col-6"><select id="spSup" class="form-select form-select-sm sup-select"></select></div>
+          <div class="col-6"><input id="spAmt" type="number" class="form-control form-control-sm" placeholder="المبلغ"></div>
+          <div class="col-6"><input id="spRef" class="form-control form-control-sm" placeholder="رقم إيصال المكتبة / التحويل"></div>
+          <div class="col-6"><select id="spCh" class="form-select form-select-sm"><option>نقدي</option><option>تحويل بنكي</option><option>إنستاباي</option><option>شيك</option></select></div>
+          <div class="col-12 form-check ms-2"><input id="spAdv" type="checkbox" class="form-check-input"><label class="form-check-label small" for="spAdv">دفعة مقدمة (أكبر من المستحق)</label></div>
+        </div>
+        <button class="btn btn-we btn-sm mt-2" onclick="paySupplier()">تسجيل الدفعة</button>
+        <hr><h6 class="fw-bold">كشف حساب المكتبة</h6><div id="supBalTbl"></div>
+        <hr><h6 class="fw-bold">إرجاع كتب للمكتبة (من الرصيد الحر)</h6>
+        <div class="row g-2"><div class="col-6"><select id="srBook" class="form-select form-select-sm book-select"></select></div><div class="col-3"><input id="srQty" type="number" class="form-control form-control-sm" placeholder="العدد"></div><div class="col-3"><button class="btn btn-outline-danger btn-sm w-100" onclick="returnToSupplier()">إرجاع</button></div></div>
+      </div></div>
+      <div class="col-lg-6"><div class="card-x p-3 h-100"><h6 class="fw-bold">مصروفات المبادرة</h6>
+        <div class="row g-2">
+          <div class="col-6"><select id="exCat" class="form-select form-select-sm"><option>مصاريف شحن ونقل</option><option>مصاريف تحميل وتنزيل ومشال</option><option>مصاريف تعبئة وتغليف</option><option>أجور عمال ومكافآت تنظيم</option><option>أخرى</option></select></div>
+          <div class="col-6"><input id="exAmt" type="number" class="form-control form-control-sm" placeholder="المبلغ"></div>
+          <div class="col-6"><input id="exBen" class="form-control form-control-sm" placeholder="المستفيد"></div>
+          <div class="col-6"><input id="exDoc" class="form-control form-control-sm" placeholder="رقم الإيصال"></div>
+          <div class="col-12"><input id="exNotes" class="form-control form-control-sm" placeholder="ملاحظات"></div>
+        </div>
+        <button class="btn btn-danger btn-sm mt-2" onclick="addExpense()">تسجيل المصروف</button>
+        <div id="expTbl" class="mt-2"></div>
+        <hr><h6 class="fw-bold">تسوية جرد المخزن</h6>
+        <div class="row g-2"><div class="col-5"><select id="adjBook" class="form-select form-select-sm book-select"></select></div><div class="col-2"><input id="adjQty" type="number" class="form-control form-control-sm" placeholder="±"></div><div class="col-5"><input id="adjReason" class="form-control form-control-sm" placeholder="رقم محضر الجرد والسبب"></div></div>
+        <button class="btn btn-outline-dark btn-sm mt-1" onclick="adjustStock()">تسجيل التسوية</button>
+      </div></div>
+    </div></div>
+
+    <div id="aRep" class="adm-pane d-none"><div class="card-x p-3">
+      <div class="row g-2 mb-3 no-print align-items-end">
+        <div class="col-md-6"><label class="small fw-bold">التقرير</label><select id="repSel" class="form-select fw-bold" onchange="renderReport()">
+          <option value="R14">التصفية المالية والمخزنية النهائية</option>
+          <option value="R01">حجوزات الموظفين التفصيلية</option>
+          <option value="R02">الحصر التجميعي لكل كتاب</option>
+          <option value="R03">فروق فواتير المكتبة (نقص/زيادة/تالف/لم يُطبع)</option>
+          <option value="R04">الأسبقية والتخصيص</option>
+          <option value="R05">قائمة المنتظرين</option>
+          <option value="R06">فواتير الموظفين وأرصدتهم</option>
+          <option value="R07">جدول الأقساط والمتأخرات</option>
+          <option value="R08">التحصيلات حسب وسيلة الدفع</option>
+          <option value="R09">كشف حساب المكتبة</option>
+          <option value="R10">المصروفات</option>
+          <option value="R11">حركة المخزون</option>
+          <option value="R12">الرصيد الحالي لكل كتاب وقيمته</option>
+          <option value="R13">هامش كل كتاب (يكشف الكتب المباعة بخسارة)</option>
+        </select></div>
+        <div class="col-md-6 text-md-end"><button class="btn btn-dark btn-sm" onclick="window.print()"><i class="bi bi-printer"></i> طباعة / PDF</button> <button class="btn btn-success btn-sm" onclick="exportTable('repArea','تقرير')"><i class="bi bi-file-earmark-excel"></i> تصدير</button></div>
+      </div>
+      <div id="repArea"></div>
+    </div></div>
+  </div>
+</div></div>
+</div>
+
+<!-- نافذة تغيير كلمة المرور -->
+<div class="modal fade" id="pwModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content">
+  <div class="modal-header"><h5 class="modal-title fw-bold">تغيير كلمة المرور</h5></div>
+  <div class="modal-body">
+    <div id="pwForceNote" class="alert alert-warning small d-none">هذا أول دخول بكلمة مرور مؤقتة. يجب تغييرها الآن.</div>
+    <input id="pwOld" type="password" class="form-control mb-2" placeholder="كلمة المرور الحالية">
+    <input id="pwNew" type="password" class="form-control mb-2" placeholder="الجديدة (8 أحرف على الأقل)">
+    <input id="pwNew2" type="password" class="form-control" placeholder="تأكيد الجديدة">
+  </div>
+  <div class="modal-footer"><button class="btn btn-we" onclick="changePw()">حفظ</button></div>
+</div></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// يُفحص وجود جسر Apps Script عند كل نداء (وليس مرة واحدة عند التحميل)، مع انتظار قصير إن تأخر تحميله
+const hasGas = () => !!(window.google && window.google.script && window.google.script.run);
+function waitGas(ms) {
+  return new Promise(res => { const t0 = Date.now(); (function poll() { if (hasGas()) return res(true); if (Date.now() - t0 > ms) return res(false); setTimeout(poll, 100); })(); });
+}
+const APP = { token: null, user: null, phaseId: null, cart: {}, emp: null, adm: null, settlement: null };
+const STATUS_AR = {
+  Draft: "مسودة", Open: "الحجز مفتوح", Scheduled: "لم يبدأ", Closed: "الحجز مغلق", Ordered: "أُرسل للمكتبة", Receiving: "استلام وجرد", Delivering: "تسليم وتحصيل", Completed: "مكتملة",
+  Pending: "قيد الانتظار", Fully_Allocated: "مخصص بالكامل", Partially_Allocated: "مخصص جزئياً", Waitlisted: "في الانتظار", Cancelled_By_Employee: "ألغاه الموظف", Carried_Forward: "رُحِّل",
+  Unpaid: "غير مسدد", Partially_Paid: "مسدد جزئياً", Paid_In_Full: "مسدد بالكامل", Overdue: "متأخر", Refund_Due: "مستحق رد", Zero_Allocation: "لا تخصيص",
+  Scheduled_i: "مجدول", Paid: "مسدد", Partial: "جزئي", INSTALLMENT: "تقسيط", CASH: "نقدي", WALLET: "محفظة", INSTAPAY: "إنستاباي", PAYROLL: "خصم من المرتب",
+  Available: "متاح", Not_Yet_Printed: "لم يُطبع", Suspended: "موقوف", Discontinued: "ملغى",
+  EXACT: "مطابق", SHORTAGE: "نقص", SURPLUS: "زيادة", NOT_PRINTED: "لم يُطبع", NOT_RECEIVED: "لم يصل", UNORDERED_ITEM: "غير مطلوب",
+  Open_po: "مستحق على المكتبة", Fulfilled: "مكتمل", Covered_From_Stock: "مغطى من المخزون", Cancelled: "ملغى"
+};
+const ar = (k, ctx) => STATUS_AR[k + (ctx || "")] || STATUS_AR[k] || k || "";
+const esc = s => String(s === undefined || s === null ? "" : s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const money = v => (Math.round(Number(v || 0) * 100) / 100).toLocaleString("ar-EG") + " ج.م";
+const n = v => Number(v || 0);
+const val = id => document.getElementById(id).value;
+const $ = id => document.getElementById(id);
+const ceil = v => { const x = Number(v); return isNaN(x) || x <= 0 ? 0 : Math.ceil(Math.round(x * 10000) / 10000); };
+
+function tbl(headers, rows, opts) {
+  opts = opts || {};
+  if (!rows.length) return `<div class="text-muted small py-3 text-center">${opts.empty || "لا توجد بيانات"}</div>`;
+  return `<div class="table-responsive" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="table table-sm table-bordered table-hover align-middle tbl" ${opts.id ? `id="${opts.id}"` : ""}><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+}
+function toast(msg, type) {
+  const d = document.createElement("div");
+  d.className = `alert alert-${type || "success"} shadow fw-bold d-flex justify-content-between`;
+  d.innerHTML = `<span>${esc(msg)}</span><button class="btn-close" onclick="this.parentNode.remove()"></button>`;
+  $("toastBox").appendChild(d);
+  setTimeout(() => d.remove(), type === "danger" ? 9000 : 5000);
+}
+function call(action, payload) {
+  $("loading").style.display = "flex";
+  return waitGas(4000).then(ok => new Promise(resolve => {
+    if (!ok) { $("loading").style.display = "none"; resolve({ success: false, message: "تعذر الاتصال بخادم Apps Script من هذه الصفحة (" + location.hostname + "). افتح رابط /exec مباشرة في المتصفح." }); return; }
+    google.script.run
+      .withSuccessHandler(r => { $("loading").style.display = "none"; if (!r.success && /الجلسة/.test(r.message || "")) { logout(true); } resolve(r); })
+      .withFailureHandler(e => { $("loading").style.display = "none"; resolve({ success: false, message: e.message || String(e) }); })
+      .callServerApi(action, payload || {}, APP.token);
+  }));
+}
+async function act(action, payload, confirmMsg) {
+  if (confirmMsg && !confirm(confirmMsg)) return null;
+  const r = await call(action, payload);
+  toast(r.message || (r.success ? "تم" : "خطأ"), r.success ? "success" : "danger");
+  (r.warnings || []).forEach(w => toast(w, "warning"));
+  if (r.success) { if (APP.user && APP.user.userType === "ADMIN") await loadAdmin(); else await loadEmp(); }
+  return r;
+}
+function tab(scope, pane, btn) {
+  document.querySelectorAll(scope === "emp" ? ".emp-pane" : ".adm-pane").forEach(p => p.classList.add("d-none"));
+  $(pane).classList.remove("d-none");
+  btn.parentNode.parentNode.querySelectorAll(".nav-link").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  if (pane === "aRep") renderReport();
+}
+function openPrint(title, html) {
+  // تُبنى نافذة الطباعة عبر DOM بدون كتابة وسوم مستند كاملة داخل نص JavaScript،
+  // لأن خادم Google يعالج هذه الوسوم داخل الصفحة فيكسر الكود.
+  const w = window.open("", "_blank");
+  if (!w) return toast("اسمح بالنوافذ المنبثقة لهذا الموقع لطباعة المستند", "warning");
+  const d = w.document;
+  d.title = title;
+  d.documentElement.setAttribute("dir", "rtl");
+  const css = d.createElement("link"); css.rel = "stylesheet"; css.href = "https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.rtl.min.css"; d.head.appendChild(css);
+  const st = d.createElement("style"); st.textContent = "body{font-family:Cairo,Tahoma;padding:24px}th{background:#eee}"; d.head.appendChild(st);
+  d.body.innerHTML = html;
+  setTimeout(() => { w.focus(); w.print(); }, 600);
+}
+function exportTable(containerId, name) {
+  const t = $(containerId).querySelector("table"); if (!t) return toast("لا يوجد جدول للتصدير", "warning");
+  let csv = "﻿";
+  t.querySelectorAll("tr").forEach(tr => { csv += Array.from(tr.querySelectorAll("th,td")).map(td => `"${td.innerText.replace(/"/g, '""').replace(/\n/g, " ")}"`).join(",") + "\r\n"; });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = name + ".csv"; a.click();
+}
+
+// ============ الدخول ============
+window.addEventListener("DOMContentLoaded", async () => {
+  $("siDate").valueAsDate = new Date(); $("clsDate").valueAsDate = new Date();
+  const r = await call("GET_PUBLIC_INIT_DATA");
+  if (r.success && r.settings.INITIATIVE_TITLE) $("appTitle").textContent = r.settings.INITIATIVE_TITLE;
+});
+function enter(res, view) {
+  APP.token = res.sessionToken; APP.user = res.user;
+  $("loginView").classList.add("d-none"); $(view).classList.remove("d-none");
+  $("userArea").classList.remove("d-none"); $("userArea").classList.add("d-flex");
+  $("userBadge").textContent = res.user.fullName + (res.user.role !== "Employee" ? " · " + res.user.role : "");
+  $("btnChangePw").classList.toggle("d-none", res.user.userType !== "ADMIN");
+}
+async function loginEmployee() {
+  const r = await call("LOGIN_EMPLOYEE", { empId: val("lgEmp"), natIdLast4: val("lgNat"), mobile: val("lgMob") });
+  if (!r.success) return toast(r.message, "danger");
+  enter(r, "empView"); await loadEmp();
+}
+async function loginAdmin() {
+  const r = await call("LOGIN_ADMIN", { username: val("lgUser"), password: val("lgPass") });
+  if (!r.success) return toast(r.message, "danger");
+  $("lgPass").value = "";
+  enter(r, "admView"); await loadAdmin();
+  if (r.user.mustChangePassword) openChangePw(true);
+}
+function openChangePw(force) { $("pwForceNote").classList.toggle("d-none", !force); new bootstrap.Modal($("pwModal"), { backdrop: force ? "static" : true }).show(); }
+async function changePw() {
+  if (val("pwNew") !== val("pwNew2")) return toast("التأكيد غير مطابق", "danger");
+  const r = await call("CHANGE_PASSWORD", { oldPassword: val("pwOld"), newPassword: val("pwNew") });
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) bootstrap.Modal.getInstance($("pwModal")).hide();
+}
+async function logout(silent) {
+  if (APP.token && !silent) await call("LOGOUT");
+  APP.token = null; APP.user = null;
+  ["empView", "admView"].forEach(v => $(v).classList.add("d-none"));
+  $("userArea").classList.add("d-none"); $("userArea").classList.remove("d-flex"); $("loginView").classList.remove("d-none");
+  if (silent) toast("انتهت الجلسة، سجّل الدخول مرة أخرى.", "warning");
+}
+
+// ============ بوابة الموظف ============
+async function loadEmp() {
+  const r = await call("GET_EMPLOYEE_PORTAL_DATA", { phaseId: APP.phaseId });
+  if (!r.success) return toast(r.message, "danger");
+  APP.emp = r;
+  if (!r.activePhase) { $("empPhaseState").innerHTML = "لا توجد مراحل مفتوحة حالياً"; return; }
+  APP.phaseId = r.activePhase.Phase_ID;
+  const u = APP.user;
+  $("empName").textContent = u.fullName; $("empMeta").textContent = `الرقم الوظيفي ${u.empId} · ${u.department || ""}`;
+  $("empDisc").textContent = r.settings.UNIFIED_EMP_DISCOUNT_PCT;
+  $("empPhase").innerHTML = r.phases.map(p => `<option value="${esc(p.Phase_ID)}" ${p.Phase_ID === APP.phaseId ? "selected" : ""}>${esc(p.Phase_Name)}</option>`).join("");
+  const ph = r.activePhase;
+  $("empPhaseState").innerHTML = ph.Booking_Open ? `<span class="text-success fw-bold">الحجز مفتوح حتى ${esc(String(ph.End_DateTime).slice(0, 10))}</span>` : `<span class="text-danger fw-bold">${ar(ph.Effective_Status)}</span>`;
+  $("btnSubmitRes").disabled = !ph.Booking_Open;
+  // السلة من الشرائح
+  APP.cart = {};
+  r.myReservationItems.filter(i => i.Phase_ID === APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward")
+    .forEach(i => APP.cart[i.Book_ID] = (APP.cart[i.Book_ID] || 0) + n(i.Requested_Qty));
+  const h = r.myReservations.find(x => x.Phase_ID === APP.phaseId);
+  $("pCount").innerHTML = Array.from({ length: r.settings.MAX_INSTALLMENT_COUNT || 4 }, (_, i) => `<option value="${i + 1}">${i + 1}</option>`).join("");
+  $("pCount").value = r.settings.DEFAULT_INSTALLMENT_COUNT || 2;
+  if (h) { $("pMethod").value = h.Payment_Method_Selected; $("pDownType").value = h.Down_Payment_Type || "PERCENTAGE"; $("pDown").value = h.Down_Payment_Input; if (n(h.Installment_Count)) $("pCount").value = h.Installment_Count; }
+  if (!r.employee.installmentAllowed) { $("pMethod").querySelector('[value="INSTALLMENT"]').disabled = true; if ($("pMethod").value === "INSTALLMENT") $("pMethod").value = "CASH"; }
+  $("payNote").textContent = `الحد الأدنى للمقدم ${r.settings.MIN_DOWN_PAYMENT_PCT}% · المحفظة وإنستاباي باسم ${r.settings.CASH_ACCOUNT_HOLDER} · احتفظ برقم التحويل`;
+  const stages = [...new Set(r.books.map(b => b.Stage))], grades = [...new Set(r.books.map(b => b.Grade))];
+  $("fStage").innerHTML = `<option value="">كل المراحل الدراسية</option>` + stages.map(s => `<option>${esc(s)}</option>`).join("");
+  $("fGrade").innerHTML = `<option value="">كل الصفوف</option>` + grades.map(s => `<option>${esc(s)}</option>`).join("");
+  renderCatalog(); renderCart(); renderEmpStatus();
+}
+function renderCatalog() {
+  const st = val("fStage"), gr = val("fGrade"), q = val("fSearch").trim();
+  const list = APP.emp.books.filter(b => (!st || b.Stage === st) && (!gr || b.Grade === gr) && (!q || (b.Book_Name + b.Subject + b.Book_ID).includes(q)));
+  const open = APP.emp.activePhase && APP.emp.activePhase.Booking_Open;
+  $("catBody").innerHTML = list.map(b => {
+    const inCart = APP.cart[b.Book_ID] || 0;
+    const tags = (b.Book_Status === "Not_Yet_Printed" ? `<span class="badge bg-warning text-dark">لم يُطبع بعد</span> ` : "") + (n(b.In_Stock_From_Previous) > 0 ? `<span class="badge bg-info text-dark">متوفر بالمخزن</span>` : "");
+    return `<tr><td><div class="fw-bold">${esc(b.Book_Name)}</div><small class="text-muted">${esc(b.Grade)} · ${esc(b.Subject)} · ${esc(b.Book_ID)}</small> ${tags}</td>
+      <td class="text-decoration-line-through text-muted num">${n(b.Cover_Price)}</td><td><span class="badge price-emp fs-6 num">${n(b.Emp_Selling_Price)}</span></td>
+      <td><button class="btn btn-sm ${inCart ? "btn-success" : "btn-outline-primary"}" ${open ? "" : "disabled"} onclick="addCart('${esc(b.Book_ID)}')"><i class="bi bi-plus-lg"></i> ${inCart ? inCart : "أضف"}</button></td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="text-center text-muted py-3">لا توجد كتب مطابقة</td></tr>`;
+}
+function addCart(id) { const mx = APP.emp.settings.MAX_QTY_PER_BOOK || 3; if ((APP.cart[id] || 0) >= mx) return toast("الحد الأقصى " + mx + " نسخ من الكتاب", "warning"); APP.cart[id] = (APP.cart[id] || 0) + 1; renderCatalog(); renderCart(); }
+function setCart(id, q) { q = parseInt(q, 10) || 0; if (q <= 0) delete APP.cart[id]; else APP.cart[id] = Math.min(q, APP.emp.settings.MAX_QTY_PER_BOOK || 3); renderCatalog(); renderCart(); }
+function cartTotals() {
+  const m = {}; APP.emp.books.forEach(b => m[b.Book_ID] = b);
+  let cover = 0, net = 0; Object.keys(APP.cart).forEach(id => { const b = m[id]; if (b) { cover += n(b.Cover_Price) * APP.cart[id]; net += n(b.Emp_Selling_Price) * APP.cart[id]; } });
+  return { cover, net, m };
+}
+function renderCart() {
+  const t = cartTotals(); const open = APP.emp.activePhase && APP.emp.activePhase.Booking_Open;
+  $("cartBody").innerHTML = Object.keys(APP.cart).map(id => { const b = t.m[id]; if (!b) return ""; return `<tr><td class="small fw-bold">${esc(b.Book_Name)}</td><td><input type="number" min="0" class="form-control form-control-sm text-center" value="${APP.cart[id]}" ${open ? "" : "disabled"} onchange="setCart('${esc(id)}',this.value)"></td><td class="num">${n(b.Emp_Selling_Price) * APP.cart[id]}</td><td>${open ? `<button class="btn btn-sm text-danger" onclick="setCart('${esc(id)}',0)"><i class="bi bi-trash"></i></button>` : ""}</td></tr>`; }).join("")
+    || `<tr><td colspan="4" class="text-center text-muted">لم تضف كتباً بعد</td></tr>`;
+  $("cCover").textContent = money(t.cover); $("cSave").textContent = money(t.cover - t.net); $("cNet").textContent = money(t.net);
+  recalcPlan();
+}
+function recalcPlan() {
+  const t = cartTotals().net, m = val("pMethod");
+  $("planBox").classList.toggle("d-none", m !== "INSTALLMENT");
+  if (m !== "INSTALLMENT") return;
+  const type = val("pDownType"), inp = n(val("pDown")), cnt = parseInt(val("pCount"), 10) || 1;
+  const down = type === "PERCENTAGE" ? ceil(t * Math.min(100, Math.max(0, inp)) / 100) : ceil(Math.min(t, Math.max(0, inp)));
+  const rem = Math.max(0, t - down), per = Math.floor(rem / cnt), last = rem - per * (cnt - 1);
+  const minDown = ceil(t * (APP.emp.settings.MIN_DOWN_PAYMENT_PCT || 0) / 100);
+  $("planPreview").innerHTML = `المقدم عند الاستلام: <b>${money(down)}</b> · ${cnt} أقساط شهرية: <b>${money(per)}</b>${last !== per ? ` (الأخير ${money(last)})` : ""}` + (down < minDown ? `<div class="text-danger">أقل مقدم مسموح ${money(minDown)}</div>` : "");
+}
+async function submitReservation() {
+  const items = Object.keys(APP.cart).map(id => ({ bookId: id, qty: APP.cart[id] }));
+  if (!items.length && !confirm("الاستمارة فارغة: سيتم إلغاء حجزك في هذه المرحلة. متابعة؟")) return;
+  await act("SUBMIT_OR_UPDATE_RESERVATION", { phaseId: APP.phaseId, items, paymentMethod: val("pMethod"), downPaymentType: val("pDownType"), downPaymentInput: n(val("pDown")), installmentCount: val("pCount") });
+}
+function renderEmpStatus() {
+  const r = APP.emp, ph = APP.phaseId, bm = {}; r.books.forEach(b => bm[b.Book_ID] = b.Book_Name);
+  const items = r.myReservationItems.filter(i => i.Phase_ID === ph);
+  const inv = r.myInvoices.find(i => i.Phase_ID === ph);
+  let html = `<div class="d-flex justify-content-between align-items-center mb-2"><h6 class="fw-bold mb-0">موقف كتبك في المرحلة</h6><button class="btn btn-sm btn-outline-dark no-print" onclick="printEmpInvoice()"><i class="bi bi-printer"></i> طباعة الفاتورة</button></div>`;
+  html += tbl(["الكتاب", "وقت الأسبقية", "محجوز", "مخصص", "مستلم", "مرتجع", "سعر النسخة", "الحالة"], items.map(i => [
+    esc(bm[i.Book_ID] || i.Book_ID), `<span dir="ltr" class="small">${esc(i.Priority_Timestamp)}</span>`, i.Requested_Qty, `<b>${i.Allocated_Qty}</b>`, i.Delivered_Qty, i.Returned_Qty, n(i.Unit_Emp_Price),
+    `<span class="badge bg-${i.Allocation_Status === "Fully_Allocated" ? "success" : i.Allocation_Status === "Waitlisted" ? "secondary" : "warning text-dark"}">${ar(i.Allocation_Status)}</span><div class="small text-muted">${esc(i.Unallocated_Reason)}</div>`]), { empty: "لا توجد كتب محجوزة في هذه المرحلة" });
+  if (inv) html += `<div id="empInvoicePrint" class="row g-2 mt-2 small">
+    <div class="col-md-3"><div class="bg-light rounded p-2">بسعر الغلاف<br><b class="num">${money(inv.Total_Cover_Amount)}</b></div></div>
+    <div class="col-md-3"><div class="bg-light rounded p-2 text-success">التوفير<br><b class="num">${money(inv.Total_Savings)}</b></div></div>
+    <div class="col-md-3"><div class="bg-light rounded p-2">صافي الفاتورة<br><b class="num">${money(inv.Net_Final_Invoice_Amount)}</b></div></div>
+    <div class="col-md-3"><div class="bg-light rounded p-2 text-danger">المتبقي عليك<br><b class="num">${money(inv.Remaining_Balance)}</b>${n(inv.Credit_Balance) ? `<br><span class="text-success">لك رصيد ${money(inv.Credit_Balance)}</span>` : ""}</div></div></div>`;
+  else html += `<div class="alert alert-light border small mt-2">تصدر الفاتورة بعد وصول الكتب وتوزيعها حسب الأسبقية.</div>`;
+  $("empInvoiceArea").innerHTML = html;
+  $("empInstArea").innerHTML = tbl(["القسط", "الاستحقاق", "المبلغ", "المسدد", "المتبقي", "الحالة"], r.myInstallments.filter(i => i.Emp_Inv_ID.indexOf("-" + ph + "-") > 0).map(s => [esc(s.Admin_Custom_Notes), s.Due_Date, n(s.Scheduled_Amount), n(s.Paid_Amount), n(s.Remaining_Inst_Amount), ar(s.Status, s.Status === "Scheduled" ? "_i" : "")]), { empty: "يظهر الجدول بعد إصدار الفاتورة" });
+  $("empPayArea").innerHTML = tbl(["الإيصال", "التاريخ", "المبلغ", "الوسيلة", "المرجع"], r.myPayments.map(p => [esc(p.Receipt_No), esc(String(p.Payment_Date).slice(0, 16)), n(p.Amount), ar(p.Payment_Method), esc(p.Transaction_Ref)]), { empty: "لا توجد مدفوعات" });
+}
+function printEmpInvoice() { openPrint("فاتورة", `<h4>فاتورة كتب – ${esc(APP.user.fullName)} (${esc(APP.user.empId)})</h4>` + $("empInvoiceArea").innerHTML); }
+
+// ============ لوحة الإدارة ============
+async function loadAdmin() {
+  const r = await call("GET_ADMIN_DASHBOARD_DATA");
+  if (!r.success) return toast(r.message, "danger");
+  APP.adm = r;
+  if (!APP.phaseId || !r.phases.find(p => p.Phase_ID === APP.phaseId)) { const op = r.phases.filter(p => p.Phase_Status !== "Completed"); APP.phaseId = (op[op.length - 1] || r.phases[r.phases.length - 1] || {}).Phase_ID; }
+  $("admPhase").innerHTML = r.phases.map(p => `<option value="${esc(p.Phase_ID)}" ${p.Phase_ID === APP.phaseId ? "selected" : ""}>${esc(p.Phase_Name)} (${esc(p.Phase_ID)})</option>`).join("");
+  const supOpts = r.suppliers.map(s => `<option value="${esc(s.Supplier_ID)}">${esc(s.Supplier_Name)}</option>`).join("");
+  document.querySelectorAll(".sup-select").forEach(s => { const v = s.value; s.innerHTML = supOpts; if (v) s.value = v; });
+  const bookOpts = r.books.map(b => `<option value="${esc(b.Book_ID)}">${esc(b.Book_ID)} - ${esc(b.Book_Name)}</option>`).join("");
+  document.querySelectorAll(".book-select").forEach(s => s.innerHTML = bookOpts);
+  $("settingsCard").classList.toggle("d-none", APP.user.role !== "Admin");
+  APP.settlement = null;
+  renderAdmin();
+}
+function phaseObj() { return APP.adm.phases.find(p => p.Phase_ID === APP.phaseId) || {}; }
+function maps() {
+  const d = APP.adm, e = {}, b = {}, s = {};
+  d.employees.forEach(x => e[x.Emp_ID] = x); d.books.forEach(x => b[x.Book_ID] = x); d.suppliers.forEach(x => s[x.Supplier_ID] = x);
+  return { e, b, s };
+}
+function renderAdmin() {
+  const ph = phaseObj();
+  $("admPhaseStatus").textContent = ar(ph.Effective_Status);
+  $("carryTo").innerHTML = APP.adm.phases.filter(p => p.Phase_ID !== APP.phaseId).map(p => `<option value="${esc(p.Phase_ID)}">${esc(p.Phase_Name)}</option>`).join("");
+  renderDash(); renderCatalogAdm(); renderEmployees(); renderPO(); draftInvoice(); renderAlloc(); renderDelivery(); renderFinance(); renderSupFin();
+  if (!$("aRep").classList.contains("d-none")) renderReport();
+}
+function phaseItems() { return APP.adm.resItems.filter(i => i.Phase_ID === APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward"); }
+
+function renderDash() {
+  const d = APP.adm, ph = phaseObj(), items = phaseItems();
+  const sum = (a, f) => a.reduce((s, x) => s + n(x[f]), 0);
+  const invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId);
+  const people = new Set(items.map(i => i.Emp_ID)).size;
+  const waiting = items.reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty))), 0);
+  const overdue = d.installments.filter(i => i.Status === "Overdue").reduce((s, i) => s + n(i.Remaining_Inst_Amount), 0);
+  const k = [
+    ["الموظفون الحاجزون", people, ""], ["نسخ محجوزة", sum(items, "Requested_Qty"), ""], ["مخصص / مُسلَّم", sum(items, "Allocated_Qty") + " / " + sum(items, "Delivered_Qty"), "good"],
+    ["في الانتظار", waiting, waiting ? "warn" : "good"], ["فواتير المرحلة", money(sum(invs, "Net_Final_Invoice_Amount")), ""], ["المحصَّل", money(sum(invs, "Total_Paid_Amount")), "good"],
+    ["المتبقي على الموظفين", money(sum(invs, "Remaining_Balance")), "warn"], ["أقساط متأخرة (كل المراحل)", money(overdue), overdue ? "bad" : "good"]
+  ];
+  $("kpis").innerHTML = k.map(x => `<div class="col-6 col-md-3"><div class="card-x kpi ${x[2]} p-3"><div class="small text-muted fw-bold">${x[0]}</div><div class="fs-5 fw-bold num">${x[1]}</div></div></div>`).join("");
+  const steps = [["Open", "الحجز مفتوح", "يحجز الموظفون ويعدّلون"], ["Closed", "إغلاق الحجز", "يُغلق تلقائياً بانتهاء الموعد"], ["Ordered", "تجميد الحصر", "إرسال طلب التوريد للمكتبة"], ["Receiving", "استلام وجرد", "إدخال فاتورة المكتبة"], ["Delivering", "توزيع وتسليم", "تشغيل التوزيع ثم التسليم والتحصيل"], ["Completed", "إغلاق المرحلة", "بعد تسليم كل المخصص"]];
+  const cur = steps.findIndex(s => s[0] === ph.Effective_Status);
+  $("phaseFlow").innerHTML = `<ol class="list-group list-group-numbered small">${steps.map((s, i) => `<li class="list-group-item d-flex justify-content-between align-items-center ${i === cur ? "list-group-item-primary fw-bold" : i < cur ? "text-muted" : ""}"><span>${s[1]} <span class="text-muted">— ${s[2]}</span></span>${["Closed", "Completed", "Open"].includes(s[0]) && i !== cur ? `<button class="btn btn-sm btn-outline-dark py-0" onclick="act('SET_PHASE_STATUS',{phaseId:APP.phaseId,status:'${s[0]}'},'تغيير حالة المرحلة إلى ${s[1]}؟')">تعيين</button>` : ""}</li>`).join("")}</ol>`;
+  const alerts = [];
+  const notPaidDown = invs.filter(i => n(i.Total_Paid_Amount) < n(i.Down_Payment_Required)).length;
+  if (waiting) alerts.push(`${waiting} نسخة في الانتظار. عند وصول النواقص أدخل الفاتورة وشغّل التوزيع، أو رحّلهم للمرحلة التالية.`);
+  if (notPaidDown) alerts.push(`${notPaidDown} موظف لم يسدد المقدم بعد (لن يُسلَّم).`);
+  const openPO = d.poSnapshots.filter(p => p.Line_Status === "Open").reduce((s, p) => s + n(p.Outstanding_Qty), 0);
+  if (openPO) alerts.push(`المكتبة مدينة بـ ${openPO} نسخة لم تُورَّد.`);
+  const refunds = d.empInvoices.filter(i => n(i.Credit_Balance) > 0).length;
+  if (refunds) alerts.push(`${refunds} موظف لهم أرصدة مستحقة الرد.`);
+  const loss = d.books.filter(b => n(b.Emp_Selling_Price) < n(b.Standard_Net_Cost));
+  if (loss.length) alerts.push(`${loss.length} كتاب يُباع بأقل من تكلفته (راجع تقرير الهامش).`);
+  if (overdue) alerts.push(`أقساط متأخرة بقيمة ${money(overdue)}.`);
+  $("alertsBox").innerHTML = alerts.length ? `<ul class="mb-0">${alerts.map(a => `<li class="mb-1">${esc(a)}</li>`).join("")}</ul>` : `<span class="text-success">لا توجد تنبيهات.</span>`;
+}
+
+function renderCatalogAdm() {
+  const d = APP.adm, st = d.stockMap || {};
+  $("catalogTbl").innerHTML = tbl(["الكود", "الكتاب", "الصف", "الحالة", "الغلاف", "خصم المكتبة", "التكلفة الصافية", "سعر الموظف", "الهامش", "بالمخزن", "حر", ""], d.books.map(b => {
+    const m = n(b.Emp_Selling_Price) - n(b.Standard_Net_Cost);
+    return [esc(b.Book_ID), esc(b.Book_Name), esc(b.Grade), ar(b.Book_Status), n(b.Cover_Price), n(b.Supplier_Discount_Pct) + "%", n(b.Standard_Net_Cost), `<b>${n(b.Emp_Selling_Price)}</b>`,
+      `<span class="${m < 0 ? "text-danger fw-bold" : "text-success"}">${Math.round(m * 100) / 100}</span>`, st[b.Book_ID] ? st[b.Book_ID].onHand : 0, st[b.Book_ID] ? st[b.Book_ID].free : 0,
+      `<button class="btn btn-sm btn-link p-0" onclick="editBook('${esc(b.Book_ID)}')">تعديل</button>`];
+  }), { maxH: 500 });
+  $("phasesTbl").innerHTML = tbl(["الكود", "الاسم", "الحجز", "التسليم", "الحالة", ""], d.phases.map(p => [esc(p.Phase_ID), esc(p.Phase_Name), esc(String(p.Start_DateTime).slice(0, 10)) + " → " + esc(String(p.End_DateTime).slice(0, 10)), esc(p.Delivery_Start_Date), ar(p.Effective_Status), `<button class="btn btn-sm btn-link p-0" onclick="editPhase('${esc(p.Phase_ID)}')">تعديل</button>`]));
+  $("settingsTbl").innerHTML = tbl(["الإعداد", "القيمة", ""], d.settings.map(s => [`<div class="small fw-bold">${esc(s.Description)}</div><code class="small">${esc(s.Setting_Key)}</code>`, `<input class="form-control form-control-sm" id="set_${esc(s.Setting_Key)}" value="${esc(s.Setting_Value)}">`, `<button class="btn btn-sm btn-outline-dark" onclick="act('SAVE_SETTING',{key:'${esc(s.Setting_Key)}',value:val('set_${esc(s.Setting_Key)}')})">حفظ</button>`]));
+  previewPrice();
+}
+function editBook(id) { const b = APP.adm.books.find(x => x.Book_ID === id); $("bkId").value = b.Book_ID; $("bkName").value = b.Book_Name; $("bkStage").value = b.Stage; $("bkGrade").value = b.Grade; $("bkSubject").value = b.Subject; $("bkSup").value = b.Supplier_ID; $("bkStatus").value = b.Book_Status; $("bkCover").value = b.Cover_Price; $("bkSupDisc").value = b.Supplier_Discount_Pct; $("bkVol").value = b.Volume_Discount_Share_Pct; $("bkEmpD").value = b.Emp_Discount_Pct; previewPrice(); window.scrollTo(0, 0); }
+function editPhase(id) { const p = APP.adm.phases.find(x => x.Phase_ID === id); $("phId").value = p.Phase_ID; $("phName").value = p.Phase_Name; $("phStart").value = String(p.Start_DateTime).slice(0, 10); $("phEnd").value = String(p.End_DateTime).slice(0, 10); $("phDel").value = p.Delivery_Start_Date || ""; $("phGrades").value = p.Allowed_Grades || "ALL"; }
+function previewPrice() {
+  if (!APP.adm) return;
+  const sup = APP.adm.suppliers.find(s => s.Supplier_ID === val("bkSup")) || {};
+  const cover = n(val("bkCover")), sd = n(val("bkSupDisc")), vd = val("bkVol") === "" ? n(sup.Volume_Discount_Pct) : n(val("bkVol")), ed = val("bkEmpD") === "" ? n(APP.adm.settingsMap.UNIFIED_EMP_DISCOUNT_PCT) : n(val("bkEmpD"));
+  const first = Math.round(cover * (1 - sd / 100) * 100) / 100, cost = Math.round((first - Math.round(first * vd) / 100) * 100) / 100, emp = ceil(cover * (1 - ed / 100));
+  $("pricePreview").innerHTML = `التكلفة: ${first} بعد خصم الصنف ← <b>${cost}</b> بعد خصم الكمية ${vd}% · سعر الموظف: <b class="text-success">${emp}</b> · الهامش: <b class="${emp - cost < 0 ? "text-danger" : ""}">${Math.round((emp - cost) * 100) / 100}</b>`;
+}
+async function saveBook() { const r = await act("SAVE_BOOK", { bookId: val("bkId"), bookName: val("bkName"), stage: val("bkStage"), grade: val("bkGrade"), subject: val("bkSubject"), supplierId: val("bkSup"), bookStatus: val("bkStatus"), coverPrice: val("bkCover"), supplierDiscountPct: val("bkSupDisc"), volumeDiscountSharePct: val("bkVol"), empDiscountPct: val("bkEmpD") }); }
+function parsePaste(txt) { return txt.trim().split(/\r?\n/).filter(Boolean).map(l => l.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s => s.trim().replace(/^"|"$/g, ""))); }
+async function importBooks() { const rows = parsePaste(val("bulkBooks")).map(p => ({ Book_ID: p[0], Book_Name: p[1], Stage: p[2], Grade: p[3], Subject: p[4], Publisher: p[5], Supplier_ID: p[6], Cover_Price: p[7], Supplier_Discount_Pct: p[8] })); if (rows.length) await act("BULK_IMPORT_BOOKS", { booksArray: rows }); }
+async function savePhase() { await act("SAVE_PHASE", { phaseId: val("phId"), phaseName: val("phName"), startDate: val("phStart"), endDate: val("phEnd"), deliveryStartDate: val("phDel"), allowedGrades: val("phGrades") }); }
+async function saveSupplier() { await act("SAVE_SUPPLIER", { supplierName: val("supName"), phone: val("supPhone"), volumeDiscountPct: val("supVol") }); }
+
+function renderEmployees() {
+  const q = val("empSearch").trim(), d = APP.adm;
+  const bal = {}; d.empInvoices.forEach(i => bal[i.Emp_ID] = (bal[i.Emp_ID] || 0) + n(i.Remaining_Balance));
+  $("empTbl").innerHTML = tbl(["الرقم", "الاسم", "الموبايل", "الإدارة", "الحالة", "التقسيط", "الحد الائتماني", "المتبقي عليه"], d.employees.filter(e => !q || (e.Emp_ID + e.Full_Name + e.Mobile).includes(q)).map(e =>
+    [esc(e.Emp_ID), esc(e.Full_Name), esc(e.Mobile), esc(e.Department), esc(e.Employment_Status), String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح", e.Max_Credit_Limit ? money(e.Max_Credit_Limit) : "الافتراضي", money(bal[e.Emp_ID] || 0)]), { maxH: 600 });
+}
+async function importEmployees() { const rows = parsePaste(val("bulkEmp")).map(p => ({ Emp_ID: p[0], Full_Name: p[1], National_ID_Last4: p[2], Mobile: p[3], Department: p[4], Job_Title: p[5], Max_Credit_Limit: p[6] })); if (rows.length) await act("BULK_IMPORT_EMPLOYEES", { employeesArray: rows }); }
+async function reserveOnBehalf() {
+  const items = val("obItems").split(/[,،]/).map(s => s.trim()).filter(Boolean).map(s => { const [b, q] = s.split(":"); return { bookId: b.trim(), qty: parseInt(q || "1", 10) }; });
+  const inst = val("obMethod") === "INSTALLMENT";
+  await act("SUBMIT_OR_UPDATE_RESERVATION", { empId: val("obEmp"), phaseId: APP.phaseId, items, paymentMethod: inst ? "INSTALLMENT" : "CASH", downPaymentType: "PERCENTAGE", downPaymentInput: 25, installmentCount: 2 });
+}
+
+function renderPO() {
+  const d = APP.adm, { b, s } = maps();
+  const items = phaseItems(), agg = {};
+  items.forEach(i => { agg[i.Book_ID] = agg[i.Book_ID] || { req: 0, emps: new Set() }; agg[i.Book_ID].req += n(i.Requested_Qty); agg[i.Book_ID].emps.add(i.Emp_ID); });
+  $("poLive").innerHTML = `<div class="small fw-bold mb-1">الحجوزات الحالية (تجميعي لحظي)</div>` + tbl(["الكتاب", "عدد الموظفين", "النسخ المحجوزة", "الرصيد الحر بالمخزن"], Object.keys(agg).map(k => [esc((b[k] || {}).Book_Name || k), agg[k].emps.size, agg[k].req, d.stockMap[k] ? d.stockMap[k].free : 0]), { maxH: 260 });
+  const snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId);
+  $("poTbl").innerHTML = `<div class="small fw-bold mb-1">طلب التوريد المجمَّد</div>` + tbl(["الكتاب", "المكتبة", "الاحتياج", "من المخزون", "من نواقص سابقة", "المطلوب من المكتبة", "وصل", "متبقٍ على المكتبة", "الحالة", ""], snaps.map(p => [
+    esc((b[p.Book_ID] || {}).Book_Name || p.Book_ID) + `<div class="small text-muted">${esc(p.Book_ID)}</div>`, esc((s[p.Supplier_ID] || {}).Supplier_Name || p.Supplier_ID), p.Total_Requested_Qty, p.Carryover_Stock_Qty, n(p.Pending_From_Previous_Qty), `<b>${p.Net_Order_To_Supplier_Qty}</b>`, n(p.Received_Qty_To_Date), n(p.Outstanding_Qty), ar(p.Line_Status, p.Line_Status === "Open" ? "_po" : ""),
+    p.Line_Status === "Open" ? `<button class="btn btn-sm btn-outline-danger py-0" onclick="cancelBackorder('${esc(p.PO_ID)}')">لن يُورَّد</button>` : ""]), { empty: "لم يُجمَّد الحصر بعد." });
+}
+async function cancelBackorder(id) { const reason = prompt("سبب الإلغاء (مثال: الناشر أوقف الطبعة)"); if (reason) await act("CANCEL_PO_BACKORDER", { poId: id, reason }); }
+
+function draftInvoice() {
+  const d = APP.adm; if (!d) return;
+  const sup = d.suppliers.find(x => x.Supplier_ID === val("siSup")) || d.suppliers[0] || {};
+  $("siVol").value = n(sup.Volume_Discount_Pct);
+  const snaps = {}; d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId).forEach(p => snaps[p.Book_ID] = n(p.Outstanding_Qty));
+  const books = d.books.filter(b => b.Supplier_ID === sup.Supplier_ID);
+  $("siBody").innerHTML = books.map(b => { const o = snaps[b.Book_ID] || 0; return `<tr data-id="${esc(b.Book_ID)}" data-ord="${o}">
+    <td class="small"><b>${esc(b.Book_Name)}</b><div class="text-muted">${esc(b.Book_ID)}</div></td><td>${o}</td>
+    <td><input type="number" min="0" class="form-control form-control-sm si-rec" style="width:70px" value="${o}" oninput="recalcDraft()"></td>
+    <td><input type="number" min="0" class="form-control form-control-sm si-dmg" style="width:60px" value="0" oninput="recalcDraft()"></td>
+    <td class="text-center"><input type="checkbox" class="form-check-input si-np"></td>
+    <td><input type="number" class="form-control form-control-sm si-cover" style="width:80px" value="${n(b.Cover_Price)}" oninput="recalcDraft()"></td>
+    <td><input type="number" class="form-control form-control-sm si-disc" style="width:60px" value="${n(b.Supplier_Discount_Pct)}" oninput="recalcDraft()"></td>
+    <td class="si-unit num"></td><td class="si-line num"></td><td class="si-var"></td></tr>`; }).join("");
+  recalcDraft();
+  $("supInvTbl").innerHTML = tbl(["المرجع", "رقم المكتبة", "المرحلة", "التاريخ", "بعد خصم الأصناف", "خصم الكمية", "الصافي", "تالف", "الحالة"], d.supInvHeaders.slice().reverse().map(h => [esc(h.Internal_Ref_No), esc(h.Supplier_Invoice_No), esc(h.Phase_ID), esc(h.Invoice_Date), n(h.Total_After_Item_Discount), n(h.Volume_Discount_Amount), `<b>${n(h.Net_Payable_Amount)}</b>`, n(h.Damaged_Claim_Amount), esc(h.Status) + (n(h.Variance_Amount) ? ` <span class="text-danger">(فرق ${n(h.Variance_Amount)})</span>` : "")]));
+}
+function recalcDraft() {
+  const vol = n(val("siVol")); let after = 0, dmgAmt = 0;
+  document.querySelectorAll("#siBody tr").forEach(tr => {
+    const rec = n(tr.querySelector(".si-rec").value), dmg = n(tr.querySelector(".si-dmg").value), cover = n(tr.querySelector(".si-cover").value), disc = n(tr.querySelector(".si-disc").value), ord = n(tr.dataset.ord);
+    const first = Math.round(cover * (1 - disc / 100) * 100) / 100, unit = Math.round((first - Math.round(first * vol) / 100) * 100) / 100;
+    after += first * (rec + dmg); dmgAmt += unit * dmg;
+    tr.querySelector(".si-unit").textContent = unit; tr.querySelector(".si-line").textContent = Math.round(unit * (rec + dmg) * 100) / 100;
+    const v = rec + dmg - ord; tr.querySelector(".si-var").innerHTML = v === 0 ? `<span class="text-success">مطابق</span>` : `<span class="${v < 0 ? "text-danger" : "text-warning"}">${v > 0 ? "+" : ""}${v}</span>`;
+  });
+  after = Math.round(after * 100) / 100; const va = Math.round(after * vol) / 100;
+  $("siAfter").textContent = money(after); $("siVolAmt").textContent = money(va); $("siNet").textContent = money(after - va); $("siDmg").textContent = money(dmgAmt);
+}
+async function submitInvoice() {
+  const items = []; document.querySelectorAll("#siBody tr").forEach(tr => {
+    const it = { bookId: tr.dataset.id, orderedQty: n(tr.dataset.ord), receivedQty: n(tr.querySelector(".si-rec").value), damagedQty: n(tr.querySelector(".si-dmg").value), coverPrice: n(tr.querySelector(".si-cover").value), itemDiscPct: n(tr.querySelector(".si-disc").value), notPrinted: tr.querySelector(".si-np").checked };
+    if (it.orderedQty || it.receivedQty || it.damagedQty) items.push(it);
+  });
+  await act("SUBMIT_SUPPLIER_INVOICE", { supplierId: val("siSup"), phaseId: APP.phaseId, supplierInvoiceNo: val("siNo"), invoiceDate: val("siDate"), volumeDiscountPct: val("siVol"), supplierStatedNet: val("siStated"), items }, "اعتماد الفاتورة نهائي ولا يُعدَّل. هل راجعت الجرد؟");
+}
+
+function renderAlloc() {
+  const { e, b } = maps(), q = val("allocSearch").trim();
+  const items = phaseItems().filter(i => !q || ((b[i.Book_ID] || {}).Book_Name + i.Book_ID + i.Emp_ID + ((e[i.Emp_ID] || {}).Full_Name || "")).includes(q))
+    .sort((x, y) => (x.Book_ID + x.Priority_Timestamp).localeCompare(y.Book_ID + y.Priority_Timestamp));
+  $("allocTbl").innerHTML = tbl(["الكتاب", "الموظف", "وقت الأسبقية", "شريحة", "محجوز", "مخصص", "مُسلَّم", "الحالة", "استثناء موثق"], items.map(i => [
+    esc((b[i.Book_ID] || {}).Book_Name || i.Book_ID), esc((e[i.Emp_ID] || {}).Full_Name || "") + ` <span class="text-muted">(${esc(i.Emp_ID)})</span>`, `<span dir="ltr" class="small">${esc(i.Priority_Timestamp)}</span>`, i.Tranche_No + (i.Carried_From_Item_ID ? " ↩" : ""), i.Requested_Qty, `<b>${i.Allocated_Qty}</b>`, i.Delivered_Qty,
+    `${ar(i.Allocation_Status)}<div class="small text-muted">${esc(i.Unallocated_Reason)}</div>${String(i.Is_Manual_Exception) === "true" ? `<div class="badge bg-info text-dark">${esc(i.Exception_Reason)}</div>` : ""}`,
+    `<div class="input-group input-group-sm" style="width:200px"><input type="number" min="0" class="form-control" id="mq_${esc(i.Res_Item_ID)}" value="${i.Allocated_Qty}" style="max-width:55px"><input class="form-control" id="mr_${esc(i.Res_Item_ID)}" placeholder="السبب"><button class="btn btn-outline-dark" onclick="act('MANUAL_ALLOCATION_OVERRIDE',{resItemId:'${esc(i.Res_Item_ID)}',newAllocatedQty:val('mq_${esc(i.Res_Item_ID)}'),reason:val('mr_${esc(i.Res_Item_ID)}')})">تطبيق</button></div>`]), { maxH: 650 });
+}
+
+function renderDelivery() {
+  const { e, b } = maps(), q = val("delEmp").trim(), d = APP.adm;
+  const items = phaseItems().filter(i => n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0);
+  const byEmp = {}; items.forEach(i => (byEmp[i.Emp_ID] = byEmp[i.Emp_ID] || []).push(i));
+  const emps = Object.keys(byEmp).filter(id => !q || (id + ((e[id] || {}).Full_Name || "")).includes(q)).slice(0, q ? 50 : 15);
+  $("delArea").innerHTML = emps.map(id => {
+    const list = byEmp[id], inv = d.empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || {};
+    const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
+    const downOk = n(inv.Total_Paid_Amount) >= n(inv.Down_Payment_Required);
+    return `<div class="card-x p-3 mb-2"><div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
+      <div><b>${esc((e[id] || {}).Full_Name || id)}</b> <span class="text-muted">(${esc(id)})</span> · فاتورة ${money(inv.Net_Final_Invoice_Amount)} · المطلوب قبل التسليم ${money(inv.Down_Payment_Required)} · المسدد ${money(inv.Total_Paid_Amount)}
+      ${downOk ? `<span class="badge bg-success">مسموح بالتسليم</span>` : `<span class="badge bg-danger">لم يسدد المقدم</span>`}</div>
+      ${rem > 0 ? `<button class="btn btn-success btn-sm" onclick="deliverAll('${esc(id)}')"><i class="bi bi-check2-all"></i> تسليم الكل (${rem}) بإذن واحد</button>` : `<span class="badge bg-light text-dark border">تم التسليم</span>`}</div>`
+      + tbl(["الكتاب", "مخصص", "مُسلَّم", "مرتجع", "إجراءات"], list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty); return [esc((b[i.Book_ID] || {}).Book_Name || i.Book_ID), i.Allocated_Qty, i.Delivered_Qty, i.Returned_Qty,
+        (r > 0 ? `<button class="btn btn-sm btn-outline-secondary py-0" onclick="cancelUndelivered('${esc(i.Res_Item_ID)}',${r})">تنازل/رفض</button> ` : "") +
+        (n(i.Delivered_Qty) > n(i.Returned_Qty) ? `<button class="btn btn-sm btn-outline-danger py-0" onclick="empReturn('${esc(i.Res_Item_ID)}')">مرتجع</button>` : "")]; })) + `</div>`;
+  }).join("") || `<div class="card-x p-3 text-muted text-center">لا توجد كتب مخصصة ${q ? "لهذا البحث" : "في هذه المرحلة"}.</div>`;
+  $("docsTbl").innerHTML = tbl(["المستند", "النوع", "الطرف", "الكتاب", "العدد", "القيمة", "التاريخ", "المستلم/السبب", ""], d.deliveryReturns.filter(x => x.Phase_ID === APP.phaseId).slice(-60).reverse().map(x => [esc(x.Printed_Receipt_No), x.Doc_Type === "EMP_DELIVERY" ? "تسليم" : x.Doc_Type === "EMP_RETURN" ? "مرتجع موظف" : "مرتجع للمكتبة", esc(x.Party_ID), esc((b[x.Book_ID] || {}).Book_Name || x.Book_ID), x.Qty, n(x.Total_Amount_Impact), esc(String(x.Trans_Date).slice(0, 16)), esc(x.Received_By || x.Return_Reason), `<button class="btn btn-sm btn-link p-0" onclick="printDoc('${esc(x.Printed_Receipt_No)}')">طباعة</button>`]), { maxH: 400 });
+}
+async function deliverAll(id) {
+  const r = await call("EXECUTE_BOOK_DELIVERY", { empId: id, phaseId: APP.phaseId, receivedBy: val("delBy") });
+  if (!r.success && APP.user.role === "Admin" && /المقدم|متأخرة/.test(r.message)) {
+    const reason = prompt(r.message + "\n\nللتسليم استثناءً، اكتب سبب التجاوز (يُسجَّل باسمك):");
+    if (reason) await act("EXECUTE_BOOK_DELIVERY", { empId: id, phaseId: APP.phaseId, receivedBy: val("delBy"), forceReason: reason });
+    return;
+  }
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) { await loadAdmin(); printDoc(r.receiptNo); $("delBy").value = ""; }
+}
+async function cancelUndelivered(itemId, max) { const q = prompt("عدد النسخ التي تنازل عنها الموظف (حتى " + max + ")", max); if (!q) return; const reason = prompt("السبب", "رفض الاستلام"); await act("CANCEL_UNDELIVERED_QTY", { resItemId: itemId, qty: q, reason }); }
+async function empReturn(itemId) {
+  const q = prompt("عدد النسخ المرتجعة", 1); if (!q) return;
+  const reason = prompt("سبب الإرجاع", "مكرر / خطأ في الصف"); const damaged = confirm("هل الكتاب تالف؟ (موافق = تالف)");
+  const r = await call("RECORD_BOOK_RETURN", { returnType: "EMP_RETURN", resItemId: itemId, qty: q, reason, condition: damaged ? "DAMAGED" : "OK" });
+  if (!r.success && APP.user.role === "Admin" && /المدير/.test(r.message)) { const f = prompt(r.message + "\n\nسبب الموافقة الاستثنائية:"); if (f) await act("RECORD_BOOK_RETURN", { returnType: "EMP_RETURN", resItemId: itemId, qty: q, reason, condition: damaged ? "DAMAGED" : "OK", forceReason: f }); return; }
+  toast(r.message, r.success ? "success" : "danger"); if (r.success) loadAdmin();
+}
+function printDoc(no) {
+  const d = APP.adm, { e, b } = maps(); const lines = d.deliveryReturns.filter(x => x.Printed_Receipt_No === no); if (!lines.length) return;
+  const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : "إذن ارتجاع";
+  openPrint(title, `<h4 class="text-center">${title} رقم ${esc(no)}</h4><p>الموظف: <b>${esc((e[f.Party_ID] || {}).Full_Name || f.Party_ID)}</b> (${esc(f.Party_ID)}) · التاريخ: ${esc(f.Trans_Date)} · المرحلة: ${esc(f.Phase_ID)}</p>
+    <table class="table table-bordered"><tr><th>الكتاب</th><th>العدد</th><th>سعر النسخة</th><th>القيمة</th></tr>${lines.map(l => `<tr><td>${esc((b[l.Book_ID] || {}).Book_Name || l.Book_ID)}</td><td>${l.Qty}</td><td>${l.Unit_Price_Applied}</td><td>${Math.abs(n(l.Total_Amount_Impact))}</td></tr>`).join("")}</table>
+    <p>المستلم: ${esc(f.Received_By || "")} · المسلِّم: ${esc(f.Handled_By)}</p><div class="row mt-5"><div class="col">توقيع المستلم: ..................</div><div class="col">توقيع أمين المخزن: ..................</div></div>`);
+}
+
+function renderFinance() {
+  const d = APP.adm, { e } = maps(), q = val("finSearch").trim();
+  const invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId && (!q || (i.Emp_ID + ((e[i.Emp_ID] || {}).Full_Name || "")).includes(q)));
+  $("finTbl").innerHTML = tbl(["الموظف", "الصافي", "المقدم", "المسدد", "المتبقي", "الخطة", "الحالة", "تحصيل", "إجراءات"], invs.map(i => [
+    esc((e[i.Emp_ID] || {}).Full_Name || i.Emp_ID) + ` <span class="text-muted">(${esc(i.Emp_ID)})</span>`, `<b>${n(i.Net_Final_Invoice_Amount)}</b>`, n(i.Down_Payment_Required), n(i.Total_Paid_Amount), `<span class="text-danger fw-bold">${n(i.Remaining_Balance)}</span>` + (n(i.Credit_Balance) ? `<div class="text-success small">له ${n(i.Credit_Balance)}</div>` : ""),
+    ar(i.Payment_Plan_Type) + (n(i.Installments_Count) ? " " + i.Installments_Count : ""), ar(i.Invoice_Status),
+    n(i.Remaining_Balance) > 0 ? `<div class="input-group input-group-sm" style="width:290px"><input type="number" class="form-control" id="pa_${esc(i.Emp_Inv_ID)}" value="${Math.max(0, n(i.Down_Payment_Required) - n(i.Total_Paid_Amount)) || n(i.Remaining_Balance)}" style="max-width:80px"><select class="form-select" id="pm_${esc(i.Emp_Inv_ID)}"><option value="CASH">نقدي</option><option value="INSTAPAY">إنستاباي</option><option value="WALLET">محفظة</option><option value="PAYROLL">مرتب</option></select><input class="form-control" id="pr_${esc(i.Emp_Inv_ID)}" placeholder="المرجع"><button class="btn btn-we" onclick="collect('${esc(i.Emp_Inv_ID)}')">تحصيل</button></div>` : "",
+    (n(i.Credit_Balance) ? `<button class="btn btn-sm btn-outline-success py-0" onclick="act('REFUND_EMPLOYEE_CREDIT',{empInvId:'${esc(i.Emp_Inv_ID)}'},'رد ${n(i.Credit_Balance)} ج.م للموظف؟')">رد الرصيد</button> ` : "") +
+    `<button class="btn btn-sm btn-outline-secondary py-0" onclick="changePlan('${esc(i.Res_ID)}')">خطة السداد</button>`]), { maxH: 600 });
+  const pays = d.empPayments.filter(p => (p.Emp_Inv_ID || "").indexOf("-" + APP.phaseId + "-") > 0).slice().reverse();
+  $("rcptTbl").innerHTML = tbl(["الإيصال", "الموظف", "التاريخ", "المبلغ", "الوسيلة", "المرجع", "المحصِّل", ""], pays.map(p => [esc(p.Receipt_No), esc(p.Emp_ID), esc(String(p.Payment_Date).slice(0, 16)), n(p.Amount), ar(p.Payment_Method), esc(p.Transaction_Ref), esc(p.Collected_By),
+    String(p.Is_Voided) === "true" ? `<span class="badge bg-danger">ملغى: ${esc(p.Void_Reason)}</span>` : `<button class="btn btn-sm btn-link p-0" onclick="printReceipt('${esc(p.Receipt_No)}')">طباعة</button>` + (APP.user.role === "Admin" ? ` <button class="btn btn-sm btn-link text-danger p-0" onclick="voidRcpt('${esc(p.Receipt_No)}')">إلغاء</button>` : "")]), { maxH: 450 });
+  renderCashDay();
+  $("closingsTbl").innerHTML = tbl(["اليوم", "الوسيلة", "المنظومة", "الفعلي", "الفرق"], d.cashClosings.slice(-12).reverse().map(c => [esc(c.Closing_Date), ar(c.Payment_Method), n(c.System_Amount), n(c.Counted_Amount), `<span class="${n(c.Difference) ? "text-danger fw-bold" : ""}">${n(c.Difference)}</span>`]));
+}
+async function collect(id) {
+  const m = val("pm_" + id), r = await call("RECORD_EMPLOYEE_PAYMENT", { empInvId: id, amount: val("pa_" + id), paymentMethod: m, transactionRef: val("pr_" + id) });
+  toast(r.message, r.success ? "success" : "danger"); if (r.success) { await loadAdmin(); printReceipt(r.receiptNo); }
+}
+async function voidRcpt(no) { const reason = prompt("سبب إلغاء الإيصال " + no); if (reason) await act("VOID_EMPLOYEE_PAYMENT", { receiptNo: no, reason }); }
+async function changePlan(resId) {
+  const m = prompt("طريقة السداد: INSTALLMENT أو CASH", "INSTALLMENT"); if (!m) return;
+  let down = 0, cnt = 1; if (m === "INSTALLMENT") { down = prompt("قيمة المقدم بالجنيه", 0); cnt = prompt("عدد الأقساط", 3); }
+  await act("CUSTOMIZE_EMP_INSTALLMENTS", { resId, paymentMethod: m, downPaymentType: "FIXED", downPaymentInput: down, installmentCount: cnt });
+}
+function printReceipt(no) {
+  const p = APP.adm.empPayments.find(x => x.Receipt_No === no); if (!p) return; const { e } = maps(); const inv = APP.adm.empInvoices.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {};
+  openPrint("إيصال", `<h4 class="text-center">إيصال ${n(p.Amount) < 0 ? "رد" : "استلام نقدية"} رقم ${esc(no)}</h4><table class="table table-bordered mt-3">
+    <tr><th>الموظف</th><td>${esc((e[p.Emp_ID] || {}).Full_Name || "")} (${esc(p.Emp_ID)})</td></tr><tr><th>المبلغ</th><td><b>${Math.abs(n(p.Amount))} ج.م</b></td></tr>
+    <tr><th>الوسيلة / المرجع</th><td>${ar(p.Payment_Method)} / ${esc(p.Transaction_Ref)}</td></tr><tr><th>التاريخ</th><td>${esc(p.Payment_Date)}</td></tr>
+    <tr><th>الفاتورة</th><td>${esc(p.Emp_Inv_ID)} · الصافي ${n(inv.Net_Final_Invoice_Amount)} · المتبقي بعد السداد ${n(inv.Remaining_Balance)}</td></tr></table>
+    <div class="row mt-5"><div class="col">المحصِّل: ${esc(p.Collected_By)} ..............</div><div class="col">توقيع الموظف: ..............</div></div>`);
+}
+function renderCashDay() {
+  if (!APP.adm) return; const day = val("clsDate"), by = {};
+  APP.adm.empPayments.filter(p => String(p.Is_Voided) !== "true" && String(p.Payment_Date).slice(0, 10) === day).forEach(p => by[p.Payment_Method] = (by[p.Payment_Method] || 0) + n(p.Amount));
+  $("cashDayPreview").innerHTML = "حسب المنظومة: " + (Object.keys(by).map(k => `${ar(k)} <b>${money(by[k])}</b>`).join(" · ") || "لا تحصيلات");
+}
+async function closeDay() {
+  const counted = {}; if (val("clsCash") !== "") counted.CASH = val("clsCash"); if (val("clsWallet") !== "") counted.WALLET = val("clsWallet"); if (val("clsIP") !== "") counted.INSTAPAY = val("clsIP");
+  await act("CLOSE_CASH_DAY", { date: val("clsDate"), counted }, "الإقفال نهائي ويمنع إلغاء إيصالات هذا اليوم. متابعة؟");
+}
+
+function renderSupFin() {
+  const d = APP.adm, { s } = maps();
+  const bySup = {}; d.supLedger.forEach(l => { const x = bySup[l.Supplier_ID] = bySup[l.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 }; if (l.Trans_Type === "INVOICE_CREDIT") x.inv += n(l.Credit_Amount); else if (l.Trans_Type === "DAMAGE_CLAIM") x.claim += n(l.Debit_Amount); else if (l.Trans_Type === "RETURN_DEBIT_NOTE") x.ret += n(l.Debit_Amount); else x.paid += n(l.Debit_Amount); });
+  $("supBalTbl").innerHTML = tbl(["المكتبة", "فواتير", "مطالبات تالف", "مرتجعات", "مدفوع", "الرصيد المستحق لها"], Object.keys(bySup).map(k => { const x = bySup[k]; return [esc((s[k] || {}).Supplier_Name || k), money(x.inv), money(x.claim), money(x.ret), money(x.paid), `<b>${money(x.inv - x.claim - x.ret - x.paid)}</b>`]; }));
+  $("expTbl").innerHTML = tbl(["الرقم", "التاريخ", "البند", "المستفيد", "القيمة"], d.expenses.slice().reverse().map(x => [esc(x.Expense_ID), esc(x.Expense_Date), esc(x.Expense_Category), esc(x.Beneficiary_Name), money(x.Amount)]), { maxH: 250 });
+}
+async function paySupplier() { await act("RECORD_SUPPLIER_PAYMENT", { supplierId: val("spSup"), amount: val("spAmt"), docRef: val("spRef"), channel: val("spCh"), phaseId: APP.phaseId, allowAdvance: $("spAdv").checked }); }
+async function addExpense() { await act("RECORD_INITIATIVE_EXPENSE", { category: val("exCat"), amount: val("exAmt"), beneficiary: val("exBen"), docNo: val("exDoc"), notes: val("exNotes"), phaseId: APP.phaseId }); }
+async function returnToSupplier() { await act("RECORD_BOOK_RETURN", { returnType: "SUPPLIER_RETURN", bookId: val("srBook"), qty: val("srQty"), phaseId: APP.phaseId }, "تسجيل إذن ارتجاع للمكتبة؟"); }
+async function adjustStock() { await act("RECORD_STOCK_ADJUSTMENT", { bookId: val("adjBook"), qty: val("adjQty"), reason: val("adjReason"), phaseId: APP.phaseId }); }
+
+// ============ التقارير ============
+async function renderReport() {
+  const d = APP.adm; if (!d) return; const { e, b, s } = maps(); const ph = APP.phaseId, sel = val("repSel");
+  const items = d.resItems.filter(i => i.Phase_ID === ph);
+  const head = t => `<div class="text-center border-bottom pb-2 mb-3"><h5 class="fw-bold mb-0">${t}</h5><small class="text-muted">${esc(phaseObj().Phase_Name || "")} · ${new Date().toLocaleString("ar-EG")}</small></div>`;
+  let h = "";
+  if (sel === "R14") {
+    if (!APP.settlement) { const r = await call("GET_SETTLEMENT_REPORT"); if (!r.success) return toast(r.message, "danger"); APP.settlement = r; }
+    const r = APP.settlement, P = r.pnl;
+    h = `<div class="text-center border-bottom pb-2 mb-3"><h5 class="fw-bold mb-0">التصفية المالية والمخزنية للمبادرة (كل المراحل)</h5><small class="text-muted">${esc(r.generatedAt)}</small></div><div class="row g-3">
+      <div class="col-md-6"><h6 class="fw-bold bg-dark text-white p-2 rounded">نتيجة المبادرة</h6>${tbl(["البند", "القيمة"], [["مبيعات الكتب المسلَّمة (صافي المرتجع)", money(P.deliveredRevenue)], ["إجمالي الفواتير (يشمل المخصص غير المسلَّم)", money(P.billedRevenue)], ["(−) تكلفة الكتب المسلَّمة", money(P.cogs)], ["(−) المصروفات", money(P.expenses)], ["(−) عجز الجرد", money(P.inventoryShrink)], [`<b>${P.surplus >= 0 ? "الفائض" : "العجز"} (يتحمله / يؤول إلى: ${esc(r.deficitBearer)})</b>`, `<b class="${P.surplus < 0 ? "text-danger" : "text-success"}">${money(P.surplus)}</b>`], ["التوفير الذي حصل عليه الموظفون", money(P.employeeSavings)]])}</div>
+      <div class="col-md-6"><h6 class="fw-bold text-white p-2 rounded" style="background:var(--we)">النقدية</h6>${tbl(["البند", "القيمة"], [["المحصَّل من الموظفين", money(r.cash.collected)], ...Object.keys(r.cash.byMethod).map(k => ["&nbsp;&nbsp;منها " + ar(k), money(r.cash.byMethod[k])]), ["(−) المردود للموظفين", money(r.cash.refunds)], ["(−) المدفوع للمكتبة", money(r.cash.supplierPaid)], ["(−) المصروفات", money(r.cash.expenses)], [`<b>النقدية المتوقعة لدى ${esc(r.cashHolder)}</b>`, `<b>${money(r.cash.expectedCashOnHand)}</b>`]])}<div class="small text-muted">${esc(r.reconciliation.note)}</div></div>
+      <div class="col-md-6"><h6 class="fw-bold bg-secondary text-white p-2 rounded">حساب المكتبة</h6>${tbl(["البند", "القيمة"], [["صافي الفواتير", money(r.supplier.purchasesNet)], ["(−) مطالبات تالف", money(r.supplier.damageClaims)], ["(−) مرتجعات", money(r.supplier.returns)], ["(−) مدفوع", money(r.supplier.paid)], ["<b>الرصيد المستحق للمكتبة</b>", `<b>${money(r.supplier.balance)}</b>`]])}</div>
+      <div class="col-md-6"><h6 class="fw-bold bg-warning p-2 rounded">مديونيات الموظفين حسب العمر</h6>${tbl(["الفئة", "القيمة"], [["لم تستحق", money(r.receivables.aging.notDue)], ["متأخر حتى 30 يوماً", money(r.receivables.aging.d1_30)], ["31–60", money(r.receivables.aging.d31_60)], ["61–90", money(r.receivables.aging.d61_90)], ["أكثر من 90", money(r.receivables.aging.d90p)], ["<b>الإجمالي</b>", `<b>${money(r.receivables.total)}</b>`], ["أرصدة دائنة لم تُرد", money(r.receivables.creditsDue)]])}</div>
+      <div class="col-12"><h6 class="fw-bold p-2 rounded bg-light border">قائمة إغلاق الموسم</h6>${tbl(["البند", "الموقف", ""], r.checklist.map(c => [esc(c.item), esc(c.value), c.ok ? `<span class="text-success fw-bold">✓</span>` : `<span class="text-danger fw-bold">✗</span>`]))}</div>
+      <div class="col-12"><h6 class="fw-bold">المخزون المتبقي (يُرجع للمكتبة قبل الإغلاق)</h6>${tbl(["الكتاب", "بالمخزن", "مخصص", "حر", "متوسط التكلفة", "القيمة"], r.stock.lines.map(l => [esc((b[l.bookId] || {}).Book_Name || l.bookId), l.onHand, l.reserved, l.free, l.avgCost, money(l.value)]))}</div></div>`;
+  } else if (sel === "R01") h = head("حجوزات الموظفين") + tbl(["الرقم", "الموظف", "الكتاب", "وقت الأسبقية", "محجوز", "القيمة", "السداد"], items.map(i => { const hd = d.resHeaders.find(x => x.Res_ID === i.Res_ID) || {}; return [esc(i.Emp_ID), esc((e[i.Emp_ID] || {}).Full_Name || ""), esc((b[i.Book_ID] || {}).Book_Name || i.Book_ID), `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>`, i.Requested_Qty, n(i.Requested_Qty) * n(i.Unit_Emp_Price), ar(hd.Payment_Method_Selected)]; }));
+  else if (sel === "R02") { const a = {}; items.forEach(i => { const x = a[i.Book_ID] = a[i.Book_ID] || { r: 0, al: 0, dl: 0 }; x.r += n(i.Requested_Qty); x.al += n(i.Allocated_Qty); x.dl += n(i.Delivered_Qty); }); h = head("الحصر التجميعي") + tbl(["الكود", "الكتاب", "المكتبة", "محجوز", "مخصص", "مُسلَّم", "قيمة بسعر الغلاف", "قيمة بالتكلفة"], Object.keys(a).map(k => [esc(k), esc((b[k] || {}).Book_Name), esc((s[(b[k] || {}).Supplier_ID] || {}).Supplier_Name), a[k].r, a[k].al, a[k].dl, money(a[k].r * n((b[k] || {}).Cover_Price)), money(a[k].r * n((b[k] || {}).Standard_Net_Cost))])); }
+  else if (sel === "R03") { const ids = d.supInvHeaders.filter(x => x.Phase_ID === ph).map(x => x.Sup_Inv_ID); h = head("فروق فواتير المكتبة") + tbl(["الفاتورة", "الكتاب", "مطلوب", "سليم", "تالف", "الفرق", "النوع", "سعر مختلف"], d.supInvItems.filter(x => ids.includes(x.Sup_Inv_ID) && (x.Matching_Flag !== "EXACT" || n(x.Damaged_Qty) || x.Price_Mismatch)).map(x => [esc(x.Sup_Inv_ID), esc((b[x.Book_ID] || {}).Book_Name || x.Book_ID), x.Ordered_Qty, x.Received_Qty, n(x.Damaged_Qty), x.Variance_Qty, ar(x.Matching_Flag), esc(x.Price_Mismatch)])); }
+  else if (sel === "R04") h = head("الأسبقية والتخصيص") + tbl(["الكتاب", "الترتيب", "الموظف", "وقت الأسبقية", "محجوز", "مخصص", "الحالة"], (() => { const rows = [], g = {}; items.slice().sort((x, y) => (x.Book_ID + x.Priority_Timestamp).localeCompare(y.Book_ID + y.Priority_Timestamp)).forEach(i => { g[i.Book_ID] = (g[i.Book_ID] || 0) + 1; rows.push([esc((b[i.Book_ID] || {}).Book_Name || i.Book_ID), g[i.Book_ID], esc((e[i.Emp_ID] || {}).Full_Name || i.Emp_ID), `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>`, i.Requested_Qty, i.Allocated_Qty, ar(i.Allocation_Status)]); }); return rows; })());
+  else if (sel === "R05") h = head("قائمة المنتظرين") + tbl(["الموظف", "الموبايل", "الكتاب", "وقت الأسبقية", "الكمية المنتظرة", "السبب"], items.filter(i => n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) && !String(i.Allocation_Status).startsWith("Cancelled")).map(i => [esc((e[i.Emp_ID] || {}).Full_Name || i.Emp_ID), esc((e[i.Emp_ID] || {}).Mobile), esc((b[i.Book_ID] || {}).Book_Name || i.Book_ID), `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>`, n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)), esc(i.Unallocated_Reason)]));
+  else if (sel === "R06") h = head("فواتير الموظفين") + tbl(["الفاتورة", "الموظف", "الغلاف", "التوفير", "الصافي", "المسدد", "المتبقي", "رصيد دائن", "الحالة"], d.empInvoices.filter(i => i.Phase_ID === ph).map(i => [esc(i.Emp_Inv_ID), esc((e[i.Emp_ID] || {}).Full_Name || i.Emp_ID), n(i.Total_Cover_Amount), n(i.Total_Savings), n(i.Net_Final_Invoice_Amount), n(i.Total_Paid_Amount), n(i.Remaining_Balance), n(i.Credit_Balance), ar(i.Invoice_Status)]));
+  else if (sel === "R07") h = head("جدول الأقساط والمتأخرات") + tbl(["الموظف", "الموبايل", "القسط", "الاستحقاق", "المبلغ", "المسدد", "المتبقي", "الحالة"], d.installments.filter(i => i.Emp_Inv_ID.indexOf("-" + ph + "-") > 0 && n(i.Remaining_Inst_Amount) > 0).sort((x, y) => String(x.Due_Date).localeCompare(y.Due_Date)).map(i => [esc((e[i.Emp_ID] || {}).Full_Name || i.Emp_ID), esc((e[i.Emp_ID] || {}).Mobile), esc(i.Admin_Custom_Notes), esc(i.Due_Date), n(i.Scheduled_Amount), n(i.Paid_Amount), n(i.Remaining_Inst_Amount), ar(i.Status, i.Status === "Scheduled" ? "_i" : "")]));
+  else if (sel === "R08") { const a = {}; d.empPayments.filter(p => String(p.Is_Voided) !== "true").forEach(p => { const k = String(p.Payment_Date).slice(0, 10) + "|" + p.Payment_Method; a[k] = a[k] || { c: 0, s: 0 }; a[k].c++; a[k].s += n(p.Amount); }); h = head("التحصيلات اليومية حسب الوسيلة (كل المراحل)") + tbl(["اليوم", "الوسيلة", "عدد الإيصالات", "الإجمالي"], Object.keys(a).sort().reverse().map(k => { const [dd, m] = k.split("|"); return [dd, ar(m), a[k].c, money(a[k].s)]; })); }
+  else if (sel === "R09") { let bal = 0; h = head("كشف حساب المكتبة") + tbl(["التاريخ", "المكتبة", "البيان", "المرجع", "مدين", "دائن", "الرصيد"], d.supLedger.map(l => { bal += n(l.Credit_Amount) - n(l.Debit_Amount); return [esc(l.Trans_Date), esc((s[l.Supplier_ID] || {}).Supplier_Name || l.Supplier_ID), esc(l.Notes), esc(l.Document_Ref), n(l.Debit_Amount), n(l.Credit_Amount), Math.round(bal * 100) / 100]; })); }
+  else if (sel === "R10") h = head("المصروفات") + tbl(["الرقم", "التاريخ", "المرحلة", "البند", "المستفيد", "الإيصال", "القيمة"], d.expenses.map(x => [esc(x.Expense_ID), esc(x.Expense_Date), esc(x.Phase_ID), esc(x.Expense_Category), esc(x.Beneficiary_Name), esc(x.Receipt_Doc_No), money(x.Amount)]));
+  else if (sel === "R11") h = head("حركة المخزون") + tbl(["التاريخ", "الكتاب", "الحركة", "الكمية", "التكلفة", "المستند", "بواسطة"], d.inventoryLedger.slice().reverse().map(x => [esc(String(x.Trans_Timestamp).slice(0, 16)), esc((b[x.Book_ID] || {}).Book_Name || x.Book_ID), esc(x.Movement_Type), x.Qty_Change, n(x.Unit_Actual_Cost), esc(x.Reference_Doc_ID), esc(x.Recorded_By)]));
+  else if (sel === "R12") h = head("الرصيد الحالي للمخزن") + tbl(["الكتاب", "بالمخزن", "مخصص لم يُسلَّم", "حر", "متوسط التكلفة", "القيمة"], Object.keys(d.stockMap).filter(k => d.stockMap[k].onHand).map(k => { const x = d.stockMap[k]; return [esc((b[k] || {}).Book_Name || k), x.onHand, x.reserved, x.free, x.avgCost, money(x.onHand * x.avgCost)]; }));
+  else if (sel === "R13") h = head("هامش كل كتاب") + tbl(["الكتاب", "الغلاف", "التكلفة", "سعر الموظف", "الهامش للنسخة", "النسخ المحجوزة", "إجمالي الهامش"], d.books.map(x => { const q = items.filter(i => i.Book_ID === x.Book_ID).reduce((t, i) => t + n(i.Requested_Qty), 0), m = n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost); return [esc(x.Book_Name), n(x.Cover_Price), n(x.Standard_Net_Cost), n(x.Emp_Selling_Price), `<span class="${m < 0 ? "text-danger fw-bold" : ""}">${Math.round(m * 100) / 100}</span>`, q, money(m * q)]; }));
+  $("repArea").innerHTML = h;
+}
+</script>
+</body>
+</html>
