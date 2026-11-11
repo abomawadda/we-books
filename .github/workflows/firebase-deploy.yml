@@ -37,6 +37,16 @@ jobs:
           artifactregistry.googleapis.com run.googleapis.com eventarc.googleapis.com cloudscheduler.googleapis.com
           firestore.googleapis.com iamcredentials.googleapis.com pubsub.googleapis.com
           cloudbilling.googleapis.com firebaseextensions.googleapis.com
+      - name: صلاحيات البناء لحساب الخدمة الافتراضي (المشاريع الجديدة)
+        if: env.HAS_KEY == 'true'
+        run: |
+          NUM=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
+          for SA in "$NUM-compute@developer.gserviceaccount.com" "$NUM@cloudbuild.gserviceaccount.com"; do
+            for R in roles/cloudbuild.builds.builder roles/logging.logWriter roles/artifactregistry.writer roles/storage.objectViewer; do
+              gcloud projects add-iam-policy-binding $PROJECT --member="serviceAccount:$SA" --role="$R" --condition=None --quiet >/dev/null || true
+            done
+          done
+          sleep 30
       - name: النشر
         if: env.HAS_KEY == 'true'
         run: cd firebase && npx --yes firebase-tools@13 deploy --only functions,firestore --project $PROJECT --non-interactive --force
