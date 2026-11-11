@@ -24,6 +24,13 @@ node ../supabase/live.test.mjs                     # اختبار حي على ا
 - محمية بمفتاح `cron_key` في `books.config` لا يغادر قاعدة البيانات. التشغيل يدوياً: `select books.run_daily_job();`
 - النتيجة في `net._http_response`. ملف الإعداد: `supabase/migrations/books_daily_job.sql`.
 
+## مزامنة الموظفين من MyNekaba
+- `books.sync_employees_from_members()` تقرأ `public.members` (نفس المشروع) وتضيف/تحدّث موظفي المبادرة:
+  `job_id`←الرقم الوظيفي، آخر 4 من `national_id`، `phone` بعد توحيد الصيغة، `workplace`، `job_title`.
+- الحالة: `member_state` (أو `membership_status`) ضمن `active_member_states` في `books.config` ← "ساري"، وإلا "موقوف" (لا يدخل).
+- إعدادات المبادرة لكل موظف (التقسيط، الحد الائتماني، الملاحظات) لا تُمس عند التحديث. لا تُحذف بيانات أي موظف.
+- تعمل تلقائياً كل ليلة 22:30 UTC، ويدوياً: `select * from books.sync_employees_from_members();`
+
 ## المتبقي
 - نسخة تقارير ليلية إلى Google Sheet.
 - تغيير كلمات مرور الإدارة المؤقتة وحذف البيانات التجريبية قبل التشغيل الفعلي.
