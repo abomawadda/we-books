@@ -1,0 +1,14 @@
+{
+  "name": "we-books-functions",
+  "private": true,
+  "main": "index.js",
+  "engines": { "node": "22" },
+  "scripts": {
+    "sync-code": "node -e \"require('fs').copyFileSync('../../apps-script/Code.gs','Code.gs')\"",
+    "test": "cd ../../test && SCENARIO_MOCK=../firebase/test/firestore-mock node scenarios.test.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

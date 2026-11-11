@@ -1,0 +1,11 @@
+rules_version = '2';
+// كل القراءة والكتابة تمر عبر Cloud Function "api" (Admin SDK يتجاوز القواعد).
+// العميل لا يصل إلى Firestore مباشرة إطلاقاً. أي فتح لاحق للقراءة المباشرة
+// يجب أن يقصر الموظف على بياناته: request.auth.token.s.empId == resource.data.Emp_ID
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
