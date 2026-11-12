@@ -12,7 +12,7 @@ const Doc = {
 @page { size: ${size} portrait; margin: 0; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { margin: 0; padding: 0; }
-body { font-family: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif; color: #1e1b2e; background: #e7e5ee; direction: rtl; }
+body { font-family: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif; color: #1e1b2e; background: #e7e5ee; direction: rtl; }
 .page { width: ${W}; min-height: ${H}; margin: 14px auto; background: #fff; padding: ${A4 ? "14mm 13mm" : "9mm 9mm 8mm"}; position: relative; overflow: hidden; box-shadow: 0 6px 24px rgba(30,20,60,.18); display: flex; flex-direction: column; font-size: ${A4 ? "11pt" : "8.6pt"}; line-height: 1.55; }
 @media print { body { background: #fff; } .page { margin: 0; box-shadow: none; page-break-after: always; break-after: page; } .page:last-child { page-break-after: auto; break-after: auto; } }
 .band { position: absolute; inset: 0 0 auto 0; height: ${A4 ? "6mm" : "4.5mm"}; background: linear-gradient(90deg, #f9b224, #7c4bb6 35%, #3a2059); }
@@ -116,7 +116,7 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
       <div class="meta"><div class="box"><h4>بيانات العضو</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}${d.emp.mobile ? Doc.kv("الموبايل", `<span class="num">${esc(d.emp.mobile)}</span>`) : ""}</div>
         <div class="box"><h4>بيانات الطلب</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("تاريخ الطلب", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("عدد الكتب", `<span class="num">${cnt}</span>`)}${Doc.kv("طريقة السداد", esc(Doc.methodAr(p.method)))}</div></div>
       <table><thead><tr><th class="c" style="width:6%">#</th><th>الكتاب</th><th class="c" style="width:9%">العدد</th><th class="l" style="width:13%">الغلاف</th><th class="l" style="width:13%">سعرك</th><th class="l" style="width:15%">القيمة</th></tr></thead><tbody>${rows}</tbody></table>
-      <div class="tot"><div>${p.method === "INSTALLMENT" && p.count ? `<div class="box"><h4>خطة السداد المقترحة</h4>${Doc.kv("مقدم عند الاستلام", `<span class="num">${Doc.money(p.down)}</span>`)}${Doc.kv(`${p.count} أقساط شهرية`, `<span class="num">${Doc.money(p.per)}${p.last && p.last !== p.per ? " (الأخير " + Doc.money(p.last) + ")" : ""}</span>`)}</div>` : `<div class="box"><h4>السداد</h4><div>كامل القيمة عند استلام الكتب.</div></div>`}
+      <div class="tot"><div>
         <div class="note">• الأسعار بعد خصم العاملين، وتُحتسب الأسبقية بوقت حجز كل كتاب.<br>• هذا طلب حجز وليس فاتورة؛ تصدر الفاتورة عند جاهزية الكتب للتسليم.</div></div>
         <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}<div class="kv save"><span>توفيرك</span><b class="num">${Doc.money(cover - net)}</b></div><div class="kv big"><span>الإجمالي (ج.م)</span><b class="num">${Doc.money(net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>
@@ -135,11 +135,11 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
         <div class="box"><h4>الفاتورة</h4>${Doc.kv("تاريخ الإصدار", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("السداد", esc(Doc.methodAr(d.method)))}</div></div>
       <table><thead><tr><th class="c" style="width:6%">#</th><th>البيان</th><th class="c" style="width:8%">الكمية</th><th class="c" style="width:9%">سُلّم</th><th class="l" style="width:13%">السعر</th><th class="l" style="width:15%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="c sub">لا بنود</td></tr>`}</tbody></table>
-      <div class="tot"><div>${sched ? `<div style="font-weight:700;color:#3a2059;margin-top:1mm">جدول السداد</div>${sched}` : ""}${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>
+      <div class="tot"><div>${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>
         <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
           ${Doc.kv("المقدم المطلوب", `<span class="num">${Doc.money(d.down)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(d.paid)}</span>`)}<div class="kv" style="color:${n(d.remaining) ? "#be123c" : "#047857"}"><span>المتبقي</span><b class="num">${Doc.money(d.remaining)}</b></div>${n(d.credit) ? `<div class="kv save"><span>رصيد مستحق الرد</span><b class="num">${Doc.money(d.credit)}</b></div>` : ""}<div class="kv save"><span>وفّرت</span><b class="num">${Doc.money(cover - net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>
-      <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.density(lines.length + (d.schedule || []).length * .6, "A5"));
+      <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.density(lines.length, "A5"));
   },
   /** إيصال: d = {no,date,emp,amount,method,ref,inv,net,remaining,collector,voided,voidReason} */
   receipt(d) {

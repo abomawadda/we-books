@@ -18,6 +18,11 @@ for (const w of [400, 500, 600, 700]) for (const sub of ['arabic', 'latin']) {
   fs.copyFileSync(path.join(__dirname, 'node_modules/@fontsource/ibm-plex-sans-arabic/files', f), path.join(fdir, f));
 }
 
+// خط النص: Readex Pro (عربي حديث واضح على كل الشاشات)
+for (const w of [400, 500, 600, 700]) for (const sub of ['arabic', 'latin']) {
+  const f = `readex-pro-${sub}-${w}-normal.woff2`;
+  fs.copyFileSync(path.join(__dirname, 'node_modules/@fontsource/readex-pro/files', f), path.join(fdir, f));
+}
 // خط العناوين: Alexandria (عربي حديث أنيق)
 for (const w of [600, 700, 800]) for (const sub of ['arabic', 'latin']) {
   const f = `alexandria-${sub}-${w}-normal.woff2`;

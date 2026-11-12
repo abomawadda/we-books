@@ -316,20 +316,8 @@ const Notif = {
     const out = [], add = (id, icon, tone, title, body, href) => out.push({ id, icon, tone, title, body, href });
     const today = new Date().toISOString().slice(0, 10);
     if (APP.user && APP.user.userType === "EMPLOYEE" && APP.emp) {
-      const r = APP.emp, ph = r.activePhase;
-      (r.announcements || []).forEach(a => add(a.id, "megaphone", a.tone === "warning" ? "amber" : a.tone === "success" ? "green" : "brand", a.title, a.body, ""));
-      if (ph && ph.Booking_Open) {
-        const items = Emp.activeItems(), left = Emp.daysLeft();
-        if (!items.length) add("open-" + ph.Phase_ID, "sparkles", "brand", "الحجز مفتوح دلوقتي 🎉", left !== null ? `باقي ${left} يوم — احجز كتب أولادك` : "احجز كتب أولادك بخصم العاملين", "#/e/books");
-        else if (left !== null && left <= 2) add("closing-" + ph.Phase_ID + "-" + left, "clock", "amber", "الحجز قرّب يقفل", left <= 0 ? "النهارده آخر يوم للتعديل" : `باقي ${left} يوم للتعديل`, "#/e/books");
-        if (Emp.dirty) add("dirty-" + today, "shopping-cart", "amber", "عندك تعديلات لم تُحفظ", "افتح السلة واضغط «احفظ التعديل»", "#/e/cart");
-      }
-      const ready = Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
-      if (ready) add("ready-" + (ph || {}).Phase_ID + "-" + ready, "package-check", "green", "كتبك جاهزة للتسليم 📦", `${ready} كتاب في انتظارك`, "#/e/orders");
-      const inst = Emp.installments().find(i => n(i.Remaining_Inst_Amount) > 0);
-      if (inst) { const late = inst.Status === "Overdue", days = Math.round((new Date(inst.Due_Date) - new Date(today)) / 864e5);
-        if (late || days <= 7) add("inst-" + inst.Inst_ID + "-" + (late ? "late" : "soon"), late ? "circle-alert" : "calendar-clock", late ? "red" : "amber", late ? "عليك قسط متأخر" : "قسطك قرّب", `${moneyTxt(inst.Remaining_Inst_Amount)} · ${late ? "من" : "يوم"} ${inst.Due_Date}`, "#/e/pay"); }
-      const inv = Emp.invoice(); if (inv) add("inv-" + inv.Emp_Inv_ID, "receipt", "blue", "صدرت فاتورتك", `${inv.Emp_Inv_ID} · ${moneyTxt(inv.Net_Final_Invoice_Amount)}`, "#/e/orders");
+      // إشعارات الموظف = ما تنشره الإدارة فقط (أخبار المرحلة والمواعيد)
+      (APP.emp.announcements || []).forEach(a => add(a.id, "megaphone", a.tone === "warning" ? "amber" : a.tone === "success" ? "green" : "brand", a.title, (a.body ? a.body + "\n" : "") + "— الإدارة · " + String(a.at || "").slice(0, 10), ""));
     } else if (APP.adm) {
       const d = APP.adm;
       (d.announcements || []).slice(0, 3).forEach(a => add(a.id, "megaphone", "brand", "إعلان منشور: " + a.title, a.body, "#/a/dash"));
@@ -348,7 +336,7 @@ const Notif = {
     UI.open(`${list.length ? `<ul class="space-y-2">${list.map(x => `<li><a ${x.href ? `href="${x.href}" data-act="goClose" data-id="${x.href.slice(1)}"` : ""} class="flex items-start gap-3 rounded-2xl p-3 ring-1 ${seen.includes(x.id) ? "ring-slate-100" : "ring-brand-200 bg-brand-50/40"}">
         <span class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${tone[x.tone] || tone.brand}">${ic(x.icon)}</span>
         <span class="flex-1 min-w-0"><b class="block text-[14px] text-slate-900">${esc(x.title)}</b>${x.body ? `<span class="block text-[12.5px] text-slate-500 mt-0.5 whitespace-pre-line">${esc(x.body)}</span>` : ""}</span>${!seen.includes(x.id) ? `<span class="w-2 h-2 rounded-full bg-rose-500 mt-2"></span>` : ""}</a></li>`).join("")}</ul>`
-      : UI.empty("bell", "مفيش إشعارات جديدة", "هنبلغك هنا بكل جديد في حجزك.")}
+      : UI.empty("bell", "مفيش إشعارات", "أخبار المرحلة ومواعيد الحجز والتسليم من الإدارة هتظهر هنا.")}
       <button data-act="contact" class="btn btn-soft w-full mt-4">${ic("headset")} تواصل مع المسؤول</button>`, { title: "الإشعارات" });
     Notif.markAll(list); Notif.badge();
   }

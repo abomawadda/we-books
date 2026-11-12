@@ -121,11 +121,12 @@ Router.add("/e/home", view => {
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "هنبلغك أول ما كتبك تبقى جاهزة للتسليم", cta: "تابع طلبك", href: "#/e/orders" };
   else msg = { icon: "lock", title: "الحجز مقفول حالياً", sub: "ما حجزتش في المرحلة دي — استنى المرحلة الجاية", cta: "", href: "" };
 
-  const anns = (r.announcements || []).slice(0, 3);
+  const anns = (r.announcements || []).slice(0, 4);
   view.innerHTML = `
-  ${anns.map(a => `<div class="mb-3 rounded-2xl p-3.5 flex gap-3 ${a.tone === "warning" ? "bg-amber-50 ring-1 ring-amber-200 text-amber-900" : a.tone === "success" ? "bg-emerald-50 ring-1 ring-emerald-200 text-emerald-900" : "bg-brand-50 ring-1 ring-brand-100 text-brand-900"}"><span class="text-xl mt-0.5">${ic("megaphone")}</span><div class="flex-1 min-w-0"><b class="block text-[14.5px]">${esc(a.title)}</b>${a.body ? `<p class="text-[13px] mt-0.5 whitespace-pre-line opacity-90">${esc(a.body)}</p>` : ""}</div></div>`).join("")}
+  ${anns.length ? `<div class="flex items-center gap-2 mb-2 text-[13px] font-bold text-slate-700">${ic("megaphone", "text-brand-600")} إشعارات الإدارة</div>` : ""}
+  ${anns.map(a => `<div class="mb-3 rounded-2xl p-3.5 flex gap-3 ${a.tone === "warning" ? "bg-amber-50 ring-1 ring-amber-200 text-amber-900" : a.tone === "success" ? "bg-emerald-50 ring-1 ring-emerald-200 text-emerald-900" : "bg-brand-50 ring-1 ring-brand-100 text-brand-900"}"><span class="text-xl mt-0.5">${ic("megaphone")}</span><div class="flex-1 min-w-0"><b class="block text-[14.5px]">${esc(a.title)}</b>${a.body ? `<p class="text-[13px] mt-0.5 whitespace-pre-line opacity-90">${esc(a.body)}</p>` : ""}<div class="text-[11px] opacity-60 mt-1 num">${esc(String(a.at || "").slice(0, 10))}</div></div></div>`).join("")}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-3">
-    <section class="hero text-white rounded-4xl p-5 sm:p-7 relative overflow-hidden lg:col-span-2 shadow-lift">
+    <section class="hero text-white rounded-4xl p-5 sm:p-7 relative overflow-hidden lg:col-span-3 shadow-lift">
       <div class="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-white/5"></div><div class="absolute left-10 -bottom-20 w-40 h-40 rounded-full bg-gold-400/10"></div>
       <div class="relative flex items-start justify-between gap-4">
         <div class="min-w-0">
@@ -145,17 +146,16 @@ Router.add("/e/home", view => {
       </a>
     </section>
 
-    <section class="card card-pad">
-      <h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2>
-      ${next ? `<div class="mt-4 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4">
-          <div class="text-[13px] ${next.Status === "Overdue" ? "text-rose-700" : "text-brand-700"} font-semibold">${esc(next.Admin_Custom_Notes || "قسط")} · ${next.Status === "Overdue" ? "متأخر من" : "موعده"} ${esc(day(next.Due_Date))}</div>
-          <div class="text-3xl font-bold text-slate-900 num mt-1">${money(next.Remaining_Inst_Amount)}</div></div>
-          <a href="#/e/pay" class="btn btn-soft w-full mt-3">كل الأقساط ${ic("chevron-left")}</a>`
-        : `<div class="mt-2">${UI.empty("calendar-check", inv ? "مفيش أقساط مستحقة 👌" : "لسه مفيش أقساط", inv ? "حسابك تمام." : "الأقساط بتبدأ بعد استلام الكتب.")}</div>`}
-    </section>
   </div>
 
   ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>${tracker(step)}</section>` : ""}
+  ${next ? `<section class="card card-pad mt-4 lg:mt-6">
+      <div class="flex items-center justify-between"><h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2><a href="#/e/pay" class="text-[12.5px] font-semibold text-brand-700">كل الأقساط ←</a></div>
+      <div class="mt-3 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4 flex flex-wrap items-end justify-between gap-2">
+        <div><div class="text-[13px] ${next.Status === "Overdue" ? "text-rose-700" : "text-brand-700"} font-semibold">${esc(next.Admin_Custom_Notes || "قسط")} · ${next.Status === "Overdue" ? "متأخر من" : "موعده"} ${esc(day(next.Due_Date))}</div>
+        <div class="text-3xl font-bold text-slate-900 num mt-1">${money(next.Remaining_Inst_Amount)}</div></div>
+        ${inv && n(inv.Remaining_Balance) ? `<div class="text-[12.5px] text-slate-500">إجمالي المتبقي <b class="num text-slate-800">${moneyTxt(inv.Remaining_Balance)}</b></div>` : ""}</div>
+    </section>` : ""}
 
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4 lg:mt-6">
     ${UI.kpi("كتب محجوزة", fmt(reqQty), { icon: "book-open", tone: "brand", foot: Emp.dirty ? "عندك تعديلات لم تُحفظ" : rels.length ? `منها لـ ${rels.length} من الأقارب` : "" })}

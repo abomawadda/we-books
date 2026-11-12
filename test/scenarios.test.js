@@ -271,4 +271,13 @@ if (bks.length >= 2) {
   ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: bks[0].Book_ID, coverPrice: bks[0].Cover_Price, supplierDiscountPct: 30 }], defaults: { publisherDiscounts: { [pubA]: 18 } } }, coord), 'row overrides rule');
   assert.strictEqual(rows(S.BOOKS).find(x => x.Book_ID === bks[0].Book_ID).Supplier_Discount_Pct, 30); passed++;
 }
+
+// 24) إشعارات الإدارة حسب المرحلة
+ok(api('POST_ANNOUNCEMENT', { op: 'add', title: 'التسليم الأحد', phaseId: 'PH-03' }, coord), 'announce for phase');
+ok(api('POST_ANNOUNCEMENT', { op: 'add', title: 'خبر عام' }, coord), 'announce for all');
+const pd = ok(api('GET_EMPLOYEE_PORTAL_DATA', { phaseId: 'PH-01' }, e1), 'portal ph1');
+assert.ok(pd.announcements.some(a => a.title === 'خبر عام') && !pd.announcements.some(a => a.title === 'التسليم الأحد')); passed++;
+const pd3 = ok(api('GET_EMPLOYEE_PORTAL_DATA', { phaseId: 'PH-03' }, e1), 'portal ph3');
+assert.ok(pd3.announcements.some(a => a.title === 'التسليم الأحد')); passed++;
+fail(api('POST_ANNOUNCEMENT', { op: 'add', title: 'x' }, e1), 'employee cannot announce');
 console.log('\nALL PASSED:', passed, 'checks');
