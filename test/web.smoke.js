@@ -1,7 +1,7 @@
 // اختبار شامل للواجهة الجديدة (v3) داخل jsdom مربوطة بالخادم المحاكى: كل الصفحات + دورة كاملة
 const fs = require('fs'), path = require('path');
 const { JSDOM } = require('jsdom');
-const { makeContext } = require('./gas-mock');
+const { makeContext } = require('./sb-mock');
 
 const clock = { now: new Date(2026, 10, 5, 9).getTime() };
 const { ctx } = makeContext(clock);

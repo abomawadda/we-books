@@ -1,4 +1,4 @@
-/* Service worker: يخزّن ملفات الواجهة فقط ليفتح التطبيق بسرعة. طلبات الخادم (Apps Script) لا تُخزَّن أبداً. */
+/* Service worker: يخزّن ملفات الواجهة فقط ليفتح التطبيق بسرعة. طلبات الخادم (Supabase) لا تُخزَّن أبداً. */
 const CACHE = "we-books-v3.0.0";
 const SHELL = ["./", "index.html", "app.css?v=3.0.0", "config.js", "js/icons.js?v=3.0.0", "js/core.js?v=3.0.0", "js/app.js?v=3.0.0", "js/employee.js?v=3.0.0", "js/admin.js?v=3.0.0", "js/reports.js?v=3.0.0",
   "fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2", "fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2", "icons/icon-192.png"];

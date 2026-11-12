@@ -7,23 +7,16 @@
 | المجلد | المحتوى | أين يعمل |
 |---|---|---|
 | `web/` | الواجهة (`index.html`) ورابط الخادم (`config.js`) | Vercel |
-| `apps-script/` | الخادم `Code.gs` و`appsscript.json` | Google Apps Script المرتبط بالشيت |
-| قاعدة البيانات | 22 جدولاً في Google Sheets | Google Drive |
+| `supabase/functions/books-api/` | الخادم: `index.ts` + `engine.js` + منطق العمل `logic.js` | Supabase Edge Functions |
+| قاعدة البيانات | الجداول الـ 22 في `books.records` (schema مستقل في مشروع mynekaba) | Supabase Postgres |
 
-الواجهة تتصل بالخادم عبر `POST` إلى رابط نشر Apps Script (`doPost`)، ولا تعتمد على `google.script.run`.
-
-## تحديث الخادم
-
-1. الصق `apps-script/Code.gs` في محرر Apps Script (ملف `Code` واحد فقط، بدون Core/Operations القديمة) واحفظ.
-2. نشر ← إدارة عمليات النشر ← ✏️ ← إصدار جديد ← نشر.
-3. إن تغيّر رابط النشر، عدّل `web/config.js` فقط.
-
-فحص الخادم: افتح `رابط-النشر/exec?diag=1`.
+الواجهة تتصل بالخادم عبر `POST {action, payload, token}`. التفاصيل في `supabase/README.md`.
 
 ## الاختبارات
 
 ```
-npm install
-npm test
+cd test && npm install
+node scenarios.test.js   # دورة موسم كاملة (61 فحصاً) على محرك Supabase
+node web.smoke.js        # الواجهة كاملة في jsdom مع خادم محاكى
+node ../supabase/live.test.mjs   # اختبار حي على الخادم
 ```
-دورة موسم كاملة (61 فحصاً) واختبار الواجهة على محاكاة لبيئة Apps Script.

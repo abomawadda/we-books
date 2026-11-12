@@ -1,6 +1,6 @@
-// دورة كاملة للمبادرة على محاكاة Apps Script
+// دورة كاملة للمبادرة على محرك Supabase (مخزن في الذاكرة)
 const assert = require('assert');
-const { makeContext } = require(process.env.SCENARIO_MOCK || './gas-mock');
+const { makeContext } = require('./sb-mock');
 
 const clock = { now: new Date(2026, 10, 5, 9, 0, 0).getTime() }; // 5 نوفمبر 2026
 const at = (y, m, d, h = 9, mi = 0, s = 0, ms = 0) => { clock.now = new Date(y, m - 1, d, h, mi, s, ms).getTime(); };

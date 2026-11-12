@@ -8,10 +8,10 @@
   - CSS يُبنى بـ Tailwind من `ui/`: `cd ui && npm i && node build.js` (يولّد `web/app.css` و`web/js/icons.js` والخطوط).
   - كل اتصال بالخادم يمر عبر دالة واحدة `call(action, payload)` في `web/js/core.js` (POST JSON: `{action, payload, token}`).
 - **الخادم الحالي: Supabase** — Edge Function `books-api` في مشروع mynekaba (`bulfwclnhbwpzqwnxjie`)، schema مستقل `books`. التفاصيل في `supabase/README.md`.
-  - منطق العمل = `apps-script/Code.gs` بلا تعديل، يشغّله `supabase/functions/books-api/engine.js` فوق Postgres.
+  - منطق العمل = `supabase/functions/books-api/logic.js` (أصله Apps Script، أُزيلت منه أجزاء جوجل)، يشغّله `engine.js` فوق Postgres.
   - النشر والإعداد يتمان عبر أدوات Supabase المتصلة بالجلسة (بلا طرفية من المستخدم).
-- الخادم السابق: Google Apps Script + Google Sheet (`1gvbF2BhoHMeektLSEFZFqFMWjUQPvEZuQsXdGuVJGiM`) — متاح للرجوع بتغيير `web/config.js`.
-- **الاختبارات:** `cd test && npm i && node scenarios.test.js` (61 فحصاً لمنطق الخادم)، و `node ../supabase/run-scenarios.mjs` (نفسها على محرك Supabase)، و `node web.smoke.js` (الواجهة في jsdom)، و `node ../supabase/live.test.mjs` (اختبار حي).
+- أُزيل كل ما يخص جوجل (Apps Script والشيت) من المستودع بطلب المستخدم (نوفمبر 2026).
+- **الاختبارات:** `cd test && npm i && node scenarios.test.js` (61 فحصاً على محرك Supabase)، و `node web.smoke.js` (الواجهة في jsdom)، و `node ../supabase/live.test.mjs` (اختبار حي).
 - فرع `ui-demo`: نسخة عرض بلوحة الإدارة ببيانات تجريبية (لا تُدمج). فرع `main-react-backup`: نسخة React القديمة.
 
 ## قرار الخادم
@@ -28,4 +28,4 @@
 ## قواعد العمل
 - لا تكتب في `main` مباشرة إلا بطلب المستخدم؛ اعمل على فرع ثم ادمج.
 - رسائل الـ commit بالعربية.
-- لا تضعف حماية Vercel أو قواعد Firestore الأمنية.
+- لا تضعف حماية Vercel أو أمان قاعدة البيانات (schema `books` غير معروض، و RLS مفعّل).

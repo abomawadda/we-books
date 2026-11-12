@@ -1,7 +1,7 @@
 {
   "name": "we-books",
   "private": true,
-  "description": "منظومة مبادرة الكتب الخارجية بالتقسيط — واجهة Vercel وخادم Apps Script وقاعدة Google Sheets",
+  "description": "منظومة مبادرة الكتب الخارجية بالتقسيط — واجهة Vercel وخادم وقاعدة بيانات Supabase",
   "scripts": {
     "test": "node test/scenarios.test.js && node test/web.smoke.js"
   },
