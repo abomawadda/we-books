@@ -134,7 +134,8 @@
   @media (min-width: 1024px) and (max-height: 720px) { .side-nav .nav-item { height: 1.45rem; font-size: 12.5px; } .side-nav .grp { padding-top: .1rem; font-size: 10px; } }
   @media (max-width: 1023px) and (max-height: 900px) { .side-nav .nav-item { padding-top: .35rem; padding-bottom: .35rem; } }
   .safe-b { padding-bottom: env(safe-area-inset-bottom); }
-  .pb-nav { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
+  .pb-nav { padding-bottom: calc(6rem + env(safe-area-inset-bottom)) !important; }
+  @media (min-width: 768px) { .pb-nav { padding-bottom: 2.5rem !important; } }
 }
 
 @media print {

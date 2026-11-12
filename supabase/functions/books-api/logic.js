@@ -1040,7 +1040,7 @@ const OperationsEngine = {
 
       return {
         success: true,
-        message: result.length ? "تم حفظ حجزك بنجاح وتوثيق أسبقية كل كتاب." : "تم إلغاء الحجز بالكامل.",
+        message: result.length ? (isEmpPortal ? "تم حفظ حجزك بنجاح وتوثيق أسبقية كل كتاب." : "تم حفظ حجز الموظف (" + emp.Full_Name + ") وتوثيق أسبقية كل كتاب.") : (isEmpPortal ? "تم إلغاء حجزك بالكامل." : "تم إلغاء حجز الموظف بالكامل."),
         warnings: warnings, reservationHeader: headerObj, reservationItems: result, installmentPlan: plan
       };
     });

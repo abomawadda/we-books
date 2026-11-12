@@ -155,8 +155,8 @@ const Shell = {
         <header class="no-print sticky top-0 z-30 bg-slate-50/85 backdrop-blur-xl border-b border-slate-200/60">
           <div class="flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-6 lg:px-8 max-w-[1400px] w-full mx-auto">
             ${Brand.logo("we", "md:hidden w-10 h-10")}
-            <div class="min-w-0 flex-1"><div id="hdTitle" class="font-bold text-slate-900 text-[16px] sm:text-lg truncate"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
-            <div id="phaseBox" class="shrink-0"></div>
+            <div class="min-w-0 flex-1"><div id="hdTitle" class="font-display font-bold text-slate-900 text-[15px] sm:text-lg leading-tight line-clamp-2"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
+            <div id="phaseBox" class="shrink-0 ${admin ? "" : "hidden sm:block"}"></div>
 ${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="السلة" title="السلة">${ic("shopping-cart")}<span id="cartBadge" class="hidden absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-brand-950 text-[10.5px] font-bold flex items-center justify-center num">0</span></a>`}
                         <button data-act="refresh" class="icon-btn ${admin ? "" : "hidden sm:inline-flex"}" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
             <button data-act="notifs" class="icon-btn relative" aria-label="الإشعارات" title="الإشعارات">${ic("bell")}<span id="notifBadge" class="notif-dot hidden">0</span></button>
@@ -336,7 +336,7 @@ const Notif = {
     UI.open(`${list.length ? `<ul class="space-y-2">${list.map(x => `<li><a ${x.href ? `href="${x.href}" data-act="goClose" data-id="${x.href.slice(1)}"` : ""} class="flex items-start gap-3 rounded-2xl p-3 ring-1 ${seen.includes(x.id) ? "ring-slate-100" : "ring-brand-200 bg-brand-50/40"}">
         <span class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${tone[x.tone] || tone.brand}">${ic(x.icon)}</span>
         <span class="flex-1 min-w-0"><b class="block text-[14px] text-slate-900">${esc(x.title)}</b>${x.body ? `<span class="block text-[12.5px] text-slate-500 mt-0.5 whitespace-pre-line">${esc(x.body)}</span>` : ""}</span>${!seen.includes(x.id) ? `<span class="w-2 h-2 rounded-full bg-rose-500 mt-2"></span>` : ""}</a></li>`).join("")}</ul>`
-      : UI.empty("bell", "مفيش إشعارات", "أخبار المرحلة ومواعيد الحجز والتسليم من الإدارة هتظهر هنا.")}
+      : Art.empty("bell", "مفيش إشعارات", "أخبار المرحلة ومواعيد الحجز والتسليم من الإدارة هتظهر هنا.")}
       <button data-act="contact" class="btn btn-soft w-full mt-4">${ic("headset")} تواصل مع المسؤول</button>`, { title: "الإشعارات" });
     Notif.markAll(list); Notif.badge();
   }
