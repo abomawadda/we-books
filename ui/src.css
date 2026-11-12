@@ -7,9 +7,23 @@
 @font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
 @font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
 
+@font-face { font-family: "Alexandria"; font-weight: 600; font-display: swap; src: url(fonts/alexandria-arabic-600-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Alexandria"; font-weight: 600; font-display: swap; src: url(fonts/alexandria-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Alexandria"; font-weight: 700; font-display: swap; src: url(fonts/alexandria-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Alexandria"; font-weight: 700; font-display: swap; src: url(fonts/alexandria-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Alexandria"; font-weight: 800; font-display: swap; src: url(fonts/alexandria-arabic-800-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Alexandria"; font-weight: 800; font-display: swap; src: url(fonts/alexandria-latin-800-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* الخطوط: العناوين بخط Alexandria، والنص بـ IBM Plex Sans Arabic، وأحجام تتكيف مع عرض الشاشة */
+@layer base {
+  html { font-size: clamp(15px, 0.35vw + 13.8px, 16.5px); -webkit-text-size-adjust: 100%; }
+  h1, h2, h3, .card-title, .font-display, .kpi .text-\[22px\] { font-family: "Alexandria", "IBM Plex Sans Arabic", system-ui, sans-serif; letter-spacing: 0; }
+  h1 { line-height: 1.35; }
+}
 
 @layer base {
   html { -webkit-tap-highlight-color: transparent; }
@@ -98,13 +112,17 @@
   .mesh { background: radial-gradient(60% 50% at 85% 10%, rgba(249,178,36,.18), transparent 60%), radial-gradient(60% 60% at 10% 90%, rgba(124,75,182,.35), transparent 60%), linear-gradient(160deg, #2a1347 0%, #1a0b2e 100%); }
   .scroll-x { @apply flex gap-2 overflow-x-auto pb-1 -mx-4 px-4; scrollbar-width: none; }
   .scroll-x::-webkit-scrollbar { display: none; }
+  /* الشعاران: داخل دائرة بيضاء ليظهرا بوضوح على أي خلفية */
+  .logo-slot { @apply inline-flex items-center justify-center shrink-0 rounded-full bg-white p-[3px] shadow-sm ring-1 ring-black/5 overflow-hidden; }
+  .logo-slot.logo-missing { @apply text-[10px] font-bold text-brand-800 px-2; }
+  .notif-dot { @apply absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10.5px] font-bold flex items-center justify-center num; }
   /* الشريط الجانبي: مضغوط ليتسع لكل الأقسام بلا شريط تمرير (ويبقى قابلاً للتمرير بلا شريط ظاهر في الشاشات القصيرة جداً) */
   .side-nav { scrollbar-width: none; }
   .side-nav::-webkit-scrollbar { display: none; }
   .side-nav .nav-item { @apply rounded-lg; }
   @media (min-width: 1024px) { .side-nav .nav-item { height: 2.4rem; font-size: 13.5px; } }
-  @media (min-width: 1024px) and (max-height: 860px) { .side-nav .nav-item { height: 1.85rem; } .side-nav .grp { padding-top: .3rem; padding-bottom: 0; font-size: 10.5px; } }
-  @media (min-width: 1024px) and (max-height: 720px) { .side-nav .nav-item { height: 1.65rem; font-size: 13px; } .side-nav .grp { padding-top: .15rem; } }
+  @media (min-width: 1024px) and (max-height: 860px) { .side-nav .nav-item { height: 1.72rem; } .side-nav .grp { padding-top: .3rem; padding-bottom: 0; font-size: 10.5px; } }
+  @media (min-width: 1024px) and (max-height: 720px) { .side-nav .nav-item { height: 1.45rem; font-size: 12.5px; } .side-nav .grp { padding-top: .1rem; font-size: 10px; } }
   @media (max-width: 1023px) and (max-height: 900px) { .side-nav .nav-item { padding-top: .35rem; padding-bottom: .35rem; } }
   .safe-b { padding-bottom: env(safe-area-inset-bottom); }
   .pb-nav { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }

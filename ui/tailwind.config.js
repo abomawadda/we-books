@@ -3,7 +3,7 @@ module.exports = {
   safelist: ['pill-gray','pill-brand','pill-green','pill-amber','pill-red','pill-blue','btn-primary','btn-danger','btn-success','btn-dark','btn-gold','btn-soft','h-16','h-28'],
   theme: {
     extend: {
-      fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'] },
+      fontFamily: { sans: ['"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'], display: ['"Alexandria"', '"IBM Plex Sans Arabic"', 'system-ui', 'sans-serif'] },
       colors: {
         brand: { 50: '#f6f2fb', 100: '#ece3f7', 200: '#d9c7ee', 300: '#bd9fe0', 400: '#9b70cd', 500: '#7c4bb6', 600: '#66369d', 700: '#552c83', 800: '#46256b', 900: '#3a2059', 950: '#22103a' },
         gold: { 50: '#fffaeb', 100: '#fef0c7', 200: '#fde08a', 300: '#fbc94d', 400: '#f9b224', 500: '#f0930b', 600: '#d46d06', 700: '#b04c09' },

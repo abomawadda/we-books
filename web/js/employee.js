@@ -19,9 +19,11 @@ const Emp = {
     if (!r.success) { toast(r.message, "danger"); return; }
     const samePhase = APP.emp && r.activePhase && APP.phaseId === r.activePhase.Phase_ID;
     APP.emp = r; store.set("cache", { t: "EMP", d: r });
+    if (r.brand) Brand.set(r.brand);
     if (r.activePhase) APP.phaseId = r.activePhase.Phase_ID;
     if (!(samePhase && Emp.dirty)) Emp.resetCart();
     Shell.rerender();
+    Notif.badge();
   },
   resetCart() {
     const r = APP.emp; APP.cart = {}; Emp.dirty = false;
@@ -119,7 +121,9 @@ Router.add("/e/home", view => {
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "هنبلغك أول ما كتبك تبقى جاهزة للتسليم", cta: "تابع طلبك", href: "#/e/orders" };
   else msg = { icon: "lock", title: "الحجز مقفول حالياً", sub: "ما حجزتش في المرحلة دي — استنى المرحلة الجاية", cta: "", href: "" };
 
+  const anns = (r.announcements || []).slice(0, 3);
   view.innerHTML = `
+  ${anns.map(a => `<div class="mb-3 rounded-2xl p-3.5 flex gap-3 ${a.tone === "warning" ? "bg-amber-50 ring-1 ring-amber-200 text-amber-900" : a.tone === "success" ? "bg-emerald-50 ring-1 ring-emerald-200 text-emerald-900" : "bg-brand-50 ring-1 ring-brand-100 text-brand-900"}"><span class="text-xl mt-0.5">${ic("megaphone")}</span><div class="flex-1 min-w-0"><b class="block text-[14.5px]">${esc(a.title)}</b>${a.body ? `<p class="text-[13px] mt-0.5 whitespace-pre-line opacity-90">${esc(a.body)}</p>` : ""}</div></div>`).join("")}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-3">
     <section class="hero text-white rounded-4xl p-5 sm:p-7 relative overflow-hidden lg:col-span-2 shadow-lift">
       <div class="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-white/5"></div><div class="absolute left-10 -bottom-20 w-40 h-40 rounded-full bg-gold-400/10"></div>
@@ -163,7 +167,7 @@ Router.add("/e/home", view => {
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-4 lg:mt-6">
     ${relOn() && ph.Booking_Open ? `<button data-act="relQuick" class="card card-pad text-right flex items-center gap-3 active:scale-[.98] transition"><span class="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center text-2xl shrink-0">${ic("users")}</span><span class="flex-1"><span class="block font-bold text-slate-900">احجز لقريب</span><span class="block text-[12.5px] text-slate-500 mt-0.5">${rels.length ? "حجزت لـ " + rels.map(esc).join("، ") : "ابن أخوك أو أختك أو حفيدك؟ احجز له على حسابك"}</span></span>${ic("chevron-left", "text-slate-300")}</button>` : ""}
     <section class="card card-pad ${relOn() && ph.Booking_Open ? "lg:col-span-2" : "sm:col-span-2 lg:col-span-3"}">
-      <h2 class="card-title">${ic("smartphone", "text-brand-600")} تدفع إزاي؟</h2>
+      <div class="flex items-center justify-between gap-2"><h2 class="card-title">${ic("smartphone", "text-brand-600")} تدفع إزاي؟</h2><button data-act="contact" class="btn btn-soft btn-xs">${ic("headset")} تواصل مع المسؤول</button></div>
       <ul class="mt-3 space-y-2 text-[13.5px] text-slate-600">
         <li class="flex gap-2.5">${ic("banknote", "text-emerald-600 mt-0.5")}نقداً لأمين الصندوق وتاخد إيصال</li>
         <li class="flex gap-2.5">${ic("smartphone", "text-sky-600 mt-0.5")}محفظة أو إنستاباي باسم <b class="text-slate-800">${esc(r.settings.CASH_ACCOUNT_HOLDER || "")}</b> وابعت رقم التحويل</li>
@@ -480,6 +484,7 @@ Router.add("/e/me", view => {
         .map(x => `<div class="flex items-center gap-3 px-4 py-3.5"><span class="w-10 h-10 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center">${ic(x[0])}</span><span class="flex-1 text-slate-600 text-[14px]">${x[1]}</span><span class="font-semibold text-slate-900 text-[14px]">${esc(x[2])}</span></div>`).join("")}
     </section>
     <section class="card divide-y divide-slate-100">
+      <button data-act="contact" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">${ic("headset")}</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">تواصل مع المسؤول</b><span class="block text-[12px] text-slate-500">واتساب · اتصال · بريد</span></span>${ic("chevron-left", "text-slate-300")}</button>
       <button data-act="pickPhase" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">${ic("calendar-range")}</span><span class="flex-1 font-semibold">تغيير المرحلة</span>${ic("chevron-left", "text-slate-400")}</button>
       <button data-act="installApp" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-gold-50 text-gold-600 flex items-center justify-center">${ic("smartphone")}</span><span class="flex-1 font-semibold">تثبيت كتطبيق على الموبايل</span>${ic("chevron-left", "text-slate-400")}</button>
       <button data-act="logout" class="w-full flex items-center gap-3 px-4 py-3.5 text-right text-rose-600"><span class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">${ic("log-out")}</span><span class="flex-1 font-semibold">تسجيل الخروج</span></button>

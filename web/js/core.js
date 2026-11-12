@@ -303,11 +303,12 @@ function openPrint(title, html) {
   const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
   const css = d.createElement("link"); css.rel = "stylesheet"; css.href = base + "app.css"; d.head.appendChild(css);
   const st = d.createElement("style");
-  st.textContent = "body{background:#fff;padding:28px;font-size:13px}table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #e2e8f0;padding:7px 9px;text-align:right}th{background:#f6f2fb;color:#3a2059}h1{font-size:20px;font-weight:700}@page{margin:14mm}";
+  st.textContent = "body{background:#fff;padding:24px;font-size:12.5px}table{width:100%;border-collapse:collapse;margin:10px 0;border:1.2px solid #3a2059}th,td{border:1px solid #d9cfe9;padding:6px 8px;text-align:right}th{background:#3a2059;color:#fff;font-family:Alexandria,'IBM Plex Sans Arabic'}tr:nth-child(even) td{background:#faf8fd}h1,h2{font-family:Alexandria,'IBM Plex Sans Arabic'}h1{font-size:20px;font-weight:700}@page{margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}";
   d.head.appendChild(st);
-  d.body.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;border-bottom:3px solid #552c83;padding-bottom:12px;margin-bottom:18px">
-    <div><div style="font-weight:700;font-size:17px;color:#3a2059">${esc(APP.title)}</div><div style="color:#64748b;font-size:12px">${esc(title)}</div></div>
-    <div style="text-align:left;color:#64748b;font-size:11px">${new Date().toLocaleString("ar-EG")}</div></div>` + html;
+  const b = Brand.get(), lg = k => `<img src="${Brand.logoUrl(k)}" style="height:52px;width:auto" onerror="this.style.display='none'">`;
+  d.body.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:3px solid #552c83;padding-bottom:10px;margin-bottom:16px">
+    ${lg("we")}<div style="flex:1;text-align:center"><div style="color:#64748b;font-size:12px">${esc(b.org)}</div><div style="font-weight:700;font-size:17px;color:#3a2059;font-family:Alexandria">${esc(b.platform)}</div><div style="color:#64748b;font-size:12px">${esc(title)} · ${new Date().toLocaleString("ar-EG")}</div></div>${lg("union")}</div>` + html
+    + `<div style="margin-top:18px;border-top:1px solid #e4def0;padding-top:6px;color:#94a3b8;font-size:10.5px;display:flex;justify-content:space-between"><span>${esc(b.credit || "")}</span><span>${esc(b.phone || "")}</span></div>`;
   setTimeout(() => { w.focus(); w.print(); }, 700);
 }
 function exportCSV(name, headers, rows) {
@@ -337,6 +338,36 @@ const Router = {
     this.current = key;
     if (!p.startsWith(scope)) { history.replaceState(null, "", "#" + key); }
     Shell.mount(key, fn);
+    if (typeof Notif !== "undefined") Notif.badge();
   }
 };
 window.addEventListener("hashchange", () => Router.render());
+
+// ---------------------------------------------------------------- الهوية: الاسم والشعارات وبيانات التواصل
+// الشعاران: web/img/logo-we.png (يمين) و web/img/logo-union.png (يسار). إن لم يوجد الملف يظهر بديل نصي أنيق.
+const BRAND_DEFAULT = { org: "النقابة العامة بالدقهلية", platform: "منصة حجز الكتب المخفضة", credit: "إعداد وتنفيذ الأستاذ محمود العراقي", phone: "015501000025", whatsapp: "015501000025", email: "mahmoud.eleraky@te.eg" };
+const Brand = {
+  get() { return Object.assign({}, BRAND_DEFAULT, store.get("brand") || {}, APP._brand || {}); },
+  set(b) { if (!b) return; const clean = {}; Object.keys(b).forEach(k => { if (b[k]) clean[k] = b[k]; }); APP._brand = clean; store.set("brand", clean); APP.title = Brand.get().platform; },
+  logoUrl(kind) { return (location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "")) + "img/logo-" + kind + ".png"; },
+  /** شعار مع بديل نصي إن تعذّر تحميل الصورة */
+  logo(kind, cls) {
+    const fb = kind === "we" ? "WE" : "النقابة";
+    return `<span class="logo-slot ${cls || ""}" data-logo="${kind}"><img src="img/logo-${kind}.png" alt="${kind === "we" ? "شعار WE" : "شعار النقابة"}" class="h-full w-auto object-contain" onerror="this.parentNode.classList.add('logo-missing');this.parentNode.textContent='${fb}'"></span>`;
+  },
+  waLink(num, text) { let d = String(num || "").replace(/\D/g, ""); if (d.startsWith("0")) d = "2" + d; return "https://wa.me/" + d + (text ? "?text=" + encodeURIComponent(text) : ""); }
+};
+APP.title = Brand.get().platform;
+
+/** نافذة «تواصل مع المسؤول»: اتصال، واتساب برسالة جاهزة، بريد */
+function openContact(topic) {
+  const b = Brand.get(), u = APP.user || {};
+  const who = u.userType === "EMPLOYEE" ? `أنا ${u.fullName || ""} (رقم ${u.empId || ""})` : (u.fullName ? `أنا ${u.fullName}` : "");
+  const msg = `السلام عليكم، ${who} بخصوص ${b.platform}${topic ? " — " + topic : ""}: `;
+  const btn = (href, icon, title, sub, tone) => `<a href="${href}" target="_blank" rel="noopener" class="flex items-center gap-3 rounded-2xl p-3.5 ring-1 ring-slate-200 hover:bg-slate-50 active:scale-[.98] transition"><span class="w-12 h-12 rounded-2xl ${tone} flex items-center justify-center text-[22px] shrink-0">${ic(icon)}</span><span class="flex-1"><b class="block text-slate-900">${title}</b><span class="block text-[12.5px] text-slate-500 num" dir="ltr" style="text-align:right">${esc(sub)}</span></span>${ic("chevron-left", "text-slate-300")}</a>`;
+  UI.open(`<p class="text-[13.5px] text-slate-600 mb-3">عندك سؤال أو مشكلة في الحجز أو السداد؟ تواصل مباشرة مع مسؤول المنصة.</p>
+    <div class="space-y-2.5">${b.whatsapp ? btn(Brand.waLink(b.whatsapp, msg), "message-circle", "واتساب", b.whatsapp, "bg-emerald-50 text-emerald-600") : ""}
+    ${b.phone ? btn("tel:" + b.phone.replace(/\s/g, ""), "phone", "اتصال", b.phone, "bg-sky-50 text-sky-600") : ""}
+    ${b.email ? btn("mailto:" + b.email + "?subject=" + encodeURIComponent(b.platform + (topic ? " — " + topic : "")) + "&body=" + encodeURIComponent(msg), "mail", "بريد إلكتروني", b.email, "bg-brand-50 text-brand-600") : ""}</div>
+    ${b.credit ? `<p class="text-center text-[11.5px] text-slate-400 mt-4">${esc(b.credit)}</p>` : ""}`, { title: "تواصل مع المسؤول", sub: b.org });
+}
