@@ -53,6 +53,10 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(d.querySelectorAll('#bookGrid article').length >= 5, 'catalog grid shows books');
   await click('[data-act="cartInc"][data-id="BK-101"]');
   await click('[data-act="cartInc"][data-id="BK-201"]');
+  // الحجز لقريب
+  await click('[data-act="addBen"]'); fill('name', 'أحمد'); await ok();
+  await click('[data-act="cartInc"][data-id="BK-101"]');
+  check(Object.keys(w.eval('APP').cart).some(k => k === 'BK-101|أحمد — ابن أخ'), 'relative line in cart');
   check(/BK-101|سلاح/.test(d.querySelector('.cart-body').textContent) || true, 'cart updated');
   await click('[data-act="openCart"]');
   check(dialog() && /استمارة الحجز/.test(dialog().textContent), 'cart sheet opened');
@@ -75,9 +79,18 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   expectNoErrorToasts('change password');
   check(/لوحة القيادة/.test(d.getElementById('hdTitle').textContent), 'admin dashboard');
 
-  const routes = ['dash', 'books', 'phases', 'suppliers', 'employees', 'settings', 'po', 'receive', 'alloc', 'delivery', 'collect', 'cash', 'supplier', 'expenses', 'reports'];
+  const routes = ['dash', 'res', 'books', 'phases', 'suppliers', 'employees', 'settings', 'po', 'receive', 'alloc', 'delivery', 'collect', 'cash', 'supplier', 'expenses', 'reports'];
   for (const r of routes) { await go('/a/' + r); check(view().length > 40 && !/تعذر عرض الصفحة/.test(view()), 'admin page ' + r); }
 
+  // الحجوزات: تعديل حجز موظف من الإدارة
+  check(w.eval('APP').adm.resItems.some(i => i.Emp_ID === '1001' && i.Beneficiary === 'أحمد — ابن أخ'), 'relative reservation stored');
+  await go('/a/res'); check(/أحمد — ابن أخ/.test(view()), 'reservations page shows relative');
+  await click('[data-act="resEdit"][data-id="1001"]');
+  check(/تعديل حجز/.test(dialog().textContent), 'reservation editor opened');
+  w.eval('Ed.s.lines["BK-102|"] = 1');
+  await click('[data-act="edSave"]', dialog()); await settle();
+  expectNoErrorToasts('admin edit reservation');
+  check(w.eval('APP').adm.resItems.some(i => i.Emp_ID === '1001' && i.Book_ID === 'BK-102' && i.Requested_Qty === 1), 'admin edited reservation saved');
   // الحاجزون لكتاب
   await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
   check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');

@@ -614,18 +614,43 @@ function printDoc(no) {
 on("printDoc", id => printDoc(id));
 
 // ============================================================ التحصيل والفواتير
+const resHeaderOf = id => A().resHeaders.find(h => h.Res_ID === id) || {};
+on("adjInv", async id => {
+  const i = A().empInvoices.find(x => x.Emp_Inv_ID === id), h = resHeaderOf(i.Res_ID), { e } = maps();
+  const cur = n(h.Invoice_Adjustment), base = n(i.Net_Final_Invoice_Amount) - cur;
+  const v = await UI.form({ title: "تعديل الفاتورة", sub: `${empName(e, i.Emp_ID)} · ${id}`,
+    intro: "خصم أو إضافة على صافي الفاتورة بسبب موثق، ويُعاد بناء الأقساط تلقائياً. لتغيير الكتب استخدم «الحجز».",
+    fields: [{ name: "_s", type: "html", html: `<div class="grid grid-cols-3 gap-2">${UI.stat("قيمة الكتب", fmt(base))}${UI.stat("التعديل الحالي", fmt(cur))}${UI.stat("المسدد", fmt(i.Total_Paid_Amount))}</div>` },
+      { name: "kind", label: "النوع", type: "seg", value: cur > 0 ? "add" : "disc", options: [["disc", "خصم"], ["add", "إضافة"], ["none", "بلا تعديل"]] },
+      { name: "amount", label: "القيمة (ج.م)", type: "number", value: Math.abs(cur) || "", min: 0 },
+      { name: "reason", label: "السبب", value: h.Adjustment_Reason || "", placeholder: "مثال: خصم تأخير توريد" }], ok: "حفظ التعديل", icon: "pencil" });
+  if (!v) return;
+  const amt = v.kind === "none" ? 0 : (v.kind === "disc" ? -1 : 1) * n(v.amount);
+  await act("ADJUST_EMP_INVOICE", { invId: id, amount: amt, reason: v.reason });
+});
+on("delInv", async id => {
+  const i = A().empInvoices.find(x => x.Emp_Inv_ID === id), { e } = maps();
+  const v = await UI.form({ title: "حذف الفاتورة", sub: `${empName(e, i.Emp_ID)} · ${id}`, danger: true,
+    intro: "يُلغى حجز الموظف في هذه المرحلة وتتحرر نسخه المخصصة للتوزيع على غيره. لا يمكن الحذف إن وُجدت إيصالات سارية أو كتب مُسلَّمة.",
+    fields: [{ name: "reason", label: "سبب الحذف", required: true }], ok: "حذف الفاتورة", icon: "trash-2" });
+  if (v) await act("DELETE_EMP_INVOICE", { invId: id, reason: v.reason });
+});
+
 function finList() {
   const d = A(), { e } = maps(), q = (Q.fin || "").toLowerCase(), f = Q.finF || "";
   const invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId && (!q || (i.Emp_ID + empName(e, i.Emp_ID)).toLowerCase().includes(q))
     && (!f || (f === "due" ? n(i.Remaining_Balance) > 0 : f === "down" ? n(i.Total_Paid_Amount) < n(i.Down_Payment_Required) : f === "credit" ? n(i.Credit_Balance) > 0 : i.Invoice_Status === f)));
   return UI.table([
     { t: "الموظف", v: i => `<div class="flex items-center gap-2.5">${UI.avatar(empName(e, i.Emp_ID), "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${esc(empName(e, i.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(i.Emp_ID)}</div></div></div>` },
-    { t: "الصافي", cls: "num", v: i => `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` }, { t: "المقدم", cls: "num", v: i => fmt(i.Down_Payment_Required) }, { t: "المسدد", cls: "num", v: i => `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>` },
+    { t: "الصافي", cls: "num", v: i => { const h = resHeaderOf(i.Res_ID), a = n(h.Invoice_Adjustment); return `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` + (a ? `<div class="text-[11px] ${a < 0 ? "text-emerald-600" : "text-amber-600"}" title="${esc(h.Adjustment_Reason)}">${a < 0 ? "خصم" : "إضافة"} ${fmt(Math.abs(a))}</div>` : ""); } }, { t: "المقدم", cls: "num", v: i => fmt(i.Down_Payment_Required) }, { t: "المسدد", cls: "num", v: i => `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>` },
     { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Balance) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Balance)}</b>` + (n(i.Credit_Balance) ? `<div class="text-emerald-600 text-[11px]">له ${fmt(i.Credit_Balance)}</div>` : "") },
     { t: "الخطة", v: i => esc(ar(i.Payment_Plan_Type)) + (n(i.Installments_Count) ? ` · ${i.Installments_Count}` : "") }, { t: "الحالة", v: i => pill(i.Invoice_Status) },
     { t: "", actions: true, v: i => (n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
       + (n(i.Credit_Balance) && can("REFUND_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline btn-xs" data-act="refund" data-id="${esc(i.Emp_Inv_ID)}">${ic("undo-2")} رد الرصيد</button>` : "")
-      + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : "") }
+      + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : "")
+      + (can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : "")
+      + (can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-ghost btn-xs" data-act="resEdit" data-id="${esc(i.Emp_ID)}">${ic("notebook-pen")} الحجز</button>` : "")
+      + (can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : "") }
   ], invs, { maxH: 680, emptyIcon: "receipt", empty: "لا فواتير", emptySub: "تصدر فواتير الموظفين بعد تشغيل التوزيع." });
 }
 Router.add("/a/collect", view => {
@@ -761,4 +786,135 @@ on("adjStock", async () => {
     { name: "bookId", label: "الكتاب", type: "select", options: A().books.map(b => [b.Book_ID, `${b.Book_ID} - ${b.Book_Name}`]) },
     { name: "qty", label: "الكمية (±)", type: "number", required: true, cols: 1 }, { name: "reason", label: "رقم محضر الجرد والسبب", required: true, cols: 1 }], ok: "تسجيل التسوية" });
   if (v) await act("RECORD_STOCK_ADJUSTMENT", Object.assign(v, { phaseId: APP.phaseId }));
+});
+
+// ============================================================ الحجوزات (إضافة / تعديل / حذف نيابة عن الموظف)
+const SEP = "|";
+const resLines = (empId) => {
+  const m = {};
+  A().resItems.filter(i => i.Phase_ID === APP.phaseId && i.Emp_ID === empId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > 0)
+    .forEach(i => { const k = i.Book_ID + SEP + (i.Beneficiary || ""); m[k] = (m[k] || 0) + n(i.Requested_Qty); });
+  return m;
+};
+function resRows() {
+  const d = A(), { e } = maps(), q = (Q.res || "").toLowerCase(), showCancelled = Q.resF === "c";
+  const items = d.resItems.filter(i => i.Phase_ID === APP.phaseId);
+  return d.resHeaders.filter(h => h.Phase_ID === APP.phaseId && (showCancelled ? h.Res_Status === "Cancelled" : h.Res_Status !== "Cancelled"))
+    .map(h => { const its = items.filter(i => i.Res_ID === h.Res_ID && !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > 0);
+      return { h, emp: e[h.Emp_ID] || {}, copies: sum(its, "Requested_Qty"), books: new Set(its.map(i => i.Book_ID)).size, rel: [...new Set(its.map(i => i.Beneficiary).filter(Boolean))], delivered: sum(its, "Delivered_Qty") }; })
+    .filter(r => !q || (r.h.Emp_ID + (r.emp.Full_Name || "") + (r.emp.Department || "") + r.rel.join(" ")).toLowerCase().includes(q))
+    .sort((a, b) => String(b.h.Last_Modified_At).localeCompare(String(a.h.Last_Modified_At)));
+}
+function resTable() {
+  const rows = resRows(), edit = can("SUBMIT_OR_UPDATE_RESERVATION");
+  return UI.table([
+    { t: "الموظف", v: r => `<div class="flex items-center gap-2.5">${UI.avatar(r.emp.Full_Name || r.h.Emp_ID, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${esc(r.emp.Full_Name || r.h.Emp_ID)}</div><div class="text-[11.5px] text-slate-400"><span class="num">${esc(r.h.Emp_ID)}</span>${r.emp.Department ? " · " + esc(r.emp.Department) : ""}</div></div></div>` },
+    { t: "الكتب / النسخ", cls: "num", v: r => `${fmt(r.books)} / <b>${fmt(r.copies)}</b>` + (r.delivered ? `<div class="text-[11px] text-emerald-600">سُلّم ${fmt(r.delivered)}</div>` : "") },
+    { t: "القيمة", cls: "num", v: r => `<b>${fmt(r.h.Total_Emp_Value)}</b>` },
+    { t: "السداد", v: r => esc(ar(r.h.Payment_Method_Selected)) + (n(r.h.Installment_Count) ? ` · ${r.h.Installment_Count} أقساط` : "") },
+    { t: "للأقارب", v: r => r.rel.length ? r.rel.map(x => `<span class="pill pill-blue mb-0.5">${esc(x)}</span>`).join(" ") : `<span class="text-slate-300">—</span>` },
+    { t: "آخر تعديل", v: r => `<div class="text-[12px] num">${esc(dt(r.h.Last_Modified_At))}</div>${r.h.Created_By ? `<div class="text-[11px] text-slate-400">أنشأته الإدارة: ${esc(r.h.Created_By)}</div>` : ""}` },
+    { t: "", actions: true, v: r => edit ? `<button class="btn btn-outline btn-xs" data-act="resEdit" data-id="${esc(r.h.Emp_ID)}">${ic("pencil")} تعديل</button>${r.h.Res_Status !== "Cancelled" && !r.delivered ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="resDel" data-id="${esc(r.h.Emp_ID)}">${ic("trash-2")} حذف</button>` : ""}` : "" }
+  ], rows, { maxH: 680, emptyIcon: "notebook-pen", empty: Q.res ? "لا نتائج للبحث" : "لا حجوزات في هذه المرحلة" });
+}
+Router.add("/a/res", view => {
+  if (noPhase(view)) return;
+  const all = A().resHeaders.filter(h => h.Phase_ID === APP.phaseId), act1 = all.filter(h => h.Res_Status !== "Cancelled");
+  const its = phaseItems(), rel = its.filter(i => i.Beneficiary);
+  view.innerHTML = UI.pageHead("الحجوزات", `${esc(phaseObj().Phase_Name)} · إضافة وتعديل وحذف الحجز نيابة عن الموظف`,
+      lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-primary btn-sm" data-act="resNew">${ic("plus")} حجز لموظف</button>`))
+    + `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">${UI.kpi("حجوزات سارية", fmt(act1.length), { icon: "notebook-pen", tone: "brand" })}${UI.kpi("النسخ", fmt(sum(its, "Requested_Qty")), { icon: "book-open", tone: "blue" })}${UI.kpi("نسخ للأقارب", fmt(sum(rel, "Requested_Qty")), { icon: "users", tone: "gray", foot: `${fmt(new Set(rel.map(i => i.Emp_ID + i.Beneficiary)).size)} قريب` })}${UI.kpi("ملغاة", fmt(all.length - act1.length), { icon: "ban", tone: "red" })}</div>
+    <section class="card card-pad"><div class="flex flex-wrap items-center gap-3 mb-4">${searchBox("qRes", Q.res, "بحث بالموظف أو جهة العمل أو القريب")}
+      <div class="scroll-x !mx-0 !px-0">${[["", "السارية"], ["c", "الملغاة"]].map(f => `<button class="chip !h-9" data-act="resF" data-id="${f[0]}" aria-pressed="${(Q.resF || "") === f[0]}">${f[1]}</button>`).join("")}</div>
+      <button class="btn btn-ghost btn-sm" data-act="exportRes">${ic("download")} تصدير</button></div>
+      <div id="resList">${resTable()}</div></section>`;
+});
+on("qRes", v => { Q.res = v.trim(); rerenderList("resList", resTable); });
+on("resF", v => { Q.resF = v; Shell.rerender(); });
+on("exportRes", () => { const { b, e } = maps(); exportCSV("حجوزات " + (phaseObj().Phase_Name || ""), ["رقم الموظف", "الاسم", "جهة العمل", "الكود", "الكتاب", "المستفيد", "محجوز", "مخصص", "مُسلَّم", "سعر الموظف", "الأسبقية"],
+  phaseItems().map(i => [i.Emp_ID, empName(e, i.Emp_ID), (e[i.Emp_ID] || {}).Department, i.Book_ID, bookName(b, i.Book_ID), i.Beneficiary || "العضو", i.Requested_Qty, i.Allocated_Qty, i.Delivered_Qty, i.Unit_Emp_Price, i.Priority_Timestamp])); });
+on("resDel", async empId => {
+  const { e } = maps();
+  if (!(await UI.confirm({ title: "حذف الحجز", message: `حذف كل حجز ${empName(e, empId)} في هذه المرحلة؟ تتحرر نسخه المخصصة للتوزيع.`, ok: "حذف الحجز", tone: "danger" }))) return;
+  const h = A().resHeaders.find(x => x.Phase_ID === APP.phaseId && x.Emp_ID === empId) || {};
+  await act("SUBMIT_OR_UPDATE_RESERVATION", { empId, phaseId: APP.phaseId, items: [], paymentMethod: h.Payment_Method_Selected || "CASH" });
+});
+
+// اختيار الموظف لحجز جديد
+on("resNew", () => {
+  Q.pickEmp = "";
+  const m = UI.open(`${searchBox("qPickEmp", "", "اكتب الاسم أو الرقم الوظيفي")}<div id="pickEmpList" class="mt-3">${pickEmpList()}</div>`, { title: "حجز لموظف", sub: "اختر الموظف أولاً" });
+  setTimeout(() => { const i = m.body && m.body.querySelector("input"); if (i) i.focus(); }, 50);
+});
+function pickEmpList() {
+  const q = (Q.pickEmp || "").toLowerCase();
+  if (q.length < 2) return `<div class="text-sm text-slate-500 text-center py-6">اكتب حرفين على الأقل للبحث في ${fmt(A().employees.length)} موظف.</div>`;
+  const list = A().employees.filter(x => (x.Emp_ID + " " + x.Full_Name + " " + (x.Department || "")).toLowerCase().includes(q)).slice(0, 30);
+  return list.length ? `<ul class="divide-y divide-slate-100">${list.map(x => `<li><button class="w-full flex items-center gap-3 py-2.5 text-right hover:bg-slate-50 rounded-lg px-1" data-act="resPick" data-id="${esc(x.Emp_ID)}">${UI.avatar(x.Full_Name, "w-9 h-9 text-xs")}<span class="flex-1 min-w-0"><span class="block font-semibold text-[13.5px] truncate">${esc(x.Full_Name)}</span><span class="block text-[11.5px] text-slate-400 truncate"><span class="num">${esc(x.Emp_ID)}</span> · ${esc(x.Department || "")}</span></span>${x.Employment_Status !== "ساري" ? pill("", "موقوف", "red") : ""}</button></li>`).join("")}</ul>` : UI.empty("search", "لا نتائج");
+}
+on("qPickEmp", v => { Q.pickEmp = v.trim(); rerenderList("pickEmpList", pickEmpList); });
+on("resPick", id => { const top = UI._stack[UI._stack.length - 1]; if (top) UI.close(top); setTimeout(() => ACTIONS.resEdit(id), 50); });
+
+// محرر الحجز
+const Ed = { s: null };
+on("resEdit", empId => {
+  if (!APP.phaseId) return toast("لا توجد مرحلة.", "info");
+  const h = A().resHeaders.find(x => x.Phase_ID === APP.phaseId && x.Emp_ID === empId) || {}, st = A().settingsMap || {};
+  const lines = resLines(empId);
+  Ed.s = { empId, lines, orig: JSON.stringify(lines), ben: "", bens: [...new Set(Object.keys(lines).map(k => k.split(SEP)[1]).filter(Boolean))], q: "", grade: "", subject: "",
+    method: h.Payment_Method_Selected || "INSTALLMENT", count: n(h.Installment_Count) || n(st.DEFAULT_INSTALLMENT_COUNT) || 2,
+    downType: h.Down_Payment_Type || "PERCENTAGE", down: h.Down_Payment_Input !== undefined && h.Down_Payment_Input !== "" ? n(h.Down_Payment_Input) : n(st.MIN_DOWN_PAYMENT_PCT) || 20 };
+  const { e } = maps(), emp = e[empId] || {};
+  Ed.m = UI.open(`<div id="edBody">${edBody()}</div>`, { title: (h.Res_ID ? "تعديل حجز " : "حجز جديد لـ ") + esc(emp.Full_Name || empId), sub: `<span class="num">${esc(empId)}</span> · ${esc(emp.Department || "")} · ${esc(phaseObj().Phase_Name || "")}`, wide: true,
+    footer: `<div class="flex flex-wrap items-center justify-between gap-3"><div id="edTotal" class="text-sm"></div><button class="btn btn-primary" data-act="edSave">${ic("check")} حفظ الحجز</button></div>` });
+  edTotals();
+});
+const edRefresh = () => { const el = $("#edBody"); if (el) el.innerHTML = edBody(); edTotals(); };
+function edTotals() {
+  const { b } = maps(); let c = 0, v = 0;
+  Object.entries(Ed.s.lines).forEach(([k, q]) => { const bk = b[k.split(SEP)[0]] || {}; c += q; v += q * n(bk.Emp_Selling_Price); });
+  const el = $("#edTotal"); if (el) el.innerHTML = `<b class="num">${fmt(c)}</b> نسخة · <b class="num text-brand-800">${fmt(v)}</b> ج.م`;
+}
+function edBody() {
+  const s = Ed.s, d = A(), { b } = maps(), mx = n(d.settingsMap.MAX_QTY_PER_BOOK) || 3, c = d.catalog || {};
+  const benChip = (val, label) => `<button class="chip !h-8 !text-xs" data-act="edBen" data-id="${esc(val)}" aria-pressed="${s.ben === val}">${label}</button>`;
+  const q = s.q.toLowerCase();
+  const found = (q.length >= 2 || s.grade || s.subject) ? d.books.filter(x => ["Available", "Not_Yet_Printed"].includes(x.Book_Status)
+    && (!s.grade || x.Grade === s.grade) && (!s.subject || x.Subject === s.subject) && (!q || (x.Book_ID + " " + x.Book_Name + " " + x.Subject + " " + x.Grade).toLowerCase().includes(q))).slice(0, 40) : [];
+  const step = (k, qty) => `<div class="stepper scale-90 origin-left"><button data-act="edInc" data-id="${esc(k)}" ${qty >= mx ? "disabled" : ""}>${ic("plus")}</button><span>${qty}</span><button data-act="edDec" data-id="${esc(k)}">${ic(qty === 1 ? "trash-2" : "minus")}</button></div>`;
+  const groups = {}; Object.keys(s.lines).forEach(k => { const ben = k.split(SEP)[1] || ""; (groups[ben] = groups[ben] || []).push(k); });
+  const benOrder = ["", ...s.bens.filter(x => groups[x] || x === s.ben)];
+  const sel = (k, label, opts) => `<select class="input !h-10 !text-sm" data-change="edF" data-k="${k}"><option value="">${label}</option>${opts.map(o => `<option ${s[k] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  return `
+  <div class="mb-3"><div class="label">الحجز لـ</div><div class="flex flex-wrap gap-1.5">${benChip("", `${ic("user")} العضو وأبناؤه`)}${s.bens.map(x => benChip(x, `${ic("users")} ${esc(x)}`)).join("")}<button class="chip !h-8 !text-xs" data-act="edAddBen">${ic("plus")} قريب</button></div></div>
+  <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">${searchBox("edQ", s.q, "ابحث عن كتاب بالاسم أو الكود")}${sel("grade", "كل الصفوف", (c.grades || []).map(g => g.label))}${sel("subject", "كل المواد", c.subjects || [])}</div>
+  <div class="mt-2 max-h-56 overflow-y-auto rounded-xl ring-1 ring-slate-100">${found.length ? `<ul class="divide-y divide-slate-100">${found.map(x => { const k = x.Book_ID + SEP + s.ben, qty = s.lines[k] || 0;
+    return `<li class="flex items-center gap-3 px-3 py-2"><div class="flex-1 min-w-0"><div class="font-semibold text-[13px] truncate">${esc(x.Book_Name)}</div><div class="text-[11px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · <span class="num">${fmt(x.Emp_Selling_Price)}</span> ج.م</div></div>${qty ? step(k, qty) : `<button class="btn btn-soft btn-xs" data-act="edInc" data-id="${esc(k)}">${ic("plus")} أضف</button>`}</li>`; }).join("")}</ul>`
+    : `<div class="text-[12.5px] text-slate-400 text-center py-5">${q.length || s.grade || s.subject ? "لا كتب مسعّرة مطابقة" : "ابحث أو اختر صفاً/مادة لإضافة كتب"}</div>`}</div>
+  <div class="mt-4"><div class="label">الكتب في الحجز</div>${Object.keys(s.lines).length ? benOrder.filter(x => groups[x]).map(ben => `<div class="mt-2"><div class="text-[12px] font-bold ${ben ? "text-sky-700" : "text-brand-700"} mb-1">${ben ? "لـ " + esc(ben) : "للعضو وأبنائه"}</div><ul class="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-100">${groups[ben].map(k => { const bk = b[k.split(SEP)[0]] || {}; return `<li class="flex items-center gap-3 px-3 py-2"><div class="flex-1 min-w-0"><div class="font-semibold text-[13px] truncate">${esc(bk.Book_Name || k)}</div><div class="text-[11px] text-slate-400 num">${fmt(bk.Emp_Selling_Price)} × ${s.lines[k]} = ${fmt(n(bk.Emp_Selling_Price) * s.lines[k])}</div></div>${step(k, s.lines[k])}</li>`; }).join("")}</ul></div>`).join("") : `<div class="text-[12.5px] text-slate-400 py-3">لا كتب بعد — حفظ حجز فارغ يلغي الحجز.</div>`}</div>
+  <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-2 items-end">
+    <div class="col-span-2 sm:col-span-1"><div class="label">طريقة السداد</div><select class="input !h-10" data-change="edF" data-k="method">${[["INSTALLMENT", "تقسيط"], ["CASH", "نقدي كامل"], ["INSTAPAY", "إنستاباي"], ["WALLET", "محفظة"], ["PAYROLL", "خصم من المرتب"]].map(o => `<option value="${o[0]}" ${s.method === o[0] ? "selected" : ""}>${o[1]}</option>`).join("")}</select></div>
+    ${s.method === "INSTALLMENT" ? `<div><div class="label">المقدم %</div><input class="input !h-10" type="number" min="0" max="100" value="${esc(s.down)}" data-change="edF" data-k="down"></div><div><div class="label">عدد الأقساط</div><input class="input !h-10" type="number" min="1" max="${n(d.settingsMap.MAX_INSTALLMENT_COUNT) || 4}" value="${esc(s.count)}" data-change="edF" data-k="count"></div>` : ""}
+  </div>`;
+}
+on("edQ", v => { Ed.s.q = v.trim(); const el = $("#edBody"); if (!el) return; const pos = document.activeElement && document.activeElement.selectionStart; el.innerHTML = edBody(); const i = el.querySelector('[data-input="edQ"]'); if (i) { i.focus(); try { i.setSelectionRange(pos, pos); } catch (_) {} } });
+on("edF", (v, el) => { Ed.s[el.dataset.k] = el.dataset.k === "down" || el.dataset.k === "count" ? n(v) : v; if (el.dataset.k === "down" || el.dataset.k === "count") return; edRefresh(); });
+on("edBen", v => { Ed.s.ben = v; edRefresh(); });
+on("edAddBen", async () => {
+  const v = await UI.form({ title: "إضافة قريب", intro: "تُحسب كتب القريب على حساب العضو نفسه.", fields: [{ name: "name", label: "اسم القريب", required: true }, { name: "rel", label: "صلة القرابة", type: "select", value: "ابن أخ", options: ["ابن أخ", "ابن أخت", "حفيد", "أخ", "أخت", "ابن عم", "ابن خال", "أخرى"].map(x => [x, x]) }], ok: "إضافة" });
+  if (!v || !v.name.trim()) return;
+  const label = v.name.trim() + " — " + v.rel;
+  if (!Ed.s.bens.includes(label)) Ed.s.bens.push(label);
+  Ed.s.ben = label; edRefresh();
+});
+on("edInc", k => { const mx = n(A().settingsMap.MAX_QTY_PER_BOOK) || 3; Ed.s.lines[k] = Math.min(mx, (Ed.s.lines[k] || 0) + 1); edRefresh(); });
+on("edDec", k => { Ed.s.lines[k] = (Ed.s.lines[k] || 0) - 1; if (Ed.s.lines[k] <= 0) delete Ed.s.lines[k]; edRefresh(); });
+on("edSave", async () => {
+  const s = Ed.s, items = Object.entries(s.lines).map(([k, q]) => ({ bookId: k.split(SEP)[0], beneficiary: k.split(SEP)[1] || "", qty: q }));
+  const h = A().resHeaders.find(x => x.Phase_ID === APP.phaseId && x.Emp_ID === s.empId);
+  if (!items.length && !h) return toast("أضف كتاباً واحداً على الأقل.", "warning");
+  if (!items.length && !(await UI.confirm({ title: "إلغاء الحجز", message: "لا كتب في الحجز — سيُلغى حجز الموظف بالكامل. متابعة؟", ok: "إلغاء الحجز", tone: "danger" }))) return;
+  const r = await call("SUBMIT_OR_UPDATE_RESERVATION", { empId: s.empId, phaseId: APP.phaseId, items, paymentMethod: s.method, downPaymentType: "PERCENTAGE", downPaymentInput: s.down, installmentCount: s.count }, { block: true });
+  toast(r.message, r.success ? "success" : "danger"); (r.warnings || []).forEach(w => toast(w, "warning"));
+  if (r.success) { if (Ed.m) Ed.m.close(); await Admin.load(); }
 });

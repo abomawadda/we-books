@@ -9,7 +9,7 @@ const ACL = {
   SAVE_PHASE: ["Coordinator"], SET_PHASE_STATUS: ["Coordinator"], GENERATE_PO_SNAPSHOT: ["Coordinator"], CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"], RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"], MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"], CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
   EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
-  RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"],
+  RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [],
   RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"]
 };
 const can = action => !!APP.user && (APP.user.role === "Admin" || (ACL[action] || []).indexOf(APP.user.role) !== -1);
@@ -38,7 +38,7 @@ const EMP_NAV = [
 const ADMIN_NAV = [
   { g: "", items: [["dash", "layout-dashboard", "لوحة القيادة"]] },
   { g: "الإعداد", items: [["books", "library-big", "الكتب والأسعار"], ["phases", "calendar-range", "المراحل"], ["suppliers", "store", "المكتبات المتعاقدة"], ["employees", "users", "الموظفون"], ["settings", "sliders-horizontal", "الإعدادات"]] },
-  { g: "دورة التوريد", items: [["po", "clipboard-list", "الحصر وطلب التوريد"], ["receive", "truck", "فاتورة المكتبة والجرد"], ["alloc", "list-ordered", "التوزيع بالأسبقية"]] },
+  { g: "دورة التوريد", items: [["res", "notebook-pen", "الحجوزات"], ["po", "clipboard-list", "الحصر وطلب التوريد"], ["receive", "truck", "فاتورة المكتبة والجرد"], ["alloc", "list-ordered", "التوزيع بالأسبقية"]] },
   { g: "التسليم والتحصيل", items: [["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
   { g: "الحسابات", items: [["supplier", "landmark", "حساب المكتبة"], ["expenses", "coins", "المصروفات والمخزن"]] },
   { g: "", items: [["reports", "chart-column", "التقارير والتصفية"]] }
@@ -70,13 +70,13 @@ const Shell = {
         <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · نقابة العاملين</div>
       </aside>
 
-      <main class="flex flex-col min-h-[100dvh] lg:min-h-0 lg:justify-center lg:p-10">
+      <main class="flex flex-col min-h-[100dvh] lg:bg-white lg:text-slate-800 lg:justify-center lg:px-16">
         <div class="lg:hidden px-6 pt-[max(2.5rem,env(safe-area-inset-top))] pb-8">
           <div class="w-14 h-14 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[28px] shadow-lg">${ic("book-marked")}</div>
           <h1 class="mt-5 text-[26px] font-bold leading-snug">${esc(APP.title)}</h1>
           <p class="text-brand-100/80 text-sm mt-1.5">احجز · استلم · قسّط — بخصم العاملين</p>
         </div>
-        <div class="flex-1 lg:flex-none bg-white text-slate-800 rounded-t-4xl lg:rounded-4xl px-6 pt-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-9 shadow-lift lg:max-w-md lg:w-full lg:mx-auto animate-sheet-up">
+        <div class="flex-1 lg:flex-none bg-white text-slate-800 rounded-t-4xl lg:rounded-none px-6 pt-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-0 lg:max-w-md lg:w-full lg:mx-auto">
           <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-4" autocomplete="on">
             <div><h2 class="text-xl font-bold text-slate-900">أهلاً بك</h2><p class="text-sm text-slate-500 mt-1">ادخل ببياناتك المسجلة في النقابة</p></div>
             <div><label class="label" for="lgEmp">الرقم الوظيفي</label><div class="input-icon">${ic("badge-check")}<input id="lgEmp" class="input" inputmode="numeric" autocomplete="username" required></div></div>
