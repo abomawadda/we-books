@@ -40,11 +40,11 @@ const ADMIN_NAV = [
   { g: "", items: [["dash", "layout-dashboard", "لوحة القيادة"]] },
   { g: "الإعداد", items: [["books", "library-big", "الكتب والأسعار"], ["phases", "calendar-range", "المراحل"], ["suppliers", "store", "المكتبات المتعاقدة"], ["employees", "users", "الموظفون"], ["settings", "sliders-horizontal", "الإعدادات"]] },
   { g: "دورة التوريد", items: [["res", "notebook-pen", "الحجوزات"], ["po", "clipboard-list", "الحصر وطلب التوريد"], ["receive", "truck", "فاتورة المكتبة والجرد"], ["alloc", "list-ordered", "التوزيع بالأسبقية"]] },
-  { g: "التسليم والتحصيل", items: [["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
+  { g: "التسليم والتحصيل", items: [["dday", "scan-line", "يوم التسليم"], ["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
   { g: "الحسابات", items: [["supplier", "landmark", "حساب المكتبة"], ["expenses", "coins", "المصروفات والمخزن"]] },
   { g: "", items: [["reports", "chart-column", "التقارير والتصفية"], ["audit", "history", "سجل التعديلات"]] }
 ];
-const ADMIN_BOTTOM = [["dash", "layout-dashboard", "الرئيسية"], ["delivery", "package-check", "التسليم"], ["collect", "hand-coins", "التحصيل"], ["reports", "chart-column", "التقارير"]];
+const ADMIN_BOTTOM = [["dash", "layout-dashboard", "الرئيسية"], ["dday", "scan-line", "يوم التسليم"], ["collect", "hand-coins", "التحصيل"], ["reports", "chart-column", "التقارير"]];
 const navLabel = key => { for (const g of ADMIN_NAV) for (const i of g.items) if ("/a/" + i[0] === key) return i[2]; const e = EMP_NAV.find(x => "/e/" + x[0] === key); return e ? e[2] : ""; };
 
 const Shell = {

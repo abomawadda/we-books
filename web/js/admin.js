@@ -65,7 +65,7 @@ const FLOW = [["Open", "الحجز", "calendar-check"], ["Closed", "إغلاق �
 const NEXT = {
   Draft: ["افتح الحجز للموظفين", "SET_PHASE_STATUS", "Open"], Scheduled: ["الحجز سيبدأ تلقائياً في موعده", null], Open: ["أغلق الحجز ثم جمّد الحصر", "SET_PHASE_STATUS", "Closed"],
   Closed: ["جمّد الحصر وأرسل طلب التوريد", "go", "/a/po"], Ordered: ["أدخل فاتورة المكتبة ونتيجة الجرد", "go", "/a/receive"], Receiving: ["شغّل التوزيع بالأسبقية", "go", "/a/alloc"],
-  Delivering: ["سلّم الكتب وحصّل المقدمات", "go", "/a/delivery"], Completed: ["المرحلة مكتملة — راجع التصفية", "go", "/a/reports"]
+  Delivering: ["سلّم الكتب وحصّل المقدمات", "go", "/a/dday"], Completed: ["المرحلة مكتملة — راجع التصفية", "go", "/a/reports"]
 };
 /* ---------- ملخصات عامة (لا تحتاج مرحلة): جاهزية الأسعار، الأعضاء، صحة المهام الليلية ---------- */
 const STAGE_ORDER = () => [...new Set(((A().catalog || {}).grades || []).map(g => g.stage))];
@@ -752,6 +752,61 @@ function printDoc(no) {
   Doc.show(title + " " + no, Doc.delivery({ title, no, date: f.Trans_Date, emp: { name: empName(e, f.Party_ID), id: f.Party_ID }, lines: lines.map(l => ({ code: l.Book_ID, name: bookName(b, l.Book_ID), qty: n(l.Qty) })), note: f.Received_By ? "المستلم: " + f.Received_By + " · المسلِّم: " + (f.Handled_By || "") : "" }), { file: no });
 }
 on("printDoc", id => printDoc(id));
+
+// ============================================================ شاشة يوم التسليم (شباك الخدمة)
+/** موظف واحد في كل مرة: ابحث برقمه ← حصّل ما عليه ← سلّم كتبه، مع عداد تقدّم اليوم */
+function ddState(id) {
+  const d = A(), list = phaseItems().filter(i => i.Emp_ID === id && (n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0));
+  const inv = d.empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || null;
+  const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
+  const dueDown = inv ? Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) : 0;
+  const overdue = inv && inv.Invoice_Status === "Overdue";
+  return { list, inv, rem, dueDown, overdue, ok: rem > 0 && !dueDown && !overdue };
+}
+function ddCard(id) {
+  const { e, b } = maps(), emp = e[id];
+  if (!emp) return `<div class="card card-pad text-center text-rose-600 font-semibold">لا يوجد موظف بالرقم ${esc(id)}</div>`;
+  const s = ddState(id), inv = s.inv;
+  if (!s.list.length) return `<div class="card card-pad">${UI.empty("package-x", empName(e, id), "لا توجد له كتب مخصصة في هذه المرحلة.")}</div>`;
+  const step = s.rem === 0 ? ["تم تسليم كل الكتب", "gray", "circle-check"] : s.dueDown ? [`يسدد المقدم أولاً: ${moneyTxt(s.dueDown)}`, "red", "hand-coins"] : s.overdue ? ["عليه أقساط متأخرة", "red", "triangle-alert"] : ["جاهز للتسليم", "green", "package-check"];
+  const tone = { red: "bg-rose-50 text-rose-700 ring-rose-200", green: "bg-emerald-50 text-emerald-700 ring-emerald-200", gray: "bg-slate-50 text-slate-600 ring-slate-200" }[step[1]];
+  return `<article class="card overflow-hidden">
+    <div class="flex items-center gap-3 p-4">${UI.avatar(empName(e, id), "w-14 h-14 text-lg")}
+      <div class="flex-1 min-w-0"><div class="font-display font-bold text-lg text-slate-900 truncate">${esc(empName(e, id))}</div>
+      <div class="text-[13px] text-slate-500 num truncate">${esc(id)}${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div></div>
+    <div class="mx-4 rounded-2xl ring-1 ${tone} px-4 py-3 flex items-center gap-2 font-bold text-[15px]">${ic(step[2])} ${esc(step[0])}</div>
+    ${inv ? `<div class="grid grid-cols-3 gap-2 p-4">${UI.stat("الفاتورة", fmt(inv.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(inv.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(inv.Remaining_Balance)}</span>`)}</div>` : ""}
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">${s.list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty); return `<li class="flex items-center gap-3 px-4 py-2.5">
+      <span class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${r > 0 ? "bg-brand-50 text-brand-700" : "bg-emerald-50 text-emerald-600"}">${r > 0 ? `<b class="num">${r}</b>` : ic("check")}</span>
+      <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold text-slate-800 truncate">${esc(bookName(b, i.Book_ID))}</div><div class="text-[11.5px] text-slate-500 num">${esc(i.Book_ID)}${i.Beneficiary ? " · " + esc(i.Beneficiary) : ""}${n(i.Delivered_Qty) ? ` · سُلّم ${fmt(i.Delivered_Qty)}` : ""}</div></div></li>`; }).join("")}</ul>
+    <div class="p-3 bg-slate-50/70 grid gap-2">
+      ${inv && n(inv.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn ${s.dueDown || s.overdue ? "btn-primary" : "btn-outline"} w-full !h-12" data-act="collect" data-id="${esc(inv.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل${s.dueDown ? " المقدم " + fmt(s.dueDown) : ""}</button>` : ""}
+      ${s.rem > 0 && can("EXECUTE_BOOK_DELIVERY") ? `<button class="btn ${s.ok ? "btn-success" : "btn-outline"} w-full !h-12" data-act="deliver" data-id="${esc(id)}">${ic("check-check")} تسليم ${fmt(s.rem)} نسخة وطباعة الإذن</button>` : ""}
+      <button class="btn btn-ghost w-full" data-act="ddNext">${ic("arrow-right")} الموظف التالي</button></div></article>`;
+}
+function ddMatches() {
+  const { e } = maps(), q = (Q.ddq || "").trim().toLowerCase(); if (!q) return "";
+  const ids = [...new Set(phaseItems().filter(i => n(i.Allocated_Qty) > 0).map(i => i.Emp_ID))].filter(id => (id + " " + empName(e, id)).toLowerCase().includes(q)).slice(0, 8);
+  if (!ids.length) return `<div class="text-sm text-slate-500 p-3">لا نتائج</div>`;
+  return `<div class="card divide-y divide-slate-100">${ids.map(id => { const s = ddState(id); return `<button class="w-full flex items-center gap-3 px-4 py-3 text-right" data-act="ddPick" data-id="${esc(id)}">${UI.avatar(empName(e, id), "w-9 h-9 text-xs")}<div class="flex-1 min-w-0"><div class="font-semibold truncate">${esc(empName(e, id))}</div><div class="text-[12px] text-slate-500 num">${esc(id)}</div></div>${s.rem === 0 ? pill("", "استلم", "gray") : s.ok ? pill("", "جاهز", "green") : pill("", "عليه سداد", "red")}</button>`; }).join("")}</div>`;
+}
+Router.add("/a/dday", view => {
+  if (noPhase(view)) return;
+  const d = A(), items = phaseItems().filter(i => n(i.Allocated_Qty) > 0), today = new Date().toISOString().slice(0, 10);
+  const emps = [...new Set(items.map(i => i.Emp_ID))], done = emps.filter(id => ddState(id).rem === 0).length;
+  const alloc = sum(items, "Allocated_Qty"), deliv = sum(items, "Delivered_Qty");
+  const cashToday = d.empPayments.filter(p => !isTrue(p.Is_Voided) && day(p.Payment_Date) === today && String(p.Emp_Inv_ID || "").indexOf("-" + APP.phaseId + "-") > 0).reduce((s, p) => s + n(p.Amount), 0);
+  const delToday = new Set(d.deliveryReturns.filter(x => x.Doc_Type === "EMP_DELIVERY" && x.Phase_ID === APP.phaseId && day(x.Trans_Date) === today).map(x => x.Party_ID)).size;
+  view.innerHTML = UI.pageHead("يوم التسليم", "ابحث برقم الموظف ← حصّل ما عليه ← سلّم كتبه")
+    + `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">${UI.kpi("استلموا كتبهم", `${fmt(done)} / ${fmt(emps.length)}`, { icon: "users", tone: "brand", pct: emps.length ? done / emps.length * 100 : 0 })}${UI.kpi("النسخ المسلّمة", `${fmt(deliv)} / ${fmt(alloc)}`, { icon: "package-check", tone: "green", pct: alloc ? deliv / alloc * 100 : 0 })}${UI.kpi("سُلِّموا اليوم", fmt(delToday), { icon: "calendar-check", tone: "amber" })}${UI.kpi("محصّل اليوم", money(cashToday), { icon: "banknote", tone: "green" })}</div>
+    <div class="max-w-2xl mx-auto grid gap-3">
+      <div class="input-icon">${ic("search")}<input id="ddq" class="input !h-14 !text-lg" inputmode="search" placeholder="رقم الموظف أو اسمه" value="${esc(Q.ddq || "")}" data-input="ddq" autocomplete="off"></div>
+      <div id="ddRes">${Q.ddId ? ddCard(Q.ddId) : ddMatches()}</div></div><div class="h-5"></div>`;
+  if (!Q.ddId) setTimeout(() => { const i = $("#ddq"); if (i && matchMedia("(min-width:768px)").matches) i.focus(); }, 50);
+});
+on("ddq", v => { Q.ddq = v; Q.ddId = ""; const { e } = maps(), t = v.trim(); if (e[t] && phaseItems().some(i => i.Emp_ID === t)) Q.ddId = t; const r = $("#ddRes"); if (r) r.innerHTML = Q.ddId ? ddCard(Q.ddId) : ddMatches(); });
+on("ddPick", id => { Q.ddId = id; Q.ddq = id; Shell.rerender(); });
+on("ddNext", () => { Q.ddId = ""; Q.ddq = ""; Shell.rerender(); setTimeout(() => { const i = $("#ddq"); if (i) i.focus(); }, 80); });
 
 // ============================================================ التحصيل والفواتير
 const resHeaderOf = id => A().resHeaders.find(h => h.Res_ID === id) || {};
