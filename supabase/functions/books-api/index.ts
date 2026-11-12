@@ -9,10 +9,10 @@ const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 8, prepare: false,
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
-const CODE_COMMIT = '512f1608e595910e28893e73eec90f252a7b7602';
-const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/apps-script/Code.gs`;
+const CODE_COMMIT = 'a0ddaa00904903797ea38c60e1f6f22af21275da';
+const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/supabase/functions/books-api/logic.js`;
 let rtP: Promise<any> | null = null;
-const runtime = () => (rtP ||= fetch(CODE_URL).then(r => { if (!r.ok) throw new Error('Code.gs ' + r.status); return r.text(); })
+const runtime = () => (rtP ||= fetch(CODE_URL).then(r => { if (!r.ok) throw new Error('logic.js ' + r.status); return r.text(); })
   .then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
 
 // ---------------- المخزن: Postgres مع أقفال استشارية بدل إعادة المحاولة ----------------
