@@ -27,7 +27,8 @@ node ../supabase/live.test.mjs                     # اختبار حي على ا
 ## مزامنة الموظفين من MyNekaba
 - `books.sync_employees_from_members()` تقرأ `public.members` (نفس المشروع) وتضيف/تحدّث موظفي المبادرة:
   `job_id`←الرقم الوظيفي، آخر 4 من `national_id`، `phone` بعد توحيد الصيغة، `workplace`، `job_title`.
-- الحالة: `member_state` (أو `membership_status`) ضمن `active_member_states` في `books.config` ← "ساري"، وإلا "موقوف" (لا يدخل).
+- الحالة: `member_state` = "نشط" (أو فارغ) ← "ساري"؛ موقوف/إجازة بدون أجر/معاش/استقالة/وفاة ← "موقوف" (لا يدخل).
+  القائمة قابلة للتعديل في `books.config` (`active_member_states`). `membership_status` نوع العضوية وليس الحالة.
 - إعدادات المبادرة لكل موظف (التقسيط، الحد الائتماني، الملاحظات) لا تُمس عند التحديث. لا تُحذف بيانات أي موظف.
 - تعمل تلقائياً كل ليلة 22:30 UTC، ويدوياً: `select * from books.sync_employees_from_members();`
 

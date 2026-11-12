@@ -1,7 +1,8 @@
 -- مزامنة موظفي المبادرة من أعضاء النقابة (public.members في MyNekaba) — قراءة فقط من بيانات النقابة.
 -- طُبِّقت على مشروع mynekaba. التشغيل يدوياً: select * from books.sync_employees_from_members();
-insert into books.config (key, value) values ('active_member_states', 'ساري,عامل,نشط,active,Active')
-on conflict (key) do nothing;
+-- member_state في MyNekaba: نشط / موقوف / إجازة بدون أجر / معاش / استقالة / وفاة (الفارغ = نشط)
+insert into books.config (key, value) values ('active_member_states', 'نشط')
+on conflict (key) do update set value = excluded.value;
 
 create or replace function books.sync_employees_from_members()
 returns table(added int, updated int, skipped int)
@@ -21,7 +22,7 @@ begin
     if coalesce(trim(m.job_id), '') = '' or length(coalesce(m.national_id, '')) < 4 or mob = '' then
       s := s + 1; continue;
     end if;
-    st := case when trim(coalesce(m.member_state, m.membership_status, '')) = any(active) then 'ساري' else 'موقوف' end;
+    st := case when coalesce(nullif(trim(m.member_state), ''), 'نشط') = any(active) then 'ساري' else 'موقوف' end;
     d := jsonb_build_object(
       'Emp_ID', trim(m.job_id), 'Full_Name', coalesce(m.name, ''), 'National_ID_Last4', right(m.national_id, 4),
       'Mobile', mob, 'Department', coalesce(m.workplace, ''), 'Job_Title', coalesce(m.job_title, ''),
