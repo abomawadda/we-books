@@ -81,19 +81,34 @@ function call(action, payload, opts) {
     return r;
   };
   if (!API_URL) return Promise.resolve(done({ success: false, message: "لم يُضبط رابط الخادم في config.js" }));
-  const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-  const timer = setTimeout(() => ctrl && ctrl.abort(), 60000);
-  return fetch(API_URL, {
-    method: "POST", redirect: "follow", signal: ctrl ? ctrl.signal : undefined,
-    headers: { "Content-Type": "text/plain;charset=utf-8" },
-    body: JSON.stringify({ action, payload: payload || {}, token: APP.token })
-  }).then(r => r.text()).then(t => {
-    clearTimeout(timer);
-    try { return done(JSON.parse(t)); } catch (e) { return done({ success: false, message: "رد غير متوقع من الخادم. حاول مرة أخرى." }); }
-  }).catch(err => {
-    clearTimeout(timer);
-    return done({ success: false, message: err && err.name === "AbortError" ? "انتهت مهلة الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى." : "تعذر الاتصال بالخادم. تحقق من الإنترنت." });
-  });
+  // إعادة محاولة تلقائية عند رفض الخادم للطلب قبل تنفيذه (ضغط يوم الحجز) — فقط للعمليات الآمنة التكرار
+  const SAFE_RETRY = /^(LOGIN_|GET_|SUBMIT_OR_UPDATE_RESERVATION$)/.test(action);
+  const once = () => {
+    const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    const timer = setTimeout(() => ctrl && ctrl.abort(), 60000);
+    return fetch(API_URL, {
+      method: "POST", redirect: "follow", signal: ctrl ? ctrl.signal : undefined,
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action, payload: payload || {}, token: APP.token })
+    }).then(r => r.text()).then(t => {
+      clearTimeout(timer);
+      try { return JSON.parse(t); } catch (e) { return { success: false, retryable: true, message: "رد غير متوقع من الخادم. حاول مرة أخرى." }; }
+    }).catch(err => {
+      clearTimeout(timer);
+      return { success: false, retryable: !(err && err.name === "AbortError"), message: err && err.name === "AbortError" ? "انتهت مهلة الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى." : "تعذر الاتصال بالخادم. تحقق من الإنترنت." };
+    });
+  };
+  const attempt = async () => {
+    let r;
+    for (let i = 0; i < (SAFE_RETRY ? 4 : 1); i++) {
+      if (i) await new Promise(res => setTimeout(res, 700 * Math.pow(2, i - 1) * (0.5 + Math.random())));
+      r = await once();
+      if (r.success || !r.retryable) break;
+    }
+    if (r) delete r.retryable;
+    return done(r);
+  };
+  return attempt();
 }
 /** تنفيذ عملية تغيّر البيانات: تأكيد اختياري ← تنفيذ ← تنبيه ← إعادة تحميل */
 async function act(action, payload, confirmOpts) {

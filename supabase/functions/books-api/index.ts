@@ -5,7 +5,20 @@ import { createHash, createHmac, createSign, timingSafeEqual } from 'node:crypto
 import { Buffer } from 'node:buffer';
 import { createRuntime } from './engine.js';
 
-const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 8, prepare: false, idle_timeout: 20 });
+// الاتصال بقاعدة البيانات عبر مجمّع الاتصالات (Supavisor، وضع transaction، المنفذ 6543): يوم الحجز تعمل نسخ
+// كثيرة من الخادم معاً، والاتصال المباشر محدود بـ 60 فلا يُستخدم إلا إن تعذّر بناء عنوان المجمّع.
+const DIRECT = Deno.env.get('SUPABASE_DB_URL')!;
+const POOLER_HOST = 'aws-0-eu-central-1.pooler.supabase.com';
+let sql: any, dbMode = 'direct';
+try {
+  const u = new URL(DIRECT);
+  const ref = (u.hostname.match(/^db\.([a-z0-9]+)\./) || [])[1] || (u.username.split('.')[1] || '');
+  if (!ref) throw new Error('no ref');
+  sql = postgres(`postgres://postgres.${ref}:${encodeURIComponent(decodeURIComponent(u.password))}@${POOLER_HOST}:6543/postgres`,
+    { max: 3, prepare: false, idle_timeout: 10, connect_timeout: 15 });
+  dbMode = 'pooler';
+} catch (_) { sql = postgres(DIRECT, { max: 2, prepare: false, idle_timeout: 10, connect_timeout: 10 }); }
+const ready = Promise.resolve();
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
@@ -193,10 +206,19 @@ async function handle(action: string, payload: any, token: string) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION });
+  await ready;
+  if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION, db: dbMode });
   let body: any;
   try { body = JSON.parse(await req.text()); } catch { return reply({ success: false, message: 'طلب غير صالح.' }, 400); }
   if (!body || typeof body.action !== 'string') return reply({ success: false, message: 'طلب غير صالح.' }, 400);
-  try { return reply(await handle(body.action, body.payload || {}, body.token)); }
+  // عند امتلاء اتصالات قاعدة البيانات لحظياً (53300) تُعاد المحاولة بانتظار متزايد — آمن لأنها أخطاء فتح اتصال، فلم يبدأ شيء ولم يُكتب شيء
+  // 57014 = انتهت مهلة انتظار القفل (أُلغيت الـ transaction كاملة فلا شيء كُتب)
+  const busy = (e: any) => e && (['53300', '57P03', '57014', '40001', '40P01'].includes(e.code) || /too many clients|connection slots|max client|CONNECT_TIMEOUT/i.test(String(e.message || e.code)));
+  try {
+    for (let i = 0; ; i++) {
+      try { return reply(await handle(body.action, body.payload || {}, body.token)); }
+      catch (e) { if (!busy(e) || i >= 8) throw e; await new Promise(r => setTimeout(r, Math.min(4000, 150 * 2 ** i) * (0.5 + Math.random()))); }
+    }
+  }
   catch (err) { console.error(body.action, err); return reply({ success: false, message: 'حدث خطأ في الخادم أثناء تنفيذ العملية. حاول مرة أخرى.' }); }
 });
