@@ -854,7 +854,7 @@ const OperationsEngine = {
         Util.require(book.Book_Status !== "Pricing", "الكتاب (" + book.Book_Name + ") جاري تسعيره، ويُتاح للحجز فور إعلان سعره.");
         Util.require(SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(book.Book_Status) !== -1, "الكتاب (" + book.Book_Name + ") غير متاح للحجز حالياً.");
         if (gradeList) Util.require(gradeList.indexOf(Util.str(book.Grade)) !== -1, "الكتاب (" + book.Book_Name + ") ليس ضمن صفوف هذه المرحلة.");
-        Util.require(wanted[key] <= maxPerBook, "الحد الأقصى من الكتاب الواحد " + maxPerBook + " نسخ (" + book.Book_Name + ")" + (benOf(key) ? " لـ " + benOf(key) : "") + ".");
+        Util.require(wanted[key] <= maxPerBook, "أقصى عدد من نفس الكتاب " + maxPerBook + " (" + book.Book_Name + ")" + (benOf(key) ? " لـ " + benOf(key) : "") + ".");
       });
 
       const nowStr = Util.nowPrecise();
@@ -978,7 +978,7 @@ const OperationsEngine = {
 
       return {
         success: true,
-        message: result.length ? "تم حفظ استمارة الحجز بنجاح وتوثيق أسبقية كل نسخة." : "تم إلغاء الحجز بالكامل.",
+        message: result.length ? "تم حفظ حجزك بنجاح وتوثيق أسبقية كل كتاب." : "تم إلغاء الحجز بالكامل.",
         warnings: warnings, reservationHeader: headerObj, reservationItems: result, installmentPlan: plan
       };
     });

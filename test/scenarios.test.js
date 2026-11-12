@@ -51,7 +51,7 @@ assert.ok(e1Items.find(i => i.Tranche_No == 2).Priority_Timestamp.startsWith('20
 at(2026, 11, 6, 9);
 ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 1 }], paymentMethod: 'CASH' }, e3), 'e3 book');
 // القواعد
-fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 4 }], paymentMethod: 'CASH' }, e3), 'max per book', /الحد الأقصى/);
+fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 4 }], paymentMethod: 'CASH' }, e3), 'max per book', /أقصى عدد/);
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-301', qty: 1 }], paymentMethod: 'INSTALLMENT', downPaymentType: 'PERCENTAGE', downPaymentInput: 5, installmentCount: 2 }, e3), 'min down', /مقدم/);
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-301', qty: 1 }], paymentMethod: 'INSTALLMENT', downPaymentType: 'PERCENTAGE', downPaymentInput: 25, installmentCount: 9 }, e3), 'max inst', /الأقساط/);
 // تخفيض الموظف 1 لا يفقد أسبقية الشريحة الأولى
@@ -207,7 +207,7 @@ const relItems = rows(S.RES_ITEMS).filter(i => i.Emp_ID === '1001' && i.Phase_ID
 assert.strictEqual(relItems.find(i => i.Beneficiary === 'أحمد — ابن أخ').Requested_Qty, 2);
 assert.strictEqual(relItems.find(i => i.Beneficiary === '').Requested_Qty, 1);
 assert.strictEqual(new Set(relItems.map(i => i.Res_Item_ID)).size, relItems.length);
-fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 4, beneficiary: 'س' }], paymentMethod: 'CASH' }, e1), 'max per beneficiary', /الحد الأقصى/);
+fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 4, beneficiary: 'س' }], paymentMethod: 'CASH' }, e1), 'max per beneficiary', /أقصى عدد/);
 // الإدارة تضيف حجزاً لموظف ثم تعدّله ثم تحذفه
 ok(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1 }], paymentMethod: 'CASH' }, coord), 'admin adds reservation');
 assert.ok(rows(S.RES_HEADER).find(h => h.Emp_ID === '1002' && h.Phase_ID === 'PH-03').Created_By);

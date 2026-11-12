@@ -51,6 +51,11 @@
   .input-icon { @apply relative; }
   .input-icon > .ico { @apply absolute top-1/2 -translate-y-1/2 right-3.5 text-slate-400 pointer-events-none; }
   .input-icon > .input { @apply pr-10; }
+  /* شاشة الدخول: خانات زجاجية بنفس ألوان الخلفية */
+  .glass .label { @apply text-brand-100; }
+  .glass .input { @apply bg-white/10 text-white ring-white/15 placeholder:text-white/35 focus:ring-gold-400 focus:bg-white/15; }
+  .glass .input-icon > .ico { @apply text-brand-200; }
+  .glass .input:-webkit-autofill { -webkit-text-fill-color: #fff; -webkit-box-shadow: 0 0 0 40px #3b2160 inset; caret-color: #fff; }
 
   .chip { @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[13px] font-semibold ring-1 ring-slate-200 bg-white text-slate-600 whitespace-nowrap transition active:scale-95; }
   .chip[aria-pressed=true] { @apply bg-brand-700 text-white ring-brand-700 shadow-glow; }
