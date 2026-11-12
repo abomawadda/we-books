@@ -50,6 +50,8 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
         await p.click('[data-act="resPick"]'); await p.waitForTimeout(500);
         await p.fill('[data-input="edQ"]', 'المعاصر'); await p.waitForTimeout(300); await p.click('[data-act="edInc"]'); await p.waitForTimeout(200); await shot(p, 'a-d-editor');
         await p.click('[data-act="edSave"]'); await p.waitForTimeout(800); await shot(p, 'a-d-res-after');
+        await p.click('#resList [data-act="empProfile"]'); await p.waitForTimeout(400); await shot(p, 'a-d-profile');
+        await p.click('[data-act="epTab"][data-id="info"]'); await p.waitForTimeout(200); await shot(p, 'a-d-profile-info');
         const btn = null; if (btn) { await btn.click(); await p.waitForTimeout(400); await p.fill('[data-input="edQ"]', 'المعاصر'); await p.waitForTimeout(400); await shot(p, 'a-d-editor'); }
         const sn = await p.evaluate(() => { const n = document.querySelector('.side-nav'); return n ? [n.scrollHeight, n.clientHeight] : null; }); console.log('sidenav scroll/client', JSON.stringify(sn));
       }

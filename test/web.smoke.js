@@ -91,6 +91,11 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="edSave"]', dialog()); await settle();
   expectNoErrorToasts('admin edit reservation');
   check(w.eval('APP').adm.resItems.some(i => i.Emp_ID === '1001' && i.Book_ID === 'BK-102' && i.Requested_Qty === 1), 'admin edited reservation saved');
+  // ملف الموظف
+  await go('/a/employees'); await click('[data-act="empProfile"][data-id="1001"]');
+  check(/الحجوزات/.test(dialog().textContent) && /أحمد — ابن أخ/.test(dialog().textContent), 'employee profile shows reservations');
+  for (const t of ['inv', 'inst', 'pay', 'info']) { await click(`[data-act="epTab"][data-id="${t}"]`, dialog()); check(dialog().querySelector('#epBody').textContent.length > 20, 'profile tab ' + t); }
+  await closeAll();
   // الحاجزون لكتاب
   await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
   check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');

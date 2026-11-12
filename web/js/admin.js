@@ -12,6 +12,7 @@ const Admin = {
       APP.phaseId = (op[op.length - 1] || r.phases[r.phases.length - 1] || {}).Phase_ID;
     }
     Shell.rerender();
+    const ep = $("#epBody"); if (ep && Q.epId) ep.innerHTML = epBody(Q.epId); // ملف موظف مفتوح يتحدث بعد أي عملية
   }
 };
 const A = () => APP.adm;
@@ -23,7 +24,9 @@ const bookName = (b, id) => (b[id] || {}).Book_Name || id;
 const noPhase = view => { if (APP.phaseId) return false; view.innerHTML = UI.empty("calendar-range", "لا توجد مراحل بعد", "ابدأ بإنشاء أول مرحلة حجز.", can("SAVE_PHASE") ? `<button class="btn btn-primary mt-5" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>` : ""); return true; };
 const lockedBtn = (action, html) => can(action) ? html : "";
 const searchBox = (act, val, ph) => `<div class="input-icon w-full sm:w-72">${ic("search")}<input type="search" class="input input-sm !h-10" placeholder="${esc(ph || "بحث")}" value="${esc(val || "")}" data-input="${act}"></div>`;
-const Q = {};   // نصوص البحث لكل صفحة
+const Q = {};
+/** اسم الموظف كرابط يفتح ملفه */
+const empLink = (id, name) => `<button class="text-right hover:text-brand-700 hover:underline" data-act="empProfile" data-id="${esc(id)}">${esc(name || id)}</button>`;   // نصوص البحث لكل صفحة
 const rerenderList = (key, fn) => { const el = $("#" + key); if (el) el.innerHTML = fn(); };
 
 // ============================================================ لوحة القيادة
@@ -156,7 +159,7 @@ Router.add("/a/dash", view => {
   </div>
   <div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
     ${UI.section(`${ic("wallet", "text-brand-600")} التحصيل حسب الوسيلة`, "", Object.keys(byM).length ? UI.ring(Object.keys(byM).map(k => ({ label: ar(k), value: byM[k], color: MCOL[k] || "#94a3b8" })), `<div class="text-lg font-bold num">${fmt(sum(Object.values(byM), x => x))}</div><div class="text-[11px] text-slate-500">ج.م</div>`) : UI.empty("wallet", "لا تحصيلات بعد"))}
-    ${UI.section(`${ic("receipt", "text-brand-600")} آخر الإيصالات`, "", recent.length ? `<ul class="divide-y divide-slate-100">${recent.map(p => `<li class="flex items-center gap-3 py-2.5">${UI.avatar(empName(e, p.Emp_ID), "w-9 h-9 text-xs")}<div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${esc(empName(e, p.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(p.Receipt_No)} · ${esc(ar(p.Payment_Method))} · ${esc(dt(p.Payment_Date))}</div></div><div class="font-bold num text-emerald-600">${fmt(p.Amount)}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا إيصالات بعد"), `<a href="#/a/cash" class="btn btn-ghost btn-sm">الكل ${ic("chevron-left")}</a>`)}
+    ${UI.section(`${ic("receipt", "text-brand-600")} آخر الإيصالات`, "", recent.length ? `<ul class="divide-y divide-slate-100">${recent.map(p => `<li class="flex items-center gap-3 py-2.5">${UI.avatar(empName(e, p.Emp_ID), "w-9 h-9 text-xs")}<div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${empLink(p.Emp_ID, empName(e, p.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(p.Receipt_No)} · ${esc(ar(p.Payment_Method))} · ${esc(dt(p.Payment_Date))}</div></div><div class="font-bold num text-emerald-600">${fmt(p.Amount)}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا إيصالات بعد"), `<a href="#/a/cash" class="btn btn-ghost btn-sm">الكل ${ic("chevron-left")}</a>`)}
   </div>
   <div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
     ${UI.section(`${ic("graduation-cap", "text-brand-600")} الحجز حسب المرحلة الدراسية`, "عدد النسخ المحجوزة", byStage.length ? UI.bars(byStage) : UI.empty("graduation-cap", "لا حجوزات بعد"))}
@@ -199,7 +202,7 @@ function bookResList(bookId) {
   if (!rows.length) return UI.empty("users", Q.bookRes ? "لا نتائج للبحث" : "لا يوجد حاجزون لهذا الكتاب", Q.bookRes ? "" : "في المرحلة المختارة.");
   return `<ul class="divide-y divide-slate-100">${rows.map(({ i, k, emp }) => { const w = Math.max(0, n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
     return `<li class="flex items-center gap-3 py-2.5"><span class="w-7 text-center text-xs font-bold text-slate-400 num">${k}</span>${UI.avatar(emp.Full_Name || i.Emp_ID, "w-9 h-9 text-xs")}
-    <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${esc(emp.Full_Name || i.Emp_ID)}</div><div class="text-[11.5px] text-slate-400 truncate"><span class="num">${esc(i.Emp_ID)}</span>${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="num text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div>
+    <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${empLink(i.Emp_ID, emp.Full_Name || i.Emp_ID)}</div><div class="text-[11.5px] text-slate-400 truncate"><span class="num">${esc(i.Emp_ID)}</span>${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="num text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div>
     <div class="text-left shrink-0"><div class="font-bold num">${fmt(i.Requested_Qty)} <span class="text-[11px] font-normal text-slate-400">نسخة</span></div>${w ? `<span class="text-[11px] text-amber-600 font-semibold">انتظار ${fmt(w)}</span>` : n(i.Delivered_Qty) ? `<span class="text-[11px] text-emerald-600 font-semibold">سُلّم ${fmt(i.Delivered_Qty)}</span>` : n(i.Allocated_Qty) ? `<span class="text-[11px] text-sky-600 font-semibold">مخصص ${fmt(i.Allocated_Qty)}</span>` : ""}</div></li>`; }).join("")}</ul>`;
 }
 on("bookRes", id => {
@@ -348,7 +351,7 @@ function empTable() {
   d.empInvoices.forEach(i => bal[i.Emp_ID] = (bal[i.Emp_ID] || 0) + n(i.Remaining_Balance));
   const list = d.employees.filter(e => !q || (e.Emp_ID + e.Full_Name + e.Mobile + e.Department).toLowerCase().includes(q));
   return UI.table([
-    { t: "الموظف", v: e => `<div class="flex items-center gap-2.5">${UI.avatar(e.Full_Name, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${esc(e.Full_Name)}</div><div class="text-[11.5px] text-slate-400 num">${esc(e.Emp_ID)}</div></div></div>` },
+    { t: "الموظف", v: e => `<div class="flex items-center gap-2.5">${UI.avatar(e.Full_Name, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${empLink(e.Emp_ID, e.Full_Name)}</div><div class="text-[11.5px] text-slate-400 num">${esc(e.Emp_ID)}</div></div></div>` },
     { t: "الموبايل", cls: "num", v: e => `<span dir="ltr">${esc(e.Mobile)}</span>` },
     { t: "الإدارة", v: "Department" },
     { t: "الحالة", v: e => pill("", e.Employment_Status || "نشط", /نشط|active/i.test(e.Employment_Status || "نشط") ? "green" : "gray") },
@@ -370,15 +373,7 @@ on("importEmps", async () => {
   const rows = parsePaste(v.txt).map(p => ({ Emp_ID: p[0], Full_Name: p[1], National_ID_Last4: p[2], Mobile: p[3], Department: p[4], Job_Title: p[5], Max_Credit_Limit: p[6] }));
   if (rows.length) await act("BULK_IMPORT_EMPLOYEES", { employeesArray: rows });
 });
-on("reserveFor", async () => {
-  const v = await UI.form({ title: "حجز نيابة عن موظف", sub: phaseObj().Phase_Name, intro: "للموظف الذي لا يملك هاتفاً. تُسجَّل الأسبقية بوقت الحفظ ويوثَّق اسمك كمُدخِل.",
-    fields: [{ name: "empId", label: "الرقم الوظيفي", required: true, cols: 1 }, { name: "method", label: "السداد", type: "seg", value: "CASH", cols: 1, options: [["CASH", "دفعة واحدة"], ["INSTALLMENT", "تقسيط 25% + 2"]] },
-      { name: "items", label: "الكتب والكميات", required: true, placeholder: "BK-101:2, BK-201:1", hint: "كود الكتاب ثم : ثم العدد، وافصل بين الكتب بفاصلة" }] });
-  if (!v) return;
-  const items = v.items.split(/[,،]/).map(s => s.trim()).filter(Boolean).map(s => { const [bk, q] = s.split(":"); return { bookId: bk.trim(), qty: parseInt(q || "1", 10) }; });
-  const inst = v.method === "INSTALLMENT";
-  await act("SUBMIT_OR_UPDATE_RESERVATION", { empId: v.empId.trim(), phaseId: APP.phaseId, items, paymentMethod: inst ? "INSTALLMENT" : "CASH", downPaymentType: "PERCENTAGE", downPaymentInput: 25, installmentCount: 2 });
-});
+on("reserveFor", () => ACTIONS.resNew());
 
 // ============================================================ الإعدادات
 Router.add("/a/settings", view => {
@@ -641,7 +636,7 @@ function finList() {
   const invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId && (!q || (i.Emp_ID + empName(e, i.Emp_ID)).toLowerCase().includes(q))
     && (!f || (f === "due" ? n(i.Remaining_Balance) > 0 : f === "down" ? n(i.Total_Paid_Amount) < n(i.Down_Payment_Required) : f === "credit" ? n(i.Credit_Balance) > 0 : i.Invoice_Status === f)));
   return UI.table([
-    { t: "الموظف", v: i => `<div class="flex items-center gap-2.5">${UI.avatar(empName(e, i.Emp_ID), "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${esc(empName(e, i.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(i.Emp_ID)}</div></div></div>` },
+    { t: "الموظف", v: i => `<div class="flex items-center gap-2.5">${UI.avatar(empName(e, i.Emp_ID), "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${empLink(i.Emp_ID, empName(e, i.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(i.Emp_ID)}</div></div></div>` },
     { t: "الصافي", cls: "num", v: i => { const h = resHeaderOf(i.Res_ID), a = n(h.Invoice_Adjustment); return `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` + (a ? `<div class="text-[11px] ${a < 0 ? "text-emerald-600" : "text-amber-600"}" title="${esc(h.Adjustment_Reason)}">${a < 0 ? "خصم" : "إضافة"} ${fmt(Math.abs(a))}</div>` : ""); } }, { t: "المقدم", cls: "num", v: i => fmt(i.Down_Payment_Required) }, { t: "المسدد", cls: "num", v: i => `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>` },
     { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Balance) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Balance)}</b>` + (n(i.Credit_Balance) ? `<div class="text-emerald-600 text-[11px]">له ${fmt(i.Credit_Balance)}</div>` : "") },
     { t: "الخطة", v: i => esc(ar(i.Payment_Plan_Type)) + (n(i.Installments_Count) ? ` · ${i.Installments_Count}` : "") }, { t: "الحالة", v: i => pill(i.Invoice_Status) },
@@ -808,7 +803,7 @@ function resRows() {
 function resTable() {
   const rows = resRows(), edit = can("SUBMIT_OR_UPDATE_RESERVATION");
   return UI.table([
-    { t: "الموظف", v: r => `<div class="flex items-center gap-2.5">${UI.avatar(r.emp.Full_Name || r.h.Emp_ID, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${esc(r.emp.Full_Name || r.h.Emp_ID)}</div><div class="text-[11.5px] text-slate-400"><span class="num">${esc(r.h.Emp_ID)}</span>${r.emp.Department ? " · " + esc(r.emp.Department) : ""}</div></div></div>` },
+    { t: "الموظف", v: r => `<div class="flex items-center gap-2.5">${UI.avatar(r.emp.Full_Name || r.h.Emp_ID, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${empLink(r.h.Emp_ID, r.emp.Full_Name || r.h.Emp_ID)}</div><div class="text-[11.5px] text-slate-400"><span class="num">${esc(r.h.Emp_ID)}</span>${r.emp.Department ? " · " + esc(r.emp.Department) : ""}</div></div></div>` },
     { t: "الكتب / النسخ", cls: "num", v: r => `${fmt(r.books)} / <b>${fmt(r.copies)}</b>` + (r.delivered ? `<div class="text-[11px] text-emerald-600">سُلّم ${fmt(r.delivered)}</div>` : "") },
     { t: "القيمة", cls: "num", v: r => `<b>${fmt(r.h.Total_Emp_Value)}</b>` },
     { t: "السداد", v: r => esc(ar(r.h.Payment_Method_Selected)) + (n(r.h.Installment_Count) ? ` · ${r.h.Installment_Count} أقساط` : "") },
@@ -918,3 +913,37 @@ on("edSave", async () => {
   toast(r.message, r.success ? "success" : "danger"); (r.warnings || []).forEach(w => toast(w, "warning"));
   if (r.success) { if (Ed.m) Ed.m.close(); await Admin.load(); }
 });
+
+// ============================================================ ملف الموظف: كل ما يخصه في مكان واحد
+on("empProfile", id => { Q.epTab = Q.epTab || "res"; Q.epId = id; const e = maps().e[id] || {};
+  Q.epM = UI.open(`<div id="epBody">${epBody(id)}</div>`, { title: esc(e.Full_Name || id), sub: `<span class="num">${esc(id)}</span>${e.Department ? " · " + esc(e.Department) : ""}${e.Job_Title ? " · " + esc(e.Job_Title) : ""}`, wide: true }); });
+on("epTab", t => { Q.epTab = t; const el = $("#epBody"); if (el) el.innerHTML = epBody(Q.epId); });
+function epBody(id) {
+  const d = A(), { b } = maps(), e = maps().e[id] || {}, ph = by(d.phases, "Phase_ID");
+  const items = d.resItems.filter(i => i.Emp_ID === id && n(i.Requested_Qty) > 0 && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  const invs = d.empInvoices.filter(i => i.Emp_ID === id), pays = d.empPayments.filter(p => p.Emp_ID === id);
+  const insts = d.installments.filter(i => i.Emp_ID === id).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date)));
+  const billed = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance");
+  const overdue = insts.filter(i => i.Status === "Overdue").reduce((s, i) => s + n(i.Remaining_Inst_Amount), 0);
+  const rels = [...new Set(items.map(i => i.Beneficiary).filter(Boolean))];
+  const t = Q.epTab;
+  const tab = (k, label, c) => `<button class="chip !h-9" data-act="epTab" data-id="${k}" aria-pressed="${t === k}">${label}${c !== undefined ? ` <span class="num text-[11px] opacity-70">${fmt(c)}</span>` : ""}</button>`;
+  const byPhase = {}; items.forEach(i => (byPhase[i.Phase_ID] = byPhase[i.Phase_ID] || []).push(i));
+  let body = "";
+  if (t === "res") body = Object.keys(byPhase).length ? Object.keys(byPhase).reverse().map(pid => `<div class="mb-4"><div class="flex items-center justify-between mb-1.5"><div class="font-bold text-[13.5px] text-slate-800">${esc((ph[pid] || {}).Phase_Name || pid)}</div>${pid === APP.phaseId && can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-outline btn-xs" data-act="epEditRes" data-id="${esc(id)}">${ic("pencil")} تعديل الحجز</button>` : ""}</div>
+      <ul class="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-100">${byPhase[pid].sort((a, c) => String(a.Priority_Timestamp).localeCompare(String(c.Priority_Timestamp))).map(i => `<li class="flex items-center gap-3 px-3 py-2"><div class="flex-1 min-w-0"><div class="font-semibold text-[13px] truncate">${esc(bookName(b, i.Book_ID))}</div><div class="text-[11px] text-slate-400"><span class="num">${esc(i.Book_ID)}</span>${i.Beneficiary ? ` · <span class="text-sky-700 font-semibold">لـ ${esc(i.Beneficiary)}</span>` : ""} · <span class="num">${esc(dt(i.Priority_Timestamp))}</span></div></div>
+        <div class="text-left text-[12px] num shrink-0"><b>${fmt(i.Requested_Qty)}</b> نسخة${n(i.Delivered_Qty) ? `<div class="text-emerald-600">سُلّم ${fmt(i.Delivered_Qty)}</div>` : n(i.Allocated_Qty) ? `<div class="text-sky-600">مخصص ${fmt(i.Allocated_Qty)}</div>` : ""}</div>${pill(i.Allocation_Status)}</li>`).join("")}</ul></div>`).join("")
+    : UI.empty("notebook-pen", "لا حجوزات", "", can("SUBMIT_OR_UPDATE_RESERVATION") && APP.phaseId ? `<button class="btn btn-primary btn-sm mt-4" data-act="epEditRes" data-id="${esc(id)}">${ic("plus")} حجز له</button>` : "");
+  if (t === "inv") body = invs.length ? `<ul class="space-y-2">${invs.slice().reverse().map(i => `<li class="rounded-2xl ring-1 ring-slate-100 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="font-bold text-[13.5px]">${esc((ph[i.Phase_ID] || {}).Phase_Name || i.Phase_ID)} <span class="num text-[11px] text-slate-400">${esc(i.Emp_Inv_ID)}</span></div><div class="text-[11.5px] text-slate-500">${esc(ar(i.Payment_Plan_Type))}${n(i.Installments_Count) ? " · " + i.Installments_Count + " أقساط" : ""} · صدرت ${esc(i.Issue_Date)}</div></div>${pill(i.Invoice_Status)}</div>
+      <div class="grid grid-cols-4 gap-2 mt-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المقدم", fmt(i.Down_Payment_Required))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>`)}${UI.stat("المتبقي", `<span class="${n(i.Remaining_Balance) ? "text-rose-600" : ""}">${fmt(i.Remaining_Balance)}</span>`)}</div>
+      <div class="flex flex-wrap gap-1.5 mt-2">${n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : ""}${can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : ""}${can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : ""}${can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : ""}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا فواتير", "تصدر بعد التوزيع.");
+  if (t === "inst") body = insts.length ? UI.table([{ t: "القسط", v: i => `${esc(i.Admin_Custom_Notes || ("قسط " + i.Installment_No))}<div class="text-[11px] text-slate-400 num">${esc(i.Emp_Inv_ID)}</div>` }, { t: "الاستحقاق", cls: "num", v: "Due_Date" }, { t: "القيمة", cls: "num", v: i => fmt(i.Scheduled_Amount) }, { t: "المسدد", cls: "num", v: i => fmt(i.Paid_Amount) }, { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Inst_Amount) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Inst_Amount)}</b>` }, { t: "الحالة", v: i => pill(i.Status) }], insts, { cardsOnMobile: false }) : UI.empty("calendar-range", "لا أقساط");
+  if (t === "pay") body = pays.length ? `<ul class="divide-y divide-slate-100">${pays.slice().reverse().map(p => `<li class="flex items-center gap-3 py-2.5"><div class="flex-1"><div class="font-semibold text-[13px] num">${esc(p.Receipt_No)} <span class="text-slate-400 font-normal">· ${esc(ar(p.Payment_Method))}${p.Transaction_Ref ? " · " + esc(p.Transaction_Ref) : ""}</span></div><div class="text-[11.5px] text-slate-400 num">${esc(dt(p.Payment_Date))} · ${esc(p.Collected_By || "")}</div></div>
+      ${isTrue(p.Is_Voided) ? pill("", "ملغى", "red") : `<b class="num ${n(p.Amount) < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(p.Amount)}</b><button class="icon-btn w-8 h-8" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة">${ic("printer")}</button>`}</li>`).join("")}</ul>` : UI.empty("wallet", "لا إيصالات");
+  if (t === "info") body = `<div class="grid grid-cols-2 gap-2">${UI.stat("الرقم الوظيفي", esc(e.Emp_ID))}${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}${UI.stat("جهة العمل", esc(e.Department || "—"))}${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}${UI.stat("حالة العضوية", esc(e.Employment_Status || "—"))}${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح")}${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}</div>
+    ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
+    <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
+  return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">${UI.stat("النسخ المحجوزة", fmt(sum(items, "Requested_Qty")))}${UI.stat("إجمالي الفواتير", fmt(billed))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`)}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50" : "")}</div>
+    <div class="scroll-x !mx-0 !px-0 mb-3">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}</div>${body}`;
+}
+on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEdit(id), 50); });
