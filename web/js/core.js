@@ -248,7 +248,7 @@ const UI = {
       let done = false;
       const tone = o.tone || "primary";
       const m = UI.open(`<div class="flex gap-4 items-start"><div class="w-12 h-12 shrink-0 rounded-2xl flex items-center justify-center text-xl ${tone === "danger" ? "bg-rose-50 text-rose-600" : "bg-brand-50 text-brand-600"}">${ic(o.icon || (tone === "danger" ? "triangle-alert" : "circle-alert"))}</div>
-        <div><div class="font-bold text-slate-900 text-[16px]">${esc(o.title || "تأكيد الإجراء")}</div><div class="text-sm text-slate-600 mt-1 leading-relaxed">${esc(o.message || "")}</div></div></div>`,
+        <div><div class="font-bold text-slate-900 text-[16px]">${esc(o.title || "تأكيد الإجراء")}</div><div class="text-sm text-slate-600 mt-1 leading-relaxed whitespace-pre-line">${esc(o.message || "")}</div></div></div>`,
         { footer: `<div class="flex gap-2"><button data-ok class="btn btn-${tone} flex-1">${esc(o.ok || "تأكيد")}</button><button data-close class="btn btn-outline flex-1">إلغاء</button></div>`, onClose: () => { if (!done) res(false); } });
       m.root.querySelector("[data-ok]").onclick = () => { done = true; res(true); m.close(); };
     });
