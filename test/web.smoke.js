@@ -22,7 +22,7 @@ const dom = new JSDOM(html, {
     w.open = () => { const d = new JSDOM('<!doctype html><html><head></head><body></body></html>').window; d.print = () => prints.push(d.document.body.textContent.slice(0, 60)); d.focus = () => {}; return d; };
     w.URL.createObjectURL = () => 'blob:';
     w.HTMLAnchorElement.prototype.click = function () {};
-    w.fetch = (url, opt) => new Promise(res => setTimeout(() => { const t = ctx.__doPost({ postData: { contents: opt.body } }); res({ text: () => Promise.resolve(t) }); }, 1));
+    w.fetch = (url, opt) => !opt ? Promise.resolve({ json: () => Promise.resolve({ success: true, jobs: { SYNC_MEMBERS: { ok: true, last: "2026-11-12T00:00:00Z" } } }) }) : new Promise(res => setTimeout(() => { const t = ctx.__doPost({ postData: { contents: opt.body } }); res({ text: () => Promise.resolve(t) }); }, 1));
     w.addEventListener('error', ev => errors.push(ev.error || ev.message));
     w.console.error = (...a) => errors.push(a.join(' '));
   }
