@@ -23,6 +23,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
       const ct = f.endsWith('.js') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : f.endsWith('.html') ? 'text/html' : f.endsWith('.woff2') ? 'font/woff2' : 'application/octet-stream';
       return r.fulfill({ body: fs.readFileSync(fp), contentType: ct });
     }
+    if (u.hostname === 'cdnjs.cloudflare.com') return r.continue();
     return r.abort();
   });
   const shot = n => p.screenshot({ path: path.join(OUT, PFX + '-' + n + '.png') });
@@ -38,6 +39,12 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   await p.evaluate(() => document.querySelectorAll('[role=dialog]').forEach(d => d.closest('.fixed') && d.closest('.fixed').remove()));
   await go('#/e/home'); await shot('home1');
   await go('#/e/orders'); await shot('orders');
+  await p.click('[data-act="printRes"]'); await p.waitForTimeout(1200); await shot('doc-res');
+  const fr = await (await p.$('iframe')).contentFrame(); await fr.evaluate(() => document.body.style.zoom = 1);
+  const pg = await fr.$('.page'); await pg.screenshot({ path: path.join(OUT, PFX + '-doc-res-page.png') });
+  const [dl] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }).catch(e => null), p.click('[data-png]')]);
+  console.log('PNG download:', dl ? await dl.suggestedFilename() : 'none'); if (dl) await dl.saveAs(path.join(OUT, PFX + '-doc-res-export.png'));
+  await p.click('[data-x]');
   await p.evaluate(() => window.scrollTo(0, 900)); await p.waitForTimeout(200); await shot('orders2');
   await go('#/e/pay'); await shot('pay');
   await go('#/e/me'); await shot('me');

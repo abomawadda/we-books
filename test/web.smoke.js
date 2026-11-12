@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/employee.js', 'js/admin.js', 'js/reports.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -149,8 +149,14 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
     const a = d.getElementById('repArea');
     check(a && a.innerHTML.length > 60 && !a.querySelector('.skeleton'), 'report ' + r);
   }
-  await click('[data-act="printRep"]');
+  await click('[data-act="printRep"]'); await sleep(800);
   check(prints.length > 0, 'print opened');
+  // المستندات الاحترافية
+  const docOpen = async (act, id, re, tag) => { w.eval(`ACTIONS.${act}(${id ? JSON.stringify(id) : ''})`); await settle(); const f = [...d.querySelectorAll('iframe')].pop(); check(f && re.test(f.srcdoc || ''), 'document ' + tag); f.closest('.fixed').remove(); };
+  await go('/a/po'); await docOpen('printPO', null, /أمر توريد/, 'purchase order');
+  const anyInv = w.eval('APP').adm.empInvoices[0]; if (anyInv) await docOpen('printInvA', anyInv.Emp_Inv_ID, /فاتورة بيع كتب/, 'invoice');
+  const anyRc = w.eval('APP').adm.empPayments[0]; if (anyRc) await docOpen('printRcpt', anyRc.Receipt_No, /إيصال/, 'receipt');
+  const anyRes = w.eval('APP').adm.resHeaders.find(h => h.Phase_ID === w.eval('APP').phaseId); if (anyRes) await docOpen('printResA', anyRes.Emp_ID, /طلب حجز كتب/, 'reservation request');
 
   // قوائم الجوال
   await click('[data-act="moreMenu"]'); check(/كل الأقسام/.test(dialog().textContent), 'more menu sheet'); await closeAll();
