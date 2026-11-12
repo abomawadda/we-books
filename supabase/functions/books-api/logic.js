@@ -120,8 +120,8 @@ function getDatabaseSchemaDefinition_() {
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
-    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status"] },
-    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID"] },
+    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By"] },
+    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
     { name: S.SUP_INV_HEADER, color: "#c2410c", headers: ["Sup_Inv_ID", "Internal_Ref_No", "Supplier_Invoice_No", "Supplier_ID", "Phase_ID", "Invoice_Date", "Gross_Total_Cover", "Total_After_Item_Discount", "Volume_Discount_Pct", "Volume_Discount_Amount", "Net_Payable_Amount", "Status", "Approved_By", "Approved_At", "Supplier_Stated_Net", "Variance_Amount", "Damaged_Claim_Amount"] },
@@ -452,6 +452,8 @@ function seedInitialData_() {
       st("MAX_INSTALLMENT_COUNT", 4, "NUMBER", "أقصى عدد أقساط يختاره الموظف"),
       st("MIN_DOWN_PAYMENT_PCT", 20, "NUMBER", "الحد الأدنى للمقدم عند التقسيط (%)"),
       st("MAX_QTY_PER_BOOK", 3, "NUMBER", "أقصى عدد نسخ من الكتاب الواحد للموظف في المرحلة"),
+      st("ALLOW_RELATIVE_BOOKING", true, "BOOLEAN", "السماح للعضو بالحجز لأقاربه (تُحسب على العضو نفسه)"),
+      st("MAX_RELATIVES", 5, "NUMBER", "أقصى عدد أقارب يحجز لهم العضو في المرحلة"),
       st("DEFAULT_CREDIT_LIMIT", 15000, "NUMBER", "الحد الائتماني الافتراضي للموظف (ج.م) إذا لم يُحدَّد له حد"),
       st("REQUIRE_DOWN_PAYMENT_BEFORE_DELIVERY", true, "BOOLEAN", "منع التسليم قبل سداد المقدم (أو كامل القيمة للدفع الكامل)"),
       st("BLOCK_DELIVERY_IF_OVERDUE", true, "BOOLEAN", "منع التسليم لمن عليه أقساط متأخرة من مراحل سابقة"),
@@ -563,6 +565,8 @@ const ACTION_ACL = {
   VOID_EMPLOYEE_PAYMENT: [],          // المدير فقط
   REFUND_EMPLOYEE_CREDIT: ["Finance"],
   CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"],
+  ADJUST_EMP_INVOICE: ["Finance"],
+  DELETE_EMP_INVOICE: [],             // المدير فقط
   RECORD_SUPPLIER_PAYMENT: ["Finance"],
   RECORD_INITIATIVE_EXPENSE: ["Finance"],
   CLOSE_CASH_DAY: ["Finance"]
@@ -598,6 +602,8 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_SETTING": return E.saveSetting(session, payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
+      case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
+      case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
       case "BULK_IMPORT_EMPLOYEES": return E.bulkImportEmployees(session, payload.employeesArray || []);
       case "SAVE_PHASE": return E.savePhase(session, payload);
@@ -751,7 +757,8 @@ const OperationsEngine = {
       settings: {
         UNIFIED_EMP_DISCOUNT_PCT: settings.UNIFIED_EMP_DISCOUNT_PCT, MAX_INSTALLMENT_COUNT: settings.MAX_INSTALLMENT_COUNT,
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
-        MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER
+        MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
+        ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
       },
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT },
       books: books,
@@ -814,16 +821,25 @@ const OperationsEngine = {
 
       const phaseId = Util.str(payload.phaseId);
       const phase = this.getPhase_(phaseId);
-      if (!this.isBookingOpen_(phase) && session.role !== "Admin") {
-        throw new Error("فترة الحجز لهذه المرحلة مغلقة.");
-      }
+      // الموظف يحجز أثناء فترة الحجز فقط؛ الإدارة تعدّل في أي وقت قبل إغلاق المرحلة نهائياً
+      if (isEmpPortal && !this.isBookingOpen_(phase)) throw new Error("فترة الحجز لهذه المرحلة مغلقة.");
+      if (!isEmpPortal) Util.require(phase.Phase_Status !== "Completed", "المرحلة مغلقة نهائياً ولا تقبل تعديل الحجوزات.");
 
       // تجميع الطلب لكل كتاب
+      // المفتاح = الكتاب + المستفيد ("" = العضو وأبناؤه، أو اسم القريب وصلته)
+      const SEP = "\u0001", keyOf = (b, ben) => b + SEP + ben, bookOf = k => k.split(SEP)[0], benOf = k => k.split(SEP)[1] || "";
+      const allowRel = settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false";
       const wanted = {};
       (payload.items || []).forEach(r => {
         const b = Util.str(r.bookId), q = parseInt(r.qty, 10) || 0;
-        if (b && q > 0) wanted[b] = (wanted[b] || 0) + q;
+        const ben = Util.str(r.beneficiary).replace(/\s+/g, " ").slice(0, 80);
+        if (b && q > 0) wanted[keyOf(b, ben)] = (wanted[keyOf(b, ben)] || 0) + q;
       });
+      const bens = {}; Object.keys(wanted).forEach(k => { if (benOf(k)) bens[benOf(k)] = 1; });
+      if (Object.keys(bens).length) {
+        Util.require(allowRel || !isEmpPortal, "الحجز للأقارب غير متاح حالياً.");
+        Util.require(Object.keys(bens).length <= (settings.MAX_RELATIVES || 5), "الحد الأقصى للأقارب " + (settings.MAX_RELATIVES || 5) + ".");
+      }
 
       const booksMap = {};
       DB_Engine.getAllRecords(S.BOOKS).forEach(b => booksMap[Util.str(b.Book_ID)] = b);
@@ -831,13 +847,14 @@ const OperationsEngine = {
       const gradeList = (allowedGrades && allowedGrades !== "ALL") ? allowedGrades.split(/[,،]/).map(s => s.trim()) : null;
       const maxPerBook = settings.MAX_QTY_PER_BOOK || 3;
 
-      Object.keys(wanted).forEach(bId => {
+      Object.keys(wanted).forEach(key => {
+        const bId = bookOf(key);
         const book = booksMap[bId];
         Util.require(book, "الكتاب كود " + bId + " غير موجود.");
         Util.require(book.Book_Status !== "Pricing", "الكتاب (" + book.Book_Name + ") جاري تسعيره، ويُتاح للحجز فور إعلان سعره.");
         Util.require(SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(book.Book_Status) !== -1, "الكتاب (" + book.Book_Name + ") غير متاح للحجز حالياً.");
         if (gradeList) Util.require(gradeList.indexOf(Util.str(book.Grade)) !== -1, "الكتاب (" + book.Book_Name + ") ليس ضمن صفوف هذه المرحلة.");
-        Util.require(wanted[bId] <= maxPerBook, "الحد الأقصى من الكتاب الواحد " + maxPerBook + " نسخ (" + book.Book_Name + ").");
+        Util.require(wanted[key] <= maxPerBook, "الحد الأقصى من الكتاب الواحد " + maxPerBook + " نسخ (" + book.Book_Name + ")" + (benOf(key) ? " لـ " + benOf(key) : "") + ".");
       });
 
       const nowStr = Util.nowPrecise();
@@ -849,33 +866,35 @@ const OperationsEngine = {
       const others = allItems.filter(i => Util.str(i.Res_ID) !== resId);
 
       const byBook = {};
-      mine.forEach(i => { (byBook[Util.str(i.Book_ID)] = byBook[Util.str(i.Book_ID)] || []).push(i); });
+      mine.forEach(i => { const k = keyOf(Util.str(i.Book_ID), Util.str(i.Beneficiary)); (byBook[k] = byBook[k] || []).push(i); });
+      const maxTr = {}; mine.forEach(i => { const b = Util.str(i.Book_ID); maxTr[b] = Math.max(maxTr[b] || 0, Util.num(i.Tranche_No)); });
       const audit = [];
-      const logA = (bId, type, oldQ, newQ, ts, rule) => audit.push({
+      const logA = (bId, type, oldQ, newQ, ts, rule, ben) => audit.push({
         Log_ID: "RLOG-" + new Date().getTime() + "-" + audit.length, Res_ID: resId, Emp_ID: empId, Book_ID: bId,
-        Action_Type: type, Old_Qty: oldQ, New_Qty: newQ, Priority_Timestamp_Applied: ts, Action_Timestamp: nowStr, Rule_Applied: rule
+        Action_Type: type, Old_Qty: oldQ, New_Qty: newQ, Priority_Timestamp_Applied: ts, Action_Timestamp: nowStr, Rule_Applied: rule + (ben ? " — لـ " + ben : "") + (isEmpPortal ? "" : " — بواسطة الإدارة (" + Util.actor(session) + ")")
       });
 
       const result = [];
       const allBooks = Object.keys(Object.assign({}, byBook, wanted));
-      allBooks.forEach(bId => {
-        const tranches = (byBook[bId] || []).slice().sort((a, b) => Util.num(a.Tranche_No) - Util.num(b.Tranche_No));
+      allBooks.forEach(key => {
+        const bId = bookOf(key), ben = benOf(key);
+        const tranches = (byBook[key] || []).slice().sort((a, b) => Util.num(a.Tranche_No) - Util.num(b.Tranche_No));
         const oldTotal = tranches.reduce((s, t) => s + Util.num(t.Requested_Qty), 0);
-        const newTotal = wanted[bId] || 0;
+        const newTotal = wanted[key] || 0;
         const book = booksMap[bId];
         const unitEmp = book ? FinancialEngine.roundUpEmployeePrice(book.Emp_Selling_Price) : 0;
 
         if (newTotal > oldTotal) {
-          const nextNo = tranches.reduce((m, t) => Math.max(m, Util.num(t.Tranche_No)), 0) + 1;
+          const nextNo = (maxTr[bId] = (maxTr[bId] || 0) + 1);
           tranches.push({
             Res_Item_ID: resId + "-" + bId + "-T" + nextNo, Res_ID: resId, Phase_ID: phaseId, Emp_ID: empId, Book_ID: bId,
             Priority_Timestamp: nowStr, Requested_Qty: newTotal - oldTotal, Allocated_Qty: 0, Delivered_Qty: 0, Returned_Qty: 0,
             Net_Billable_Qty: 0, Unit_Cover_Price: Util.num(book.Cover_Price), Unit_Emp_Price: unitEmp, Total_Emp_Line_Amount: 0,
             Allocation_Status: "Pending", Unallocated_Reason: "", Is_Manual_Exception: false, Exception_By: "", Exception_Reason: "",
-            Tranche_No: nextNo, Carried_From_Item_ID: ""
+            Tranche_No: nextNo, Carried_From_Item_ID: "", Beneficiary: ben
           });
           logA(bId, oldTotal === 0 ? "ADD_NEW" : "INCREASE_QTY", oldTotal, newTotal, nowStr,
-            oldTotal === 0 ? "حجز جديد بختم وقت أولي" : "زيادة: النسخ الإضافية بختم وقت جديد، والنسخ السابقة تحتفظ بأسبقيتها");
+            oldTotal === 0 ? "حجز جديد بختم وقت أولي" : "زيادة: النسخ الإضافية بختم وقت جديد، والنسخ السابقة تحتفظ بأسبقيتها", ben);
         } else if (newTotal < oldTotal) {
           let toRemove = oldTotal - newTotal;
           for (let k = tranches.length - 1; k >= 0 && toRemove > 0; k--) {
@@ -889,7 +908,7 @@ const OperationsEngine = {
           }
           Util.require(toRemove === 0, "لا يمكن تخفيض كمية كتاب سبق تسليمه.");
           logA(bId, newTotal === 0 ? "REMOVE_ITEM" : "DECREASE_QTY", oldTotal, newTotal, "",
-            "تخفيض من أحدث شريحة أولاً، والشرائح الأقدم تحتفظ بأسبقيتها");
+            "تخفيض من أحدث شريحة أولاً، والشرائح الأقدم تحتفظ بأسبقيتها", ben);
         }
         tranches.forEach(t => {
           if (Util.num(t.Requested_Qty) > 0) {
@@ -943,7 +962,8 @@ const OperationsEngine = {
         Down_Payment_Input: method === "INSTALLMENT" ? downInput : 100, Calculated_Down_Payment: plan.downPaymentAmount,
         Installment_Count: instCount, Installment_Value: method === "INSTALLMENT" ? plan.averageInstallmentValue : 0,
         Total_Cover_Value: FinancialEngine.roundCurrency(totalCover), Total_Emp_Value: totalEmp,
-        Res_Status: result.length > 0 ? "Active" : "Cancelled"
+        Res_Status: result.length > 0 ? "Active" : "Cancelled",
+        Created_By: existingHeader ? (existingHeader.Created_By || "") : (isEmpPortal ? "" : Util.actor(session))
       };
 
       if (existingHeader) DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", resId, headerObj);
@@ -952,6 +972,8 @@ const OperationsEngine = {
 
       DB_Engine.overwriteTableData(S.RES_ITEMS, others.concat(result));
       if (audit.length) DB_Engine.insertRecordsBatch(S.RES_AUDIT, audit);
+      // إن صدرت فاتورة لهذا الموظف في المرحلة تُحدَّث فوراً بعد تعديل الحجز
+      if (DB_Engine.getAllRecords(S.EMP_INVOICES).some(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === phaseId)) this.syncEmployeeInvoicesForPhase_(phaseId);
       DB_Engine.logAudit(session.userId || empId, session.role, "Reservations", isEmpPortal ? "SAVE_RESERVATION" : "SAVE_RESERVATION_ON_BEHALF", resId, existingHeader, headerObj);
 
       return {
@@ -1609,9 +1631,11 @@ const OperationsEngine = {
         net += billable * p;
         cover += billable * Util.num(i.Unit_Cover_Price);
       });
+      const adj = FinancialEngine.roundCurrency(Util.num(h.Invoice_Adjustment));
+      if (adj) net = Math.max(0, net + adj);
       const old = oldInvMap[invId];
       const paid = FinancialEngine.roundCurrency(payments.filter(p => Util.str(p.Emp_Inv_ID) === invId).reduce((s, p) => s + Util.num(p.Amount), 0));
-      if (!old && net === 0 && paid === 0) return;
+      if (net === 0 && paid === 0 && (!old || h.Res_Status === "Cancelled")) return; // فاتورة محذوفة أو بلا قيمة
       const base = (old && old.Plan_Base_Date) || phase.Delivery_Start_Date || today;
       const isInst = h.Payment_Method_Selected === "INSTALLMENT";
       const plan = isInst
@@ -1907,6 +1931,50 @@ const OperationsEngine = {
       this.syncEmployeeInvoicesForPhase_(inv.Phase_ID);
       DB_Engine.logAudit(session.userId, session.role, "Payments", "REFUND", receiptNo, null, { amount: amount });
       return { success: true, message: "تم رد " + amount + " ج.م للموظف بإيصال " + receiptNo + "." };
+    });
+  },
+
+  /** تعديل فاتورة موظف: خصم (قيمة سالبة) أو إضافة (موجبة) بسبب موثق؛ تُعاد جدولة الأقساط تلقائياً */
+  adjustEmployeeInvoice: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => Util.str(i.Emp_Inv_ID) === Util.str(payload.invId));
+      Util.require(inv, "الفاتورة غير موجودة.");
+      const h = DB_Engine.getAllRecords(S.RES_HEADER).find(r => Util.str(r.Res_ID) === Util.str(inv.Res_ID));
+      Util.require(h, "ملف الحجز غير موجود.");
+      const amount = FinancialEngine.roundCurrency(Util.num(payload.amount));
+      const reason = Util.str(payload.reason);
+      Util.require(amount === 0 || reason, "اكتب سبب التعديل.");
+      const base = Util.num(inv.Net_Final_Invoice_Amount) - Util.num(h.Invoice_Adjustment);
+      Util.require(base + amount >= 0, "لا يمكن أن يصبح صافي الفاتورة أقل من صفر.");
+      const upd = { Invoice_Adjustment: amount, Adjustment_Reason: amount ? reason : "", Last_Modified_At: Util.nowPrecise() };
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, upd);
+      this.syncEmployeeInvoicesForPhase_(h.Phase_ID);
+      DB_Engine.logAudit(session.userId, session.role, "Invoices", "ADJUST_INVOICE", inv.Emp_Inv_ID, { Invoice_Adjustment: h.Invoice_Adjustment }, upd);
+      return { success: true, message: amount ? "تم تعديل الفاتورة " + inv.Emp_Inv_ID + " بقيمة " + amount + " ج.م." : "تم إلغاء تعديل الفاتورة." };
+    });
+  },
+
+  /** حذف فاتورة موظف: يلغي حجزه في المرحلة ويحرر النسخ المخصصة له. يشترط ألا توجد إيصالات سارية ولا كتب مُسلَّمة. */
+  deleteEmployeeInvoice: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => Util.str(i.Emp_Inv_ID) === Util.str(payload.invId));
+      Util.require(inv, "الفاتورة غير موجودة.");
+      Util.require(Util.str(payload.reason), "اكتب سبب الحذف.");
+      const pays = DB_Engine.getAllRecords(S.EMP_PAYMENTS).filter(p => Util.str(p.Emp_Inv_ID) === inv.Emp_Inv_ID && !Util.bool(p.Is_Voided));
+      Util.require(!pays.length, "على الفاتورة إيصالات سارية (" + pays.length + "). ألغِ الإيصالات أو رد المبلغ أولاً.");
+      const items = DB_Engine.getAllRecords(S.RES_ITEMS);
+      const mine = items.filter(i => Util.str(i.Res_ID) === Util.str(inv.Res_ID));
+      Util.require(!mine.some(i => Util.num(i.Delivered_Qty) - Util.num(i.Returned_Qty) > 0), "بالفاتورة كتب مُسلَّمة لم تُرتجع. سجّل المرتجع أولاً.");
+      mine.forEach(i => {
+        if (this.isCancelledItem_(i) || Util.num(i.Requested_Qty) === 0) return;
+        DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", i.Res_Item_ID, { Requested_Qty: 0, Allocated_Qty: 0, Net_Billable_Qty: 0, Total_Emp_Line_Amount: 0, Allocation_Status: "Cancelled_By_Admin", Unallocated_Reason: Util.str(payload.reason) });
+      });
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", inv.Res_ID, { Res_Status: "Cancelled", Invoice_Adjustment: 0, Adjustment_Reason: "", Total_Emp_Value: 0, Total_Cover_Value: 0, Last_Modified_At: Util.nowPrecise() });
+      this.syncEmployeeInvoicesForPhase_(inv.Phase_ID);
+      DB_Engine.logAudit(session.userId, session.role, "Invoices", "DELETE_INVOICE", inv.Emp_Inv_ID, inv, { reason: Util.str(payload.reason) });
+      return { success: true, message: "تم حذف الفاتورة " + inv.Emp_Inv_ID + " وإلغاء الحجز المرتبط بها، وتحررت نسخه للتوزيع." };
     });
   },
 

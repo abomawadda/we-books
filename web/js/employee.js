@@ -3,10 +3,15 @@
  * ========================================================================== */
 "use strict";
 const SUBJECT_TONES = [["#7c4bb6", "#46256b"], ["#0ea5e9", "#0369a1"], ["#10b981", "#047857"], ["#f59e0b", "#b45309"], ["#f43f5e", "#be123c"], ["#6366f1", "#4338ca"], ["#14b8a6", "#0f766e"], ["#a855f7", "#7e22ce"]];
+// مفتاح السلة = كود الكتاب|المستفيد
+const ck = (bookId, ben) => bookId + "|" + (ben || "");
+const bk = key => String(key).split("|")[0], bn = key => String(key).split("|")[1] || "";
+const relOn = () => !!(APP.emp && APP.emp.settings && APP.emp.settings.ALLOW_RELATIVE_BOOKING);
 const toneOf = s => { let h = 0; String(s || "").split("").forEach(c => h = (h * 31 + c.charCodeAt(0)) >>> 0); return SUBJECT_TONES[h % SUBJECT_TONES.length]; };
 
 const Emp = {
   filter: { stage: "", grade: "", type: "", subject: "", q: "" },
+  ben: "", bens: [],   // المستفيد الحالي ("" = العضو وأبناؤه) وقائمة الأقارب
   dirty: false,
 
   async load() {
@@ -21,7 +26,9 @@ const Emp = {
   resetCart() {
     const r = APP.emp; APP.cart = {}; Emp.dirty = false;
     if (!r.activePhase) return;
-    Emp.activeItems().forEach(i => APP.cart[i.Book_ID] = (APP.cart[i.Book_ID] || 0) + n(i.Requested_Qty));
+    Emp.activeItems().forEach(i => { const k = ck(i.Book_ID, i.Beneficiary); APP.cart[k] = (APP.cart[k] || 0) + n(i.Requested_Qty); });
+    Emp.bens = [...new Set(Emp.activeItems().map(i => i.Beneficiary).filter(Boolean))];
+    if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.ben = "";
     const h = r.myReservations.find(x => x.Phase_ID === APP.phaseId);
     const s = r.settings;
     APP.plan = {
@@ -40,7 +47,7 @@ const Emp = {
   bookMap() { return by(APP.emp.books, "Book_ID"); },
   totals() {
     const m = Emp.bookMap(); let cover = 0, net = 0, count = 0;
-    Object.keys(APP.cart).forEach(id => { const b = m[id]; if (b) { cover += n(b.Cover_Price) * APP.cart[id]; net += n(b.Emp_Selling_Price) * APP.cart[id]; count += APP.cart[id]; } });
+    Object.keys(APP.cart).forEach(id => { const b = m[bk(id)]; if (b) { cover += n(b.Cover_Price) * APP.cart[id]; net += n(b.Emp_Selling_Price) * APP.cart[id]; count += APP.cart[id]; } });
     return { cover, net, count, m };
   },
   planCalc(total) {
@@ -134,7 +141,8 @@ Router.add("/e/home", view => {
 
 // ============================================================ الكتالوج والسلة
 function bookCard(b) {
-  const q = APP.cart[b.Book_ID] || 0, open = Emp.open(), [c1, c2] = toneOf(b.Subject);
+  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, open = Emp.open(), [c1, c2] = toneOf(b.Subject);
+  const elsewhere = Object.keys(APP.cart).filter(k => bk(k) === b.Book_ID && bn(k) !== Emp.ben).reduce((s, k) => s + APP.cart[k], 0);
   const save = n(b.Cover_Price) ? Math.round((1 - n(b.Emp_Selling_Price) / n(b.Cover_Price)) * 100) : 0;
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3;
   return `<article class="card p-3 flex gap-3 sm:flex-col sm:p-0 sm:overflow-hidden ${q ? "ring-2 ring-brand-400" : ""}" id="bk_${esc(b.Book_ID)}">
@@ -146,7 +154,7 @@ function bookCard(b) {
     <div class="flex-1 min-w-0 flex flex-col sm:p-3.5 sm:pt-3">
       <h3 class="font-bold text-slate-900 leading-snug text-[14.5px] line-clamp-2">${esc(b.Book_Name)}</h3>
       <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} <span class="text-slate-300">·</span> ${esc(String(b.School_Types || "").split("،").join(" / "))} <span class="text-slate-300">·</span> <span class="num text-slate-400">${esc(b.Book_ID)}</span></div>
-      <div class="flex flex-wrap gap-1 mt-1.5">${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
+      <div class="flex flex-wrap gap-1 mt-1.5">${elsewhere ? pill("", `${elsewhere} نسخة لمستفيد آخر`, "blue") : ""}${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
       ${b.Book_Status === "Pricing" ? `<div class="mt-auto pt-2 flex items-center justify-between gap-2"><span class="pill pill-amber">${ic("hourglass")} جاري التسعير</span><span class="text-[11px] text-slate-400">يُتاح للحجز فور إعلان سعره</span></div>` : `
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
         <div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>
@@ -162,10 +170,10 @@ function cartHTML() {
   const methods = [["INSTALLMENT", "calendar-check", "تقسيط", "مقدم + أقساط شهرية"], ["CASH", "banknote", "نقداً", "كامل القيمة عند الاستلام"], ["INSTAPAY", "send", "إنستاباي", "تحويل كامل القيمة"], ["WALLET", "smartphone", "محفظة", "تحويل كامل القيمة"]];
   const ids = Object.keys(APP.cart);
   return `
-  ${ids.length ? `<ul class="divide-y divide-slate-100 -my-1">${ids.map(id => { const b = t.m[id]; if (!b) return ""; return `<li class="flex items-center gap-3 py-2.5">
+  ${ids.length ? ["", ...new Set(ids.map(bn).filter(Boolean))].filter(g => ids.some(k => bn(k) === g)).map(g => `${relOn() || g ? `<div class="text-[12px] font-bold ${g ? "text-sky-700" : "text-brand-700"} mt-2 mb-0.5 flex items-center gap-1">${ic(g ? "users" : "user")} ${g ? "لـ " + esc(g) : "لي ولأبنائي"}</div>` : ""}<ul class="divide-y divide-slate-100 -my-1">${ids.filter(k => bn(k) === g).map(id => { const b = t.m[bk(id)]; if (!b) return ""; return `<li class="flex items-center gap-3 py-2.5">
       <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500 num">${fmt(b.Emp_Selling_Price)} × ${APP.cart[id]} = <b class="text-slate-700">${fmt(n(b.Emp_Selling_Price) * APP.cart[id])}</b></div></div>
       ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(id)}" ${APP.cart[id] >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${APP.cart[id]}</span><button data-act="cartDec" data-id="${esc(id)}">${ic(APP.cart[id] === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${APP.cart[id]}</span>`}
-    </li>`; }).join("")}</ul>`
+    </li>`; }).join("")}</ul>`).join("")
     : `<div class="text-center py-6 text-slate-400 text-sm">${ic("shopping-bag", "text-3xl mx-auto mb-2 block")}لم تضف كتباً بعد</div>`}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
@@ -243,6 +251,7 @@ Router.add("/e/books", view => {
       ${!Emp.open() ? `<div class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 p-4 mb-4 flex gap-3 text-sm">${ic("lock", "text-lg mt-0.5")}<div><b>الحجز ${esc(ar(r.activePhase.Effective_Status))}</b> — يمكنك تصفح الكتالوج، والتعديل متاح فقط أثناء فترة الحجز.</div></div>` : ""}
       <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-3 bg-slate-50/90 backdrop-blur-xl">
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="ابحث باسم الكتاب أو المادة أو الصف" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
+        ${relOn() && Emp.open() ? `<div class="scroll-x mt-3 items-center"><span class="text-[12px] font-semibold text-slate-500 shrink-0">أحجز لـ:</span><button class="chip !h-8 !text-xs" data-act="pickBen" data-id="" aria-pressed="${!Emp.ben}">${ic("user")} لي ولأبنائي</button>${Emp.bens.map(x => `<button class="chip !h-8 !text-xs" data-act="pickBen" data-id="${esc(x)}" aria-pressed="${Emp.ben === x}">${ic("users")} ${esc(x)}</button>`).join("")}<button class="chip !h-8 !text-xs" data-act="addBen">${ic("plus")} قريب</button></div>` : ""}
         <div class="scroll-x mt-3"><button class="chip" data-act="fStage" data-id="" aria-pressed="${!f.stage}">${ic("layout-grid")} الكل</button>${stages.map(s => `<button class="chip" data-act="fStage" data-id="${esc(s)}" aria-pressed="${f.stage === s}">${ic("graduation-cap")} ${esc(s)}</button>`).join("")}</div>
         <div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fType" data-id="" aria-pressed="${!f.type}">كل المدارس</button>${types.map(t => `<button class="chip !h-8 !text-xs" data-act="fType" data-id="${esc(t)}" aria-pressed="${f.type === t}">${ic("building-2")} ${esc(t)}</button>`).join("")}</div>
         ${f.stage && grades.length > 1 ? `<div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fGrade" data-id="" aria-pressed="${!f.grade}">كل الصفوف</button>${grades.map(g => `<button class="chip !h-8 !text-xs" data-act="fGrade" data-id="${esc(g)}" aria-pressed="${f.grade === g}">${esc(g)}</button>`).join("")}</div>` : ""}
@@ -266,24 +275,38 @@ on("bookSearch", v => { Emp.filter.q = v.trim(); renderBookGrid(); });
 on("fStage", v => { Emp.filter.stage = v; Emp.filter.grade = ""; Shell.rerender(); });
 on("fGrade", v => { Emp.filter.grade = v; Shell.rerender(); });
 on("fType", v => { Emp.filter.type = v; Shell.rerender(); });
+on("pickBen", v => { Emp.ben = v; Shell.rerender(); });
+on("addBen", async () => {
+  const mx = n(APP.emp.settings.MAX_RELATIVES) || 5;
+  if (Emp.bens.length >= mx) return toast("الحد الأقصى " + mx + " أقارب", "warning");
+  const v = await UI.form({ title: "الحجز لقريب", intro: "تُضاف كتب القريب إلى حجزك وتُحسب على حسابك (المقدم والأقساط).",
+    fields: [{ name: "name", label: "اسم القريب", required: true }, { name: "rel", label: "صلة القرابة", type: "select", value: "ابن أخ", options: ["ابن أخ", "ابن أخت", "حفيد", "أخ", "أخت", "ابن عم", "ابن خال", "أخرى"].map(x => [x, x]) }], ok: "متابعة" });
+  if (!v || !v.name.trim()) return;
+  const label = v.name.trim().replace(/[|]/g, " ") + " — " + v.rel;
+  if (!Emp.bens.includes(label)) Emp.bens.push(label);
+  Emp.ben = label; Shell.rerender();
+  toast("اختر الكتب الآن لـ " + label, "info");
+});
 on("fSubject", v => { Emp.filter.subject = v; Shell.rerender(); });
 /** ترتيب الصفوف كما في الكتالوج (تأسيس ← كي جي ← ابتدائي ← إعدادي ← ثانوي) */
 function gradeOrder() { const o = {}; ((APP.emp && APP.emp.catalog && APP.emp.catalog.grades) || []).forEach((g, i) => { o[g.label] = i; }); return o; }
 function cartChanged(id) {
   Emp.dirty = true;
-  const b = APP.emp.books.find(x => x.Book_ID === id);
-  const card = $("#bk_" + CSS.escape(id));
+  const b = APP.emp.books.find(x => x.Book_ID === bk(id));
+  const card = $("#bk_" + CSS.escape(bk(id)));
   if (card && b) card.outerHTML = bookCard(b);
   refreshCartViews();
 }
+const keyFor = id => String(id).includes("|") ? id : ck(id, Emp.ben);
 on("cartInc", id => {
+  id = keyFor(id);
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3;
   if ((APP.cart[id] || 0) >= mx) return toast("الحد الأقصى " + mx + " نسخ من الكتاب", "warning");
   APP.cart[id] = (APP.cart[id] || 0) + 1;
   if (navigator.vibrate) navigator.vibrate(8);
   cartChanged(id);
 });
-on("cartDec", id => { APP.cart[id] = (APP.cart[id] || 0) - 1; if (APP.cart[id] <= 0) delete APP.cart[id]; cartChanged(id); });
+on("cartDec", id => { id = keyFor(id); APP.cart[id] = (APP.cart[id] || 0) - 1; if (APP.cart[id] <= 0) delete APP.cart[id]; cartChanged(id); });
 on("planMethod", v => { APP.plan.method = v; Emp.dirty = true; refreshCartViews(); });
 on("planDownType", v => { APP.plan.downType = v; APP.plan.down = v === "PERCENTAGE" ? Math.max(25, n(APP.emp.settings.MIN_DOWN_PAYMENT_PCT)) : ceil(Emp.planCalc(Emp.totals().net).minDown); Emp.dirty = true; refreshCartViews(); });
 on("planCount", v => { APP.plan.count = n(v); Emp.dirty = true; refreshCartViews(); });
@@ -294,7 +317,7 @@ on("openCart", () => {
   Emp._cartSheet = m;
 });
 on("submitRes", async () => {
-  const items = Object.keys(APP.cart).map(id => ({ bookId: id, qty: APP.cart[id] }));
+  const items = Object.keys(APP.cart).map(id => ({ bookId: bk(id), beneficiary: bn(id), qty: APP.cart[id] }));
   const t = Emp.totals(), pc = Emp.planCalc(t.net);
   if (APP.plan.method === "INSTALLMENT" && items.length && !pc.ok) return toast(`أقل مقدم مسموح ${moneyTxt(pc.minDown)}`, "warning");
   if (!items.length && !(await UI.confirm({ title: "إلغاء الحجز", message: "الاستمارة فارغة، وسيتم إلغاء حجزك في هذه المرحلة بالكامل. متابعة؟", tone: "danger", ok: "إلغاء الحجز" }))) return;
@@ -324,7 +347,7 @@ Router.add("/e/orders", view => {
         return `<article class="card p-4">
           <div class="flex items-start gap-3">
             <div class="w-11 h-14 rounded-lg shrink-0 flex items-center justify-center text-white text-lg" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>
-            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}</h3>${pill(i.Allocation_Status)}</div>
+            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}${i.Beneficiary ? `<span class="block text-[12px] font-semibold text-sky-700 mt-0.5">لـ ${esc(i.Beneficiary)}</span>` : ""}</h3>${pill(i.Allocation_Status)}</div>
               <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للنسخة · شريحة ${esc(i.Tranche_No || 1)}</div>
               <div class="text-[11.5px] text-slate-400 mt-0.5 flex items-center gap-1">${ic("clock")} أسبقية <span dir="ltr" class="num">${esc(i.Priority_Timestamp)}</span></div></div>
           </div>
@@ -349,7 +372,7 @@ on("printInv", () => {
   const inv = Emp.invoice(), bm = Emp.bookMap(), u = APP.user;
   const rows = Emp.phaseItems().filter(i => n(i.Allocated_Qty) || n(i.Delivered_Qty));
   openPrint("فاتورة كتب", `<h1>فاتورة كتب — ${esc(u.fullName)} (${esc(u.empId)})</h1><p>${esc(APP.emp.activePhase.Phase_Name)} · ${esc(inv.Emp_Inv_ID)}</p>
-    <table><tr><th>الكتاب</th><th>مخصص</th><th>مستلم</th><th>سعر النسخة</th><th>القيمة</th></tr>${rows.map(i => `<tr><td>${esc((bm[i.Book_ID] || {}).Book_Name || i.Book_ID)}</td><td>${i.Allocated_Qty}</td><td>${i.Delivered_Qty}</td><td>${fmt(i.Unit_Emp_Price)}</td><td>${fmt(n(i.Allocated_Qty) * n(i.Unit_Emp_Price))}</td></tr>`).join("")}</table>
+    <table><tr><th>الكتاب</th><th>مخصص</th><th>مستلم</th><th>سعر النسخة</th><th>القيمة</th></tr>${rows.map(i => `<tr><td>${esc((bm[i.Book_ID] || {}).Book_Name || i.Book_ID)}${i.Beneficiary ? " — لـ " + esc(i.Beneficiary) : ""}</td><td>${i.Allocated_Qty}</td><td>${i.Delivered_Qty}</td><td>${fmt(i.Unit_Emp_Price)}</td><td>${fmt(n(i.Allocated_Qty) * n(i.Unit_Emp_Price))}</td></tr>`).join("")}</table>
     <table><tr><th>بسعر الغلاف</th><td>${moneyTxt(inv.Total_Cover_Amount)}</td><th>التوفير</th><td>${moneyTxt(inv.Total_Savings)}</td></tr><tr><th>الصافي</th><td><b>${moneyTxt(inv.Net_Final_Invoice_Amount)}</b></td><th>المسدد</th><td>${moneyTxt(inv.Total_Paid_Amount)}</td></tr><tr><th>المتبقي</th><td colspan="3"><b>${moneyTxt(inv.Remaining_Balance)}</b></td></tr></table>`);
 });
 

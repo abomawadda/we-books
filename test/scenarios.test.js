@@ -199,4 +199,35 @@ fail(api('VOID_EMPLOYEE_PAYMENT', { receiptNo: 'RCP-2027-00001', reason: 'x' }, 
 ok(api('SAVE_PHASE', { phaseId: 'PH-03', phaseName: 'ملحق', startDate: '2027-04-01', endDate: '2027-04-30' }, coord), 'ph3');
 ctx.__DB.updateRecordByPK(S.EMPLOYEES, 'Emp_ID', '1003', { Max_Credit_Limit: 300 });
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 2 }], paymentMethod: 'INSTALLMENT', downPaymentType: 'PERCENTAGE', downPaymentInput: 20, installmentCount: 2 }, e3), 'credit limit', /الحد الائتماني/);
+
+// 18) الحجز لقريب + الحجز نيابة عن موظف من الإدارة
+ok(api('SET_PHASE_STATUS', { phaseId: 'PH-03', status: 'Open' }, coord), 'open ph3');
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1 }, { bookId: 'BK-302', qty: 2, beneficiary: 'أحمد — ابن أخ' }], paymentMethod: 'CASH' }, e1), 'relative booking');
+const relItems = rows(S.RES_ITEMS).filter(i => i.Emp_ID === '1001' && i.Phase_ID === 'PH-03');
+assert.strictEqual(relItems.find(i => i.Beneficiary === 'أحمد — ابن أخ').Requested_Qty, 2);
+assert.strictEqual(relItems.find(i => i.Beneficiary === '').Requested_Qty, 1);
+assert.strictEqual(new Set(relItems.map(i => i.Res_Item_ID)).size, relItems.length);
+fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 4, beneficiary: 'س' }], paymentMethod: 'CASH' }, e1), 'max per beneficiary', /الحد الأقصى/);
+// الإدارة تضيف حجزاً لموظف ثم تعدّله ثم تحذفه
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1 }], paymentMethod: 'CASH' }, coord), 'admin adds reservation');
+assert.ok(rows(S.RES_HEADER).find(h => h.Emp_ID === '1002' && h.Phase_ID === 'PH-03').Created_By);
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 2 }], paymentMethod: 'CASH' }, coord), 'admin edits reservation');
+assert.strictEqual(rows(S.RES_ITEMS).filter(i => i.Emp_ID === '1002' && i.Phase_ID === 'PH-03').reduce((s, i) => s + i.Requested_Qty, 0), 2);
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [], paymentMethod: 'CASH' }, coord), 'admin deletes reservation');
+assert.strictEqual(rows(S.RES_HEADER).find(h => h.Emp_ID === '1002' && h.Phase_ID === 'PH-03').Res_Status, 'Cancelled');
+fail(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [] }, fin), 'finance cannot book', /صلاحية/);
+
+// 19) تعديل فاتورة وحذفها
+const invA = rows(S.EMP_INVOICES).find(i => i.Emp_ID === '1002' && i.Phase_ID === 'PH-01');
+const net0 = invA.Net_Final_Invoice_Amount;
+fail(api('ADJUST_EMP_INVOICE', { invId: invA.Emp_Inv_ID, amount: -10 }, fin), 'adjust needs reason', /سبب/);
+ok(api('ADJUST_EMP_INVOICE', { invId: invA.Emp_Inv_ID, amount: -10, reason: 'خصم تأخير توريد' }, fin), 'adjust invoice');
+assert.strictEqual(rows(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === invA.Emp_Inv_ID).Net_Final_Invoice_Amount, net0 - 10);
+ok(api('ADJUST_EMP_INVOICE', { invId: invA.Emp_Inv_ID, amount: 0 }, fin), 'reset adjust');
+assert.strictEqual(rows(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === invA.Emp_Inv_ID).Net_Final_Invoice_Amount, net0);
+fail(api('DELETE_EMP_INVOICE', { invId: invA.Emp_Inv_ID, reason: 'x' }, fin), 'only admin deletes', /صلاحية/);
+const anyDeliveredOrPaid = rows(S.EMP_PAYMENTS).some(p => p.Emp_Inv_ID === invA.Emp_Inv_ID && !p.Is_Voided) || rows(S.RES_ITEMS).some(i => i.Res_ID === invA.Res_ID && i.Delivered_Qty - i.Returned_Qty > 0);
+const delRes = api('DELETE_EMP_INVOICE', { invId: invA.Emp_Inv_ID, reason: 'طلب الموظف' }, A);
+if (anyDeliveredOrPaid) { assert.strictEqual(delRes.success, false); passed++; }
+else { assert.ok(delRes.success, delRes.message); assert.ok(!rows(S.EMP_INVOICES).some(i => i.Emp_Inv_ID === invA.Emp_Inv_ID)); passed++; }
 console.log('\nALL PASSED:', passed, 'checks');
