@@ -260,4 +260,15 @@ if (pricingBook) {
   assert.strictEqual(pb.Book_Status, 'Available'); assert.strictEqual(pb.Cover_Price, 200); assert.strictEqual(pb.Supplier_Discount_Pct, 25); assert.strictEqual(pb.Emp_Selling_Price, 164); passed++;
 }
 fail(api('BULK_PRICE_BOOKS', { rows: [] }, fin), 'finance cannot bulk price', /صلاحية/);
+
+// 23) خصم المكتبة حسب الناشر
+const bks = rows(S.BOOKS).filter(b => b.Book_Status !== 'Discontinued' && b.Cover_Price > 0).slice(0, 3);
+if (bks.length >= 2) {
+  const pubA = bks[0].Publisher;
+  const rr = ok(api('BULK_PRICE_BOOKS', { rows: bks.map(b => ({ bookId: b.Book_ID, coverPrice: b.Cover_Price })), defaults: { supplierId: 'SUP-01', supplierDiscountPct: 20, publisherDiscounts: { [pubA]: 18 } } }, coord), 'publisher discount rules');
+  bks.forEach(b => { const nb = rows(S.BOOKS).find(x => x.Book_ID === b.Book_ID); assert.strictEqual(nb.Supplier_Discount_Pct, b.Publisher === pubA ? 18 : 20, b.Book_ID); });
+  assert.ok(rows(S.SETTINGS).find(x => x.Setting_Key === 'SUPPLIER_DISCOUNT_RULES')); passed++;
+  ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: bks[0].Book_ID, coverPrice: bks[0].Cover_Price, supplierDiscountPct: 30 }], defaults: { publisherDiscounts: { [pubA]: 18 } } }, coord), 'row overrides rule');
+  assert.strictEqual(rows(S.BOOKS).find(x => x.Book_ID === bks[0].Book_ID).Supplier_Discount_Pct, 30); passed++;
+}
 console.log('\nALL PASSED:', passed, 'checks');

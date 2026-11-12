@@ -47,6 +47,10 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
       if (vp.n === 'd' || vp.n === 'm') {
         await p.evaluate(() => location.hash = '#/a/books'); await p.waitForTimeout(500); await p.click('[data-act="bulkPrice"]'); await p.waitForTimeout(400);
         const code = await p.evaluate(() => APP.adm.books[0].Book_ID);
+        await p.fill('[data-input="bpRule"]', '18').catch(() => {}); const ri = await p.$('[data-change="bpRule"]'); if (ri) { await ri.fill('18'); await ri.dispatchEvent('change'); }
+        const pubBtn = await p.$('[data-act="bpPub"]'); if (pubBtn) await pubBtn.click();
+        const rest = await p.$('[data-change="bpF"][data-k="disc"]'); await rest.fill('20'); await rest.dispatchEvent('change'); await p.waitForTimeout(200);
+        await p.click('[data-act="bpReprice"]'); await p.waitForTimeout(900); await shot(p, 'a-' + vp.n + '-bulkrules');
         await p.fill('[data-input="bpTxt"]', code + '\t150\t25\nXX-1\t10'); await p.click('[data-act="bpPreview"]'); await p.waitForTimeout(700); await shot(p, 'a-' + vp.n + '-bulkprice');
         await p.evaluate(() => document.querySelectorAll('[role=dialog]').forEach(d => d.closest('.fixed') && d.closest('.fixed').remove()));
       }

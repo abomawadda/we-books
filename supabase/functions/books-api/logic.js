@@ -1190,6 +1190,8 @@ const OperationsEngine = {
   bulkPriceBooks: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S(), st = getSettings_(), def = payload.defaults || {};
+      // قواعد خصم المكتبة حسب الناشر: {publisher: pct}، وdefaults.supplierDiscountPct لباقي الكتب
+      const pubRule = {}; Object.keys(def.publisherDiscounts || {}).forEach(k => { const v = def.publisherDiscounts[k]; if (v !== "" && v !== null && v !== undefined) pubRule[Util.str(k)] = Util.num(v); });
       const sups = {}; DB_Engine.getAllRecords(S.SUPPLIERS).forEach(x => { sups[Util.str(x.Supplier_ID)] = x; });
       const firstSup = Object.keys(sups)[0];
       const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
@@ -1207,7 +1209,11 @@ const OperationsEngine = {
         const supId = Util.str(r.supplierId) || Util.str(def.supplierId) || Util.str(b.Supplier_ID) || firstSup;
         const sup = sups[supId];
         if (!sup) { res.error = "مكتبة غير معروفة: " + supId; return; }
-        const discRaw = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? r.supplierDiscountPct : (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== "" ? def.supplierDiscountPct : b.Supplier_Discount_Pct);
+        const pub = Util.str(b.Publisher);
+        const discRaw = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? r.supplierDiscountPct
+          : pubRule[pub] !== undefined ? pubRule[pub]
+          : (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== "" ? def.supplierDiscountPct : b.Supplier_Discount_Pct);
+        res.rule = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? "السطر" : pubRule[pub] !== undefined ? pub : (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== "" ? "باقي الكتب" : "السابق");
         const disc = Util.num(discRaw);
         if (disc < 0 || disc >= 100) { res.error = "خصم المكتبة غير صحيح"; return; }
         const pr = FinancialEngine.calculateBookPricing(cover, disc, sup.Volume_Discount_Pct, b.Emp_Discount_Pct !== "" && b.Emp_Discount_Pct !== undefined ? b.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
@@ -1220,7 +1226,14 @@ const OperationsEngine = {
           Book_Status: b.Book_Status === "Pricing" ? "Available" : b.Book_Status });
       });
       const bad = results.filter(x => !x.ok).length;
-      if (!payload.dryRun && ok) DB_Engine.logAudit(session.userId, session.role, "Catalog", "BULK_PRICE_BOOKS", "-", null, { priced: ok, rejected: bad });
+      if (!payload.dryRun && ok) DB_Engine.logAudit(session.userId, session.role, "Catalog", "BULK_PRICE_BOOKS", "-", null, { priced: ok, rejected: bad, rules: pubRule, rest: def.supplierDiscountPct });
+      // حفظ القواعد لتظهر في المرة القادمة
+      if (!payload.dryRun && (Object.keys(pubRule).length || (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== ""))) {
+        const val = JSON.stringify({ publishers: pubRule, rest: def.supplierDiscountPct === undefined ? "" : def.supplierDiscountPct, supplierId: Util.str(def.supplierId) });
+        const row = DB_Engine.getAllRecords(S.SETTINGS).find(x => x.Setting_Key === "SUPPLIER_DISCOUNT_RULES");
+        const rec = { Setting_Key: "SUPPLIER_DISCOUNT_RULES", Setting_Value: val, Data_Type: "JSON", Description: "قواعد خصم المكتبة حسب الناشر (تُعدَّل من التسعير الجماعي)", Updated_At: Util.now(), Updated_By: Util.actor(session) };
+        if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "SUPPLIER_DISCOUNT_RULES", rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
+      }
       return { success: true, dryRun: !!payload.dryRun, results: results, priced: ok, rejected: bad,
         message: payload.dryRun ? "معاينة: " + ok + " صالح و" + bad + " مرفوض." : "تم تسعير " + ok + " كتاباً وإتاحتها للحجز" + (bad ? "، ورُفض " + bad + " سطراً (راجع الأخطاء)." : ".") };
     });

@@ -333,7 +333,10 @@ const toEnDigits = v => String(v || "").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦
 const BP = { s: null };
 on("bulkPrice", () => {
   const d = A(), pricing = d.books.filter(b => b.Book_Status === "Pricing").length;
-  BP.s = { txt: "", sup: (d.suppliers[0] || {}).Supplier_ID || "", disc: "", res: null, scope: "pricing" };
+  let saved = {}; try { saved = JSON.parse((d.settings.find(x => x.Setting_Key === "SUPPLIER_DISCOUNT_RULES") || {}).Setting_Value || "{}"); } catch (_) { saved = {}; }
+  const rules = Object.entries(saved.publishers || {}).reduce((m, [p, v]) => { (m[v] = m[v] || []).push(p); return m; }, {});
+  BP.s = { txt: "", sup: saved.supplierId || (d.suppliers[0] || {}).Supplier_ID || "", disc: saved.rest !== undefined ? String(saved.rest) : "", res: null, scope: "pricing",
+    rules: Object.keys(rules).length ? Object.entries(rules).map(([v, pubs]) => ({ pct: v, pubs })) : [{ pct: "", pubs: [] }] };
   BP.m = UI.open(`<div id="bpBody">${bpBody()}</div>`, { title: "التسعير الجماعي", sub: `${fmt(pricing)} كتاب بانتظار السعر`, wide: true,
     footer: `<div class="flex flex-wrap items-center justify-between gap-2"><span id="bpSum" class="text-sm text-slate-500"></span><div class="flex gap-2"><button class="btn btn-outline" data-act="bpPreview">${ic("eye")} معاينة</button><button class="btn btn-primary" data-act="bpApply" disabled>${ic("check")} اعتماد التسعير</button></div></div>` });
 });
@@ -349,14 +352,20 @@ function bpBody() {
     <div><div class="label">القالب يشمل</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="scope"><option value="pricing" ${s.scope === "pricing" ? "selected" : ""}>الكتب بانتظار السعر</option><option value="filtered" ${s.scope === "filtered" ? "selected" : ""}>الكتب الظاهرة بالفلاتر الحالية</option><option value="all" ${s.scope === "all" ? "selected" : ""}>كل الكتب</option></select></div>
     <button class="btn btn-outline btn-sm !h-10" data-act="bpTemplate">${ic("download")} تنزيل القالب</button>
     <div class="mr-auto"><div class="label">المكتبة الافتراضية</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="sup">${d.suppliers.map(x => `<option value="${esc(x.Supplier_ID)}" ${s.sup === x.Supplier_ID ? "selected" : ""}>${esc(x.Supplier_Name)}</option>`).join("")}</select></div>
-    <div><div class="label">خصم المكتبة الافتراضي %</div><input class="input !h-10 !w-28 num" inputmode="decimal" value="${esc(s.disc)}" placeholder="مثال 25" data-change="bpF" data-k="disc"></div>
   </div>
+  <div class="rounded-2xl ring-1 ring-slate-200 p-3 mb-3"><div class="flex items-center justify-between mb-2"><div class="font-bold text-[13.5px] text-slate-800">${ic("badge-percent", "text-brand-600")} خصم المكتبة حسب الناشر</div><button class="btn btn-ghost btn-xs" data-act="bpRuleAdd">${ic("plus")} قاعدة</button></div>
+    ${s.rules.map((r, i) => `<div class="flex flex-wrap items-start gap-2 mb-2"><input class="input !h-10 !w-20 num" inputmode="decimal" placeholder="%" value="${esc(r.pct)}" data-change="bpRule" data-i="${i}" data-k="pct">
+      <div class="flex-1 min-w-[12rem] flex flex-wrap gap-1.5">${pubsOf().map(p => `<button class="chip !h-8 !text-xs" data-act="bpPub" data-id="${i}|${esc(p)}" aria-pressed="${r.pubs.includes(p)}">${esc(p)}</button>`).join("")}</div>
+      ${s.rules.length > 1 ? `<button class="icon-btn w-9 h-9 text-rose-500" data-act="bpRuleDel" data-id="${i}">${ic("trash-2")}</button>` : ""}</div>`).join("")}
+    <div class="flex items-center gap-2 mt-1 pt-2 border-t border-slate-100"><span class="text-[13px] font-semibold text-slate-700">باقي الكتب</span><input class="input !h-10 !w-20 num" inputmode="decimal" value="${esc(s.disc)}" placeholder="%" data-change="bpF" data-k="disc"><span class="text-[12px] text-slate-500">%</span>
+      <button class="btn btn-outline btn-xs mr-auto" data-act="bpReprice">${ic("refresh-cw")} طبّق على الكتب المسعّرة</button></div>
+    <div class="text-[11.5px] text-slate-400 mt-1.5">الأولوية: الخصم المكتوب في السطر ← قاعدة الناشر ← باقي الكتب. سعر الموظف لا يتأثر.</div></div>
   <textarea class="input h-auto py-2.5 leading-relaxed num" rows="6" dir="ltr" placeholder="P4-012	سلاح التلميذ — عربي	4 ابتدائي	سلاح التلميذ	135	25&#10;أو بالمختصر:  P4-012	135	25" data-input="bpTxt">${esc(s.txt)}</textarea>
   <div class="text-[12px] text-slate-500 mt-1.5">${rows.length ? `قُرئ ${fmt(rows.length)} سطراً` : "يُقبل القالب كما هو (6 أعمدة) أو 3 أعمدة: الكود، سعر الغلاف، خصم المكتبة. الخصم الفارغ يأخذ الافتراضي."} · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}% مقرَّباً لأعلى جنيه.</div>
   ${res ? `<div class="mt-3">${UI.table([
       { t: "الكتاب", v: r => `<b>${esc(r.name || r.bookId)}</b><div class="text-[11px] text-slate-400 num">${esc(r.bookId)} · سطر ${r.line}</div>` },
       { t: "الغلاف", cls: "num", v: r => r.ok ? fmt(r.cover) + (n(r.oldCover) && n(r.oldCover) !== n(r.cover) ? `<div class="text-[11px] text-slate-400 line-through">${fmt(r.oldCover)}</div>` : "") : "" },
-      { t: "خصم المكتبة", cls: "num", v: r => r.ok ? r.disc + "%" : "" }, { t: "التكلفة", cls: "num", v: r => r.ok ? fmt(r.cost) : "" },
+      { t: "خصم المكتبة", cls: "num", v: r => r.ok ? r.disc + "%" + (r.rule ? `<div class="text-[10.5px] text-slate-400">${esc(r.rule)}</div>` : "") : "" }, { t: "التكلفة", cls: "num", v: r => r.ok ? fmt(r.cost) : "" },
       { t: "سعر الموظف", cls: "num", v: r => r.ok ? `<b class="text-brand-800">${fmt(r.emp)}</b>` : "" },
       { t: "الهامش", cls: "num", v: r => r.ok ? `<span class="${r.margin < 0 ? "text-rose-600 font-bold" : "text-emerald-600"}">${fmt(r.margin)}</span>` : "" },
       { t: "الحالة", v: r => r.ok ? (r.warning ? pill("", r.warning, "amber") : pill("", r.wasPricing ? "سيُتاح للحجز" : "تحديث سعر", "green")) : pill("", r.error, "red") }
@@ -372,7 +381,20 @@ on("bpTemplate", () => {
     : (!q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject + x.Publisher).toLowerCase().includes(q)) && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type)) && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st))));
   exportCSV("قالب_التسعير", ["الكود", "الكتاب", "الصف", "الناشر", "سعر الغلاف", "خصم المكتبة %"], list.map(x => [x.Book_ID, x.Book_Name, x.Grade, x.Publisher, x.Book_Status === "Pricing" ? "" : x.Cover_Price, x.Book_Status === "Pricing" ? "" : x.Supplier_Discount_Pct]));
 });
-const bpCall = dryRun => call("BULK_PRICE_BOOKS", { rows: bpRows(), defaults: { supplierId: BP.s.sup, supplierDiscountPct: BP.s.disc }, dryRun }, { block: true });
+const pubsOf = () => [...new Set(A().books.filter(b => b.Book_Status !== "Discontinued").map(b => b.Publisher).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ar"));
+const bpRules = () => { const m = {}; BP.s.rules.forEach(r => { if (r.pct !== "" && r.pct !== undefined) r.pubs.forEach(p => { m[p] = toEnDigits(r.pct); }); }); return m; };
+on("bpRuleAdd", () => { BP.s.rules.push({ pct: "", pubs: [] }); BP.s.res = null; bpRefresh(); });
+on("bpRuleDel", i => { BP.s.rules.splice(n(i), 1); BP.s.res = null; bpRefresh(); });
+on("bpRule", (v, el) => { BP.s.rules[n(el.dataset.i)][el.dataset.k] = v; BP.s.res = null; });
+on("bpPub", id => { const [i, p] = [n(id.split("|")[0]), id.slice(id.indexOf("|") + 1)]; BP.s.rules.forEach((r, k) => { if (k !== i) r.pubs = r.pubs.filter(x => x !== p); }); const r = BP.s.rules[i]; r.pubs = r.pubs.includes(p) ? r.pubs.filter(x => x !== p) : r.pubs.concat(p); BP.s.res = null; bpRefresh(); });
+// إعادة حساب خصم المكتبة للكتب المسعّرة بنفس سعر غلافها
+on("bpReprice", async () => {
+  const priced = A().books.filter(b => b.Book_Status !== "Pricing" && b.Book_Status !== "Discontinued" && n(b.Cover_Price) > 0);
+  if (!priced.length) return toast("لا توجد كتب مسعّرة بعد", "info");
+  BP.s.txt = priced.map(b => b.Book_ID + "\t" + b.Cover_Price).join("\n"); BP.s.res = null; bpRefresh();
+  ACTIONS.bpPreview();
+});
+const bpCall = dryRun => call("BULK_PRICE_BOOKS", { rows: bpRows(), defaults: { supplierId: BP.s.sup, supplierDiscountPct: toEnDigits(BP.s.disc), publisherDiscounts: bpRules() }, dryRun }, { block: true });
 on("bpPreview", async () => {
   if (!bpRows().length) return toast("الصق صفوف الأسعار أولاً", "warning");
   const r = await bpCall(true); if (!r.success) return toast(r.message, "danger");
