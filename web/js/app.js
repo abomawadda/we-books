@@ -9,7 +9,7 @@ const ACL = {
   SAVE_PHASE: ["Coordinator"], SET_PHASE_STATUS: ["Coordinator"], GENERATE_PO_SNAPSHOT: ["Coordinator"], CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"], RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"], MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"], CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
   EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
-  RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [], GET_AUDIT_LOG: ["Coordinator"],
+  RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [], GET_AUDIT_LOG: ["Coordinator"], POST_ANNOUNCEMENT: ["Coordinator"],
   RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"]
 };
 // الصلاحيات الفعلية تأتي من الخادم (بعد تخصيص المدير)، والجدول أعلاه احتياطي
@@ -59,8 +59,7 @@ const Shell = {
       <aside class="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden">
         <div class="absolute -left-24 -bottom-24 w-[28rem] h-[28rem] rounded-full border border-white/10"></div>
         <div class="absolute -left-10 -bottom-10 w-[20rem] h-[20rem] rounded-full border border-white/10"></div>
-        <div class="flex items-center gap-3"><div class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shadow-lg">${ic("book-marked")}</div>
-          <div><div class="font-bold text-lg">${esc(APP.title)}</div><div class="text-sm text-brand-200">منظومة مؤسسية متكاملة</div></div></div>
+        <div class="flex items-center justify-between gap-3">${Brand.logo("we", "w-14 h-14")}<div class="text-center"><div class="text-sm text-brand-200">${esc(Brand.get().org)}</div><div class="font-display font-bold text-lg">${esc(Brand.get().platform)}</div></div>${Brand.logo("union", "w-14 h-14")}</div>
         <div class="max-w-md">
           <h2 class="text-4xl font-bold leading-[1.35]">كتب أبنائك الخارجية<br><span class="text-gold-300">بخصم حقيقي وتقسيط مريح</span></h2>
           <p class="text-brand-100/80 mt-4 leading-relaxed">احجز من الكتالوج، وتابع التوزيع بأسبقية الحجز، واستلم وسدد على أقساط شهرية بشفافية كاملة.</p>
@@ -68,13 +67,13 @@ const Shell = {
             ${[["badge-percent", "خصم موحد للعاملين على سعر الغلاف"], ["list-ordered", "توزيع عادل بأسبقية كل كتاب"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
           </ul>
         </div>
-        <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · نقابة العاملين</div>
+        <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · ${esc(Brand.get().org)}${Brand.get().credit ? " · " + esc(Brand.get().credit) : ""}</div>
       </aside>
 
       <main class="glass flex flex-col min-h-[100dvh] lg:justify-center lg:px-16">
         <div class="lg:hidden px-6 pt-[max(2.75rem,env(safe-area-inset-top))] pb-6 text-center">
-          <div class="w-16 h-16 mx-auto rounded-3xl bg-gold-400 text-brand-950 flex items-center justify-center text-[30px] shadow-lg">${ic("book-marked")}</div>
-          <h1 class="mt-4 text-[23px] font-bold leading-snug">${esc(APP.title)}</h1>
+          <div class="flex items-center justify-between">${Brand.logo("we", "w-16 h-16")}<div class="text-brand-200 text-[13px] font-semibold">${esc(Brand.get().org)}</div>${Brand.logo("union", "w-16 h-16")}</div>
+          <h1 class="mt-5 text-[25px] font-bold leading-snug">${esc(Brand.get().platform)}</h1>
           <p class="text-brand-200 text-[13.5px] mt-1.5">كتب أولادك بخصم حقيقي وتقسيط مريح 📚</p>
         </div>
         <div class="flex-1 lg:flex-none px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-0 lg:max-w-md lg:w-full lg:mx-auto">
@@ -93,6 +92,8 @@ const Shell = {
             <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
           </form>
           <p class="text-center text-xs text-brand-200/70 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
+          <div class="text-center mt-5 flex items-center justify-center gap-3 text-[12px]"><button type="button" data-act="contact" class="text-gold-300 font-semibold hover:underline">${ic("headset", "ml-1")} تواصل مع المسؤول</button></div>
+          ${Brand.get().credit ? `<p class="lg:hidden text-center text-[11px] text-brand-300/70 mt-4">${esc(Brand.get().credit)}</p>` : ""}
           <div class="text-center mt-4">${tab === "adm"
             ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-gold-300 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
             : `<button type="button" data-act="loginTab" data-id="adm" class="text-[11px] text-brand-300/60 hover:text-brand-100 hover:underline">دخول الإدارة</button>`}</div>
@@ -137,8 +138,8 @@ const Shell = {
     <div class="min-h-[100dvh] md:flex">
       <aside class="no-print hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] w-[84px] lg:w-[264px] hero text-white">
         <div class="flex items-center gap-3 px-4 lg:px-5 h-16 shrink-0">
-          <div class="w-11 h-11 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[22px] mx-auto lg:mx-0 shrink-0">${ic("book-marked")}</div>
-          <div class="hidden lg:block min-w-0"><div class="font-bold text-[15px] truncate">${esc(APP.title)}</div><div class="text-[11px] text-brand-200">${admin ? "لوحة الإدارة" : "بوابة الموظف"}</div></div>
+          ${Brand.logo("we", "w-11 h-11 mx-auto lg:mx-0")}
+          <div class="hidden lg:block min-w-0"><div class="font-display font-bold text-[14px] truncate">${esc(Brand.get().platform)}</div><div class="text-[11px] text-brand-200 truncate">${esc(Brand.get().org)} · ${admin ? "الإدارة" : "بوابة الموظف"}</div></div>
         </div>
         <nav class="side-nav flex-1 overflow-y-auto px-2.5 lg:px-3 pb-2 space-y-0.5" aria-label="القائمة الرئيسية">${side}</nav>
         <div class="p-2 border-t border-white/10">
@@ -153,12 +154,14 @@ const Shell = {
       <div class="flex-1 min-w-0 flex flex-col">
         <header class="no-print sticky top-0 z-30 bg-slate-50/85 backdrop-blur-xl border-b border-slate-200/60">
           <div class="flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-6 lg:px-8 max-w-[1400px] w-full mx-auto">
-            <div class="md:hidden w-10 h-10 rounded-xl hero text-gold-300 flex items-center justify-center text-xl shrink-0">${ic("book-marked")}</div>
+            ${Brand.logo("we", "md:hidden w-10 h-10")}
             <div class="min-w-0 flex-1"><div id="hdTitle" class="font-bold text-slate-900 text-[16px] sm:text-lg truncate"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
             <div id="phaseBox" class="shrink-0"></div>
 ${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="السلة" title="السلة">${ic("shopping-cart")}<span id="cartBadge" class="hidden absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-brand-950 text-[10.5px] font-bold flex items-center justify-center num">0</span></a>`}
                         <button data-act="refresh" class="icon-btn ${admin ? "" : "hidden sm:inline-flex"}" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
+            <button data-act="notifs" class="icon-btn relative" aria-label="الإشعارات" title="الإشعارات">${ic("bell")}<span id="notifBadge" class="notif-dot hidden">0</span></button>
             <button data-act="userMenu" class="md:hidden" aria-label="الحساب">${UI.avatar(u.fullName, "w-10 h-10 text-sm")}</button>
+            ${Brand.logo("union", "w-10 h-10")}
           </div>
         </header>
         <main id="view" class="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 pb-nav md:pb-10"></main>
@@ -232,6 +235,7 @@ async function logout(silent) {
 }
 
 // ---------------------------------------------------------------- أحداث عامة
+on("contact", t => openContact(t));
 on("loginTab", t => { Shell.loginTab = t; Shell.renderLogin(); });
 on("togglePass", (_, el) => { const i = $("#lgPass"); i.type = i.type === "password" ? "text" : "password"; el.innerHTML = ic(i.type === "password" ? "eye" : "eye-off"); });
 on("refresh", async (_, el) => { el.classList.add("animate-spin"); APP.settlement = null; await reloadData(); el.classList.remove("animate-spin"); });
@@ -296,12 +300,57 @@ window.addEventListener("DOMContentLoaded", async () => {
       if (c.t === "ADMIN") { APP.adm = c.d; APP.phaseId = c.p || null; if (!APP.phaseId && c.d.phases.length) APP.phaseId = c.d.phases[c.d.phases.length - 1].Phase_ID; }
       else { APP.emp = c.d; if (c.d.activePhase) APP.phaseId = c.d.activePhase.Phase_ID; Emp.resetCart(); }
     }
-    Router.render(); reloadData();
+    Router.render(); reloadData(); setTimeout(() => Notif.badge(), 300);
   }
   else Shell.renderLogin();
   const r = await call("GET_PUBLIC_INIT_DATA");
-  if (r.success && r.settings && r.settings.INITIATIVE_TITLE) {
-    APP.title = r.settings.INITIATIVE_TITLE;
-    if (!APP.user) Shell.renderLogin();
-  }
+  if (r.success && r.brand) { Brand.set(r.brand); if (!APP.user) Shell.renderLogin(); }
 });
+
+// ============================================================ الإشعارات
+// إشعارات محسوبة من حالة المستخدم + إعلانات الإدارة. المقروء يُحفظ على الجهاز.
+const Notif = {
+  seen() { try { return JSON.parse(localStorage.getItem("wb_seen_" + ((APP.user || {}).empId || (APP.user || {}).userId || "")) || "[]"); } catch (e) { return []; } },
+  markAll(list) { try { localStorage.setItem("wb_seen_" + ((APP.user || {}).empId || (APP.user || {}).userId || ""), JSON.stringify(list.map(x => x.id).slice(0, 200))); } catch (e) { /* */ } },
+  list() {
+    const out = [], add = (id, icon, tone, title, body, href) => out.push({ id, icon, tone, title, body, href });
+    const today = new Date().toISOString().slice(0, 10);
+    if (APP.user && APP.user.userType === "EMPLOYEE" && APP.emp) {
+      const r = APP.emp, ph = r.activePhase;
+      (r.announcements || []).forEach(a => add(a.id, "megaphone", a.tone === "warning" ? "amber" : a.tone === "success" ? "green" : "brand", a.title, a.body, ""));
+      if (ph && ph.Booking_Open) {
+        const items = Emp.activeItems(), left = Emp.daysLeft();
+        if (!items.length) add("open-" + ph.Phase_ID, "sparkles", "brand", "الحجز مفتوح دلوقتي 🎉", left !== null ? `باقي ${left} يوم — احجز كتب أولادك` : "احجز كتب أولادك بخصم العاملين", "#/e/books");
+        else if (left !== null && left <= 2) add("closing-" + ph.Phase_ID + "-" + left, "clock", "amber", "الحجز قرّب يقفل", left <= 0 ? "النهارده آخر يوم للتعديل" : `باقي ${left} يوم للتعديل`, "#/e/books");
+        if (Emp.dirty) add("dirty-" + today, "shopping-cart", "amber", "عندك تعديلات لم تُحفظ", "افتح السلة واضغط «احفظ التعديل»", "#/e/cart");
+      }
+      const ready = Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+      if (ready) add("ready-" + (ph || {}).Phase_ID + "-" + ready, "package-check", "green", "كتبك جاهزة للتسليم 📦", `${ready} كتاب في انتظارك`, "#/e/orders");
+      const inst = Emp.installments().find(i => n(i.Remaining_Inst_Amount) > 0);
+      if (inst) { const late = inst.Status === "Overdue", days = Math.round((new Date(inst.Due_Date) - new Date(today)) / 864e5);
+        if (late || days <= 7) add("inst-" + inst.Inst_ID + "-" + (late ? "late" : "soon"), late ? "circle-alert" : "calendar-clock", late ? "red" : "amber", late ? "عليك قسط متأخر" : "قسطك قرّب", `${moneyTxt(inst.Remaining_Inst_Amount)} · ${late ? "من" : "يوم"} ${inst.Due_Date}`, "#/e/pay"); }
+      const inv = Emp.invoice(); if (inv) add("inv-" + inv.Emp_Inv_ID, "receipt", "blue", "صدرت فاتورتك", `${inv.Emp_Inv_ID} · ${moneyTxt(inv.Net_Final_Invoice_Amount)}`, "#/e/orders");
+    } else if (APP.adm) {
+      const d = APP.adm;
+      (d.announcements || []).slice(0, 3).forEach(a => add(a.id, "megaphone", "brand", "إعلان منشور: " + a.title, a.body, "#/a/dash"));
+      const pricing = d.books.filter(b => b.Book_Status === "Pricing").length;
+      if (pricing) add("pricing-" + pricing, "badge-percent", "amber", `${pricing} كتاب بانتظار السعر`, "سعّرها من «التسعير الجماعي»", "#/a/books");
+      const overdue = d.installments.filter(i => i.Status === "Overdue").length;
+      if (overdue) add("overdue-" + overdue, "circle-alert", "red", `${overdue} قسط متأخر`, "تابع التحصيل", "#/a/collect");
+      if (typeof poDrift === "function" && APP.phaseId) { const dr = poDrift(APP.phaseId); if (dr && (dr.rows.length || dr.changed.length)) add("drift-" + dr.changed.length + "-" + dr.more, "triangle-alert", "red", "تغيّرت الحجوزات بعد طلب التوريد", `${dr.changed.length} موظف عدّل`, "#/a/po"); }
+    }
+    return out;
+  },
+  badge() { const el = document.getElementById("notifBadge"); if (!el) return; const seen = Notif.seen(), c = Notif.list().filter(x => !seen.includes(x.id)).length; el.textContent = c; el.classList.toggle("hidden", !c); },
+  open() {
+    const list = Notif.list(), seen = Notif.seen();
+    const tone = { brand: "bg-brand-50 text-brand-600", green: "bg-emerald-50 text-emerald-600", amber: "bg-amber-50 text-amber-600", red: "bg-rose-50 text-rose-600", blue: "bg-sky-50 text-sky-600" };
+    UI.open(`${list.length ? `<ul class="space-y-2">${list.map(x => `<li><a ${x.href ? `href="${x.href}" data-act="goClose" data-id="${x.href.slice(1)}"` : ""} class="flex items-start gap-3 rounded-2xl p-3 ring-1 ${seen.includes(x.id) ? "ring-slate-100" : "ring-brand-200 bg-brand-50/40"}">
+        <span class="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0 ${tone[x.tone] || tone.brand}">${ic(x.icon)}</span>
+        <span class="flex-1 min-w-0"><b class="block text-[14px] text-slate-900">${esc(x.title)}</b>${x.body ? `<span class="block text-[12.5px] text-slate-500 mt-0.5 whitespace-pre-line">${esc(x.body)}</span>` : ""}</span>${!seen.includes(x.id) ? `<span class="w-2 h-2 rounded-full bg-rose-500 mt-2"></span>` : ""}</a></li>`).join("")}</ul>`
+      : UI.empty("bell", "مفيش إشعارات جديدة", "هنبلغك هنا بكل جديد في حجزك.")}
+      <button data-act="contact" class="btn btn-soft w-full mt-4">${ic("headset")} تواصل مع المسؤول</button>`, { title: "الإشعارات" });
+    Notif.markAll(list); Notif.badge();
+  }
+};
+on("notifs", () => Notif.open());

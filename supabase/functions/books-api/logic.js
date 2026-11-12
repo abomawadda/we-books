@@ -452,6 +452,12 @@ function seedInitialData_() {
       st("MAX_INSTALLMENT_COUNT", 4, "NUMBER", "أقصى عدد أقساط يختاره الموظف"),
       st("MIN_DOWN_PAYMENT_PCT", 20, "NUMBER", "الحد الأدنى للمقدم عند التقسيط (%)"),
       st("MAX_QTY_PER_BOOK", 3, "NUMBER", "أقصى عدد نسخ من الكتاب الواحد للموظف في المرحلة"),
+      st("ORG_NAME", "النقابة العامة بالدقهلية", "STRING", "اسم الجهة في الشاشات والمستندات"),
+      st("PLATFORM_NAME", "منصة حجز الكتب المخفضة", "STRING", "اسم المنصة"),
+      st("CREDIT_LINE", "إعداد وتنفيذ الأستاذ محمود العراقي", "STRING", "سطر الإعداد والتنفيذ"),
+      st("CONTACT_PHONE", "015501000025", "STRING", "هاتف التواصل مع المسؤول (اتصال)"),
+      st("CONTACT_WHATSAPP", "015501000025", "STRING", "رقم واتساب المسؤول"),
+      st("CONTACT_EMAIL", "", "STRING", "البريد الإلكتروني للمسؤول"),
       st("ALLOW_RELATIVE_BOOKING", true, "BOOLEAN", "السماح للعضو بالحجز لأقاربه (تُحسب على العضو نفسه)"),
       st("MAX_RELATIVES", 5, "NUMBER", "أقصى عدد أقارب يحجز لهم العضو في المرحلة"),
       st("DEFAULT_CREDIT_LIMIT", 15000, "NUMBER", "الحد الائتماني الافتراضي للموظف (ج.م) إذا لم يُحدَّد له حد"),
@@ -572,7 +578,8 @@ const ACTION_ACL = {
   RECORD_INITIATIVE_EXPENSE: ["Finance"],
   CLOSE_CASH_DAY: ["Finance"],
   SAVE_ROLE_PERMISSIONS: [],          // المدير فقط
-  GET_AUDIT_LOG: ["Coordinator"]
+  GET_AUDIT_LOG: ["Coordinator"],
+  POST_ANNOUNCEMENT: ["Coordinator"]
 };
 
 // صلاحيات قابلة للتخصيص من المدير (إعداد ROLE_PERMISSIONS = JSON {action: [roles]})
@@ -621,6 +628,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_SETTING": return E.saveSetting(session, payload);
       case "SAVE_ROLE_PERMISSIONS": return E.saveRolePermissions(session, payload);
       case "GET_AUDIT_LOG": return E.getAuditLog(payload);
+      case "POST_ANNOUNCEMENT": return E.postAnnouncement(session, payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
@@ -755,7 +763,36 @@ const OperationsEngine = {
 
   getPublicInitData: function() {
     const st = getSettings_();
-    return { success: true, settings: { INITIATIVE_TITLE: st.INITIATIVE_TITLE, UNIFIED_EMP_DISCOUNT_PCT: st.UNIFIED_EMP_DISCOUNT_PCT }, version: SYSTEM_CONFIG.VERSION };
+    return { success: true, settings: { INITIATIVE_TITLE: st.INITIATIVE_TITLE, UNIFIED_EMP_DISCOUNT_PCT: st.UNIFIED_EMP_DISCOUNT_PCT }, brand: this.brand_(st), version: SYSTEM_CONFIG.VERSION };
+  },
+  /** هوية المنصة وبيانات التواصل (تُعدَّل من الإعدادات) */
+  brand_: function(st) {
+    st = st || getSettings_();
+    return { org: st.ORG_NAME || "النقابة العامة بالدقهلية", platform: st.PLATFORM_NAME || st.INITIATIVE_TITLE || "منصة حجز الكتب المخفضة",
+      credit: st.CREDIT_LINE || "", phone: st.CONTACT_PHONE || "", whatsapp: st.CONTACT_WHATSAPP || st.CONTACT_PHONE || "", email: st.CONTACT_EMAIL || "" };
+  },
+  /** الإعلانات السارية (من إعداد ANNOUNCEMENTS بصيغة JSON) */
+  announcements_: function() {
+    const row = DB_Engine.getAllRecords(this.S().SETTINGS).find(r => r.Setting_Key === "ANNOUNCEMENTS");
+    try { return row && row.Setting_Value ? JSON.parse(String(row.Setting_Value)) : []; } catch (e) { return []; }
+  },
+  /** إضافة أو حذف إعلان للموظفين: {op:"add", title, body, tone, until} أو {op:"delete", id} */
+  postAnnouncement: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(); let list = this.announcements_();
+      if (payload.op === "delete") list = list.filter(a => a.id !== Util.str(payload.id));
+      else {
+        const title = Util.str(payload.title); Util.require(title, "اكتب عنوان الإعلان.");
+        list.unshift({ id: "ANN-" + new Date().getTime(), title: title.slice(0, 120), body: Util.str(payload.body).slice(0, 600), tone: ["info", "success", "warning"].indexOf(payload.tone) !== -1 ? payload.tone : "info",
+          until: Util.str(payload.until), at: Util.now(), by: Util.actor(session) });
+        list = list.slice(0, 20);
+      }
+      const val = JSON.stringify(list), row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "ANNOUNCEMENTS");
+      const rec = { Setting_Key: "ANNOUNCEMENTS", Setting_Value: val, Data_Type: "JSON", Description: "إعلانات للموظفين (تُدار من لوحة القيادة)", Updated_At: Util.now(), Updated_By: Util.actor(session) };
+      if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "ANNOUNCEMENTS", rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
+      DB_Engine.logAudit(session.userId, session.role, "Settings", payload.op === "delete" ? "DELETE_ANNOUNCEMENT" : "POST_ANNOUNCEMENT", payload.id || "-", null, payload);
+      return { success: true, message: payload.op === "delete" ? "تم حذف الإعلان." : "تم نشر الإعلان للموظفين." };
+    });
   },
 
   getEmployeePortalData: function(empId, phaseId) {
@@ -782,6 +819,7 @@ const OperationsEngine = {
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
       },
+      brand: this.brand_(settings), announcements: this.announcements_().filter(a => !a.until || a.until >= Util.today()),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT },
       books: books,
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
@@ -799,6 +837,7 @@ const OperationsEngine = {
     return {
       catalog: this.catalogLists_(),
       acl: effectiveAcl_(),
+      brand: this.brand_(), announcements: this.announcements_(),
       success: true,
       settings: DB_Engine.getAllRecords(S.SETTINGS),
       settingsMap: getSettings_(),

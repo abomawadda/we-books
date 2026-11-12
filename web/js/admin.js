@@ -7,12 +7,14 @@ const Admin = {
     const r = await call("GET_ADMIN_DASHBOARD_DATA");
     if (!r.success) { toast(r.message, "danger"); return; }
     APP.adm = r; store.set("cache", { t: "ADMIN", d: r, p: APP.phaseId });
+    if (r.brand) Brand.set(r.brand);
     if (!APP.phaseId || !r.phases.find(p => p.Phase_ID === APP.phaseId)) {
       const op = r.phases.filter(p => p.Phase_Status !== "Completed");
       APP.phaseId = (op[op.length - 1] || r.phases[r.phases.length - 1] || {}).Phase_ID;
     }
     Shell.rerender();
     const ep = $("#epBody"); if (ep && Q.epId) ep.innerHTML = epBody(Q.epId); // ملف موظف مفتوح يتحدث بعد أي عملية
+    Notif.badge();
   }
 };
 const A = () => APP.adm;
@@ -107,7 +109,8 @@ function overviewSections() {
   return `<div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
     ${UI.section(`${ic("badge-check", "text-brand-600")} جاهزية الأسعار`, "نسبة الكتب المسعّرة في كل مرحلة دراسية", pricingByStage(), can("SAVE_BOOK") ? `<a href="#/a/books" data-act="goPricing" class="btn btn-ghost btn-sm">الكتب ${ic("chevron-left")}</a>` : "")}
     ${UI.section(`${ic("activity", "text-brand-600")} صحة المنظومة`, "المهام الليلية خلال آخر 26 ساعة", healthBox())}
-  </div>`;
+  </div>
+  <div class="mt-4 sm:mt-6">${UI.section(`${ic("megaphone", "text-brand-600")} الإعلانات للموظفين`, "تظهر في أعلى الصفحة الرئيسية للموظف وفي إشعاراته", annList(), lockedBtn("POST_ANNOUNCEMENT", `<button class="btn btn-primary btn-sm" data-act="annNew">${ic("plus")} إعلان جديد</button>`))}</div>`;
 }
 
 Router.add("/a/dash", view => {
@@ -550,16 +553,16 @@ Router.add("/a/po", view => {
     ], live.sort((x, y) => y.req - x.req), { maxH: 380, empty: "لا حجوزات في المرحلة", emptyIcon: "clipboard-list" }))
     + `<div class="h-4"></div>`
     + UI.section(`${ic("truck", "text-brand-600")} طلب التوريد المجمَّد`, "", UI.table([
-      { t: "الكتاب", v: p => `<b>${esc(bookName(b, p.Book_ID))}</b><div class="text-[11.5px] text-slate-400">${esc((s[p.Supplier_ID] || {}).Supplier_Name || p.Supplier_ID)}</div>` },
-      { t: "الاحتياج", cls: "num", v: p => fmt(p.Total_Requested_Qty) }, { t: "من المخزون", cls: "num", v: p => fmt(p.Carryover_Stock_Qty) }, { t: "نواقص سابقة", cls: "num", v: p => fmt(p.Pending_From_Previous_Qty) },
-      { t: "المطلوب", cls: "num", v: p => `<b class="text-brand-800">${fmt(p.Net_Order_To_Supplier_Qty)}</b>` }, { t: "وصل", cls: "num", v: p => fmt(p.Received_Qty_To_Date) },
-      { t: "متبقٍ", cls: "num", v: p => `<span class="${n(p.Outstanding_Qty) ? "text-rose-600 font-bold" : ""}">${fmt(p.Outstanding_Qty)}</span>` },
-      { t: "الحالة", v: p => pill(p.Line_Status, p.Line_Status === "Open" ? "مستحق على المكتبة" : null, p.Line_Status === "Open" ? "amber" : null) },
+      { t: "كود الكتاب", cls: "num", v: p => esc(p.Book_ID) },
+      { t: "اسم الكتاب", v: p => `<b>${esc(bookName(b, p.Book_ID))}</b>` },
+      { t: "المادة", v: p => esc((b[p.Book_ID] || {}).Subject || "") },
+      { t: "الصف", v: p => esc((b[p.Book_ID] || {}).Grade || "") },
+      { t: "العدد المطلوب", cls: "num", v: p => `<b class="text-brand-800">${fmt(p.Net_Order_To_Supplier_Qty)}</b>` + (n(p.Received_Qty_To_Date) ? `<div class="text-[11px] text-emerald-600">وصل ${fmt(p.Received_Qty_To_Date)}</div>` : "") },
       { t: "", actions: true, v: p => p.Line_Status === "Open" && can("CANCEL_PO_BACKORDER") ? `<button class="btn btn-outline-danger btn-xs" data-act="cancelBO" data-id="${esc(p.PO_ID)}">${ic("ban")} لن يُورَّد</button>` : "" }
     ], snaps, { maxH: 520, emptyIcon: "lock", empty: "لم يُجمَّد الحصر بعد", emptySub: "التجميد يُغلق الحجز ويُنشئ طلب التوريد النهائي للمكتبة." }));
 });
 on("freezePO", () => act("GENERATE_PO_SNAPSHOT", { phaseId: APP.phaseId }, { title: "تجميد الحصر", message: "سيتم إغلاق الحجز لهذه المرحلة وإنشاء طلب التوريد النهائي. متابعة؟", ok: "تجميد" }));
-on("exportPO", () => { const { b, s } = maps(); exportCSV("طلب_توريد_" + APP.phaseId, ["الكود", "الكتاب", "المكتبة", "الاحتياج", "من المخزون", "المطلوب من المكتبة"], A().poSnapshots.filter(p => p.Phase_ID === APP.phaseId).map(p => [p.Book_ID, bookName(b, p.Book_ID), (s[p.Supplier_ID] || {}).Supplier_Name, p.Total_Requested_Qty, p.Carryover_Stock_Qty, p.Net_Order_To_Supplier_Qty])); });
+on("exportPO", () => { const { b, s } = maps(); exportCSV("طلب_توريد_" + APP.phaseId, ["كود الكتاب", "اسم الكتاب", "المادة", "الصف", "العدد المطلوب"], A().poSnapshots.filter(p => p.Phase_ID === APP.phaseId && n(p.Net_Order_To_Supplier_Qty) > 0).map(p => [p.Book_ID, bookName(b, p.Book_ID), (b[p.Book_ID] || {}).Subject, (b[p.Book_ID] || {}).Grade, p.Net_Order_To_Supplier_Qty])); });
 on("cancelBO", async id => {
   const v = await UI.form({ title: "إلغاء نواقص لن تُورَّد", tone: "danger", fields: [{ name: "reason", label: "السبب", required: true, placeholder: "مثال: الناشر أوقف الطبعة" }], ok: "تأكيد الإلغاء" });
   if (v) await act("CANCEL_PO_BACKORDER", { poId: id, reason: v.reason });
@@ -858,7 +861,7 @@ on("printPO", () => {
   const pages = Object.keys(bySup).map(sid => { const sp = s[sid] || {}, lines = bySup[sid];
     return Doc.purchaseOrder({ no: "PO-" + APP.phaseId + "-" + sid, date: (lines[0].Frozen_At || "").slice(0, 10), phase: phaseObj().Phase_Name, by: lines[0].Frozen_By,
       supplier: { name: sp.Supplier_Name || sid, contact: sp.Contact_Person, phone: sp.Phone, terms: sp.Payment_Terms, returnDays: sp.Return_Policy_Days },
-      lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, name: bk.Book_Name || p.Book_ID, grade: bk.Grade, publisher: bk.Publisher, qty: n(p.Net_Order_To_Supplier_Qty), cover: bk.Cover_Price, disc: bk.Supplier_Discount_Pct, cost: n(bk.Initial_Purchase_Price) || n(bk.Standard_Net_Cost) }; }).sort((x, y) => String(x.code).localeCompare(String(y.code))) }); }).join("");
+      lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, name: bk.Book_Name || p.Book_ID, grade: bk.Grade, subject: bk.Subject, qty: n(p.Net_Order_To_Supplier_Qty) }; }).sort((x, y) => String(x.code).localeCompare(String(y.code))) }); }).join("");
   Doc.show("أوامر التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "أمر-توريد-" + APP.phaseId });
 });
 
@@ -1115,6 +1118,7 @@ function epBody(id) {
   if (t === "log") { body = `<div id="epLog">${UI.skeleton(3)}</div>`; setTimeout(async () => { const r = await call("GET_AUDIT_LOG", { empId: id, limit: 200 }); const el = $("#epLog"); if (!el) return; Q.audRows = r.entries || []; el.innerHTML = r.success ? audList(Q.audRows) : esc(r.message); }, 0); }
   if (t === "info") body = `<div class="grid grid-cols-2 gap-2">${UI.stat("الرقم الوظيفي", esc(e.Emp_ID))}${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}${UI.stat("جهة العمل", esc(e.Department || "—"))}${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}${UI.stat("حالة العضوية", esc(e.Employment_Status || "—"))}${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح")}${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}</div>
     ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
+    ${e.Mobile ? `<div class="mt-3"><div class="label">رسالة واتساب جاهزة</div><div class="flex flex-wrap gap-1.5">${[["ready", "كتبك جاهزة"], ["inst", "تذكير بالقسط"], ["open", "الحجز مفتوح"], ["free", "رسالة حرة"]].map(x => `<button class="btn btn-soft btn-xs" data-act="waEmp" data-id="${esc(e.Emp_ID)}|${x[0]}">${ic("message-circle")} ${x[1]}</button>`).join("")}<a class="btn btn-ghost btn-xs" href="tel:${esc(e.Mobile)}">${ic("phone")} اتصال</a></div></div>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
   return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">${UI.stat("النسخ المحجوزة", fmt(sum(items, "Requested_Qty")))}${UI.stat("إجمالي الفواتير", fmt(billed))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`)}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50" : "")}</div>
     <div class="scroll-x !mx-0 !px-0 mb-3">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
@@ -1168,3 +1172,32 @@ let audT = null;
 on("audQ", v => { Q.aud.q = v.trim(); clearTimeout(audT); audT = setTimeout(loadAudit, 400); });
 on("audF", (v, el) => { Q.aud[el.dataset.k] = v; loadAudit(); });
 on("audDays", v => { Q.aud.days = n(v); Shell.rerender(); });
+
+// ============================================================ الإعلانات والتواصل مع الموظفين
+function annList() {
+  const list = A().announcements || [];
+  if (!list.length) return `<div class="text-sm text-slate-500">لا إعلانات منشورة. مثال: «الحجز يفتح السبت 10 صباحاً» أو «التسليم من مقر النقابة يوم الأحد».</div>`;
+  return `<ul class="space-y-2">${list.map(a => `<li class="flex items-start gap-3 rounded-2xl ring-1 ring-slate-100 p-3"><span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${a.tone === "warning" ? "bg-amber-50 text-amber-600" : a.tone === "success" ? "bg-emerald-50 text-emerald-600" : "bg-brand-50 text-brand-600"}">${ic("megaphone")}</span>
+    <div class="flex-1 min-w-0"><b class="block text-[14px]">${esc(a.title)}</b>${a.body ? `<p class="text-[12.5px] text-slate-500 whitespace-pre-line">${esc(a.body)}</p>` : ""}<div class="text-[11px] text-slate-400 mt-1 num">${esc(a.at || "")} · ${esc(a.by || "")}${a.until ? " · حتى " + esc(a.until) : ""}</div></div>
+    ${can("POST_ANNOUNCEMENT") ? `<button class="icon-btn w-9 h-9 text-rose-500" data-act="annDel" data-id="${esc(a.id)}" aria-label="حذف">${ic("trash-2")}</button>` : ""}</li>`).join("")}</ul>`;
+}
+on("annNew", async () => {
+  const v = await UI.form({ title: "إعلان جديد للموظفين", fields: [{ name: "title", label: "العنوان", required: true, placeholder: "مثال: الحجز يفتح السبت 10 صباحاً" }, { name: "body", label: "التفاصيل (اختياري)", type: "textarea", rows: 3 },
+    { name: "tone", label: "النوع", type: "seg", value: "info", options: [["info", "معلومة"], ["success", "خبر سعيد"], ["warning", "تنبيه"]] }, { name: "until", label: "يظهر حتى (اختياري)", type: "date" }], ok: "نشر", icon: "megaphone" });
+  if (v) await act("POST_ANNOUNCEMENT", { op: "add", title: v.title, body: v.body, tone: v.tone, until: v.until });
+});
+on("annDel", id => act("POST_ANNOUNCEMENT", { op: "delete", id }, { title: "حذف الإعلان", message: "حذف هذا الإعلان من عند الموظفين؟", ok: "حذف", tone: "danger" }));
+/** رسائل واتساب جاهزة للموظف من ملفه */
+const WA_TPL = {
+  ready: (e, x) => `أهلاً ${e}، كتبك جاهزة للتسليم 📦 في ${Brand.get().org}. برجاء الحضور لاستلامها ومعك المقدم${x.down ? " (" + x.down + " ج.م)" : ""}.`,
+  inst: (e, x) => `أهلاً ${e}، تذكير ودي بقسط كتب أولادك${x.amount ? " بقيمة " + x.amount + " ج.م" : ""}${x.due ? " المستحق " + x.due : ""}. شكراً لتعاونك.`,
+  open: e => `أهلاً ${e}، الحجز مفتوح الآن في ${Brand.get().platform} 🎉 احجز كتب أولادك بخصم العاملين من التطبيق.`,
+  free: e => `أهلاً ${e}، `
+};
+on("waEmp", key => {
+  const [id, t] = key.split("|"), d = A(), e = maps().e[id] || {};
+  if (!e.Mobile) return toast("لا يوجد رقم موبايل لهذا الموظف", "warning");
+  const inv = d.empInvoices.filter(i => i.Emp_ID === id).pop() || {}, inst = d.installments.filter(i => i.Emp_ID === id && n(i.Remaining_Inst_Amount) > 0).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date)))[0] || {};
+  const first = String(e.Full_Name || "").split(" ")[0];
+  window.open(Brand.waLink(e.Mobile, WA_TPL[t](first, { down: fmt(Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount))), amount: fmt(inst.Remaining_Inst_Amount), due: inst.Due_Date })), "_blank");
+});
