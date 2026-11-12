@@ -79,7 +79,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   expectNoErrorToasts('change password');
   check(/لوحة القيادة/.test(d.getElementById('hdTitle').textContent), 'admin dashboard');
 
-  const routes = ['dash', 'res', 'books', 'phases', 'suppliers', 'employees', 'settings', 'po', 'receive', 'alloc', 'delivery', 'collect', 'cash', 'supplier', 'expenses', 'reports'];
+  const routes = ['dash', 'res', 'books', 'phases', 'suppliers', 'employees', 'settings', 'po', 'receive', 'alloc', 'delivery', 'collect', 'cash', 'supplier', 'expenses', 'reports', 'audit'];
   for (const r of routes) { await go('/a/' + r); check(view().length > 40 && !/تعذر عرض الصفحة/.test(view()), 'admin page ' + r); }
 
   // الحجوزات: تعديل حجز موظف من الإدارة
@@ -94,8 +94,9 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   // ملف الموظف
   await go('/a/employees'); await click('[data-act="empProfile"][data-id="1001"]');
   check(/الحجوزات/.test(dialog().textContent) && /أحمد — ابن أخ/.test(dialog().textContent), 'employee profile shows reservations');
-  for (const t of ['inv', 'inst', 'pay', 'info']) { await click(`[data-act="epTab"][data-id="${t}"]`, dialog()); check(dialog().querySelector('#epBody').textContent.length > 20, 'profile tab ' + t); }
+  for (const t of ['inv', 'inst', 'pay', 'info', 'log']) { await click(`[data-act="epTab"][data-id="${t}"]`, dialog()); check(dialog().querySelector('#epBody').textContent.length > 20, 'profile tab ' + t); }
   await closeAll();
+  await go('/a/audit'); await settle(); check(d.querySelectorAll('#audList li').length > 1, 'audit page lists changes');
   // الحاجزون لكتاب
   await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
   check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');

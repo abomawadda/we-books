@@ -1032,10 +1032,59 @@ function epBody(id) {
   if (t === "inst") body = insts.length ? UI.table([{ t: "القسط", v: i => `${esc(i.Admin_Custom_Notes || ("قسط " + i.Installment_No))}<div class="text-[11px] text-slate-400 num">${esc(i.Emp_Inv_ID)}</div>` }, { t: "الاستحقاق", cls: "num", v: "Due_Date" }, { t: "القيمة", cls: "num", v: i => fmt(i.Scheduled_Amount) }, { t: "المسدد", cls: "num", v: i => fmt(i.Paid_Amount) }, { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Inst_Amount) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Inst_Amount)}</b>` }, { t: "الحالة", v: i => pill(i.Status) }], insts, { cardsOnMobile: false }) : UI.empty("calendar-range", "لا أقساط");
   if (t === "pay") body = pays.length ? `<ul class="divide-y divide-slate-100">${pays.slice().reverse().map(p => `<li class="flex items-center gap-3 py-2.5"><div class="flex-1"><div class="font-semibold text-[13px] num">${esc(p.Receipt_No)} <span class="text-slate-400 font-normal">· ${esc(ar(p.Payment_Method))}${p.Transaction_Ref ? " · " + esc(p.Transaction_Ref) : ""}</span></div><div class="text-[11.5px] text-slate-400 num">${esc(dt(p.Payment_Date))} · ${esc(p.Collected_By || "")}</div></div>
       ${isTrue(p.Is_Voided) ? pill("", "ملغى", "red") : `<b class="num ${n(p.Amount) < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(p.Amount)}</b><button class="icon-btn w-8 h-8" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة">${ic("printer")}</button>`}</li>`).join("")}</ul>` : UI.empty("wallet", "لا إيصالات");
+  if (t === "log") { body = `<div id="epLog">${UI.skeleton(3)}</div>`; setTimeout(async () => { const r = await call("GET_AUDIT_LOG", { empId: id, limit: 200 }); const el = $("#epLog"); if (!el) return; Q.audRows = r.entries || []; el.innerHTML = r.success ? audList(Q.audRows) : esc(r.message); }, 0); }
   if (t === "info") body = `<div class="grid grid-cols-2 gap-2">${UI.stat("الرقم الوظيفي", esc(e.Emp_ID))}${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}${UI.stat("جهة العمل", esc(e.Department || "—"))}${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}${UI.stat("حالة العضوية", esc(e.Employment_Status || "—"))}${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح")}${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}</div>
     ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
   return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">${UI.stat("النسخ المحجوزة", fmt(sum(items, "Requested_Qty")))}${UI.stat("إجمالي الفواتير", fmt(billed))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`)}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50" : "")}</div>
-    <div class="scroll-x !mx-0 !px-0 mb-3">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}</div>${body}`;
+    <div class="scroll-x !mx-0 !px-0 mb-3">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
 }
 on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEdit(id), 50); });
+
+// ============================================================ سجل التعديلات
+const AUD_MOD = { Reservations: "الحجوزات", ReservationItems: "بنود الحجز", Invoices: "الفواتير", Payments: "الإيصالات", Installments: "الأقساط", Catalog: "الكتب", Settings: "الإعدادات", Phases: "المراحل", PO_Snapshot: "طلب التوريد", Supplier_Invoices: "فواتير المكتبة", Supplier: "حساب المكتبة", Suppliers: "المكتبات", Allocation: "التوزيع", Delivery: "التسليم", Returns: "المرتجعات", Inventory: "المخزن", Expenses: "المصروفات", Cash: "الخزينة", Employees: "الموظفون", Auth: "الدخول" };
+const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
+const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "إجمالي الغلاف", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "الغلاف", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
+const AUD_TONE = a => /DELETE|VOID|REMOVE|CANCEL/.test(a) ? "red" : /ADJUST|DECREASE|CUSTOM|SET_STATUS|PERMISSION|SETTING/.test(a) ? "amber" : /ON_BEHALF|MANUAL/.test(a) ? "blue" : "green";
+Q.aud = Q.aud || { module: "", q: "", days: 7 };
+async function loadAudit() {
+  const el = $("#audList"); if (!el) return;
+  el.innerHTML = UI.skeleton(4);
+  const r = await call("GET_AUDIT_LOG", Object.assign({ limit: 400 }, Q.aud));
+  if (!$("#audList")) return;
+  if (!r.success) { el.innerHTML = UI.empty("history", "تعذر تحميل السجل", r.message); return; }
+  Q.audRows = r.entries;
+  $("#audCount").textContent = `${fmt(r.entries.length)} من ${fmt(r.total)} حركة`;
+  el.innerHTML = audList(r.entries);
+}
+function audDiff(a) {
+  let b = {}, c = {}; try { b = a.before ? JSON.parse(a.before) : {}; } catch (_) { b = { قيمة: a.before }; } try { c = a.after ? JSON.parse(a.after) : {}; } catch (_) { c = { قيمة: a.after }; }
+  const keys = [...new Set([...Object.keys(b || {}), ...Object.keys(c || {})])].filter(k => JSON.stringify((b || {})[k]) !== JSON.stringify((c || {})[k])).slice(0, 14);
+  if (!keys.length) return "";
+  const v = x => x === undefined || x === null || x === "" ? "—" : esc(typeof x === "object" ? JSON.stringify(x) : String(x)).slice(0, 120);
+  return `<div class="mt-2 rounded-xl bg-slate-50 p-2.5 text-[12px] grid grid-cols-[auto_1fr_auto_1fr] gap-x-2 gap-y-1 items-start">${keys.map(k => `<span class="text-slate-500 font-semibold">${esc(AUD_F[k] || k)}</span><span class="text-rose-600 line-through break-all">${v((b || {})[k])}</span><span class="text-slate-300">←</span><span class="text-emerald-700 break-all">${v((c || {})[k])}</span>`).join("")}</div>`;
+}
+function audList(rows) {
+  if (!rows.length) return UI.empty("history", "لا حركات مطابقة", "جرّب توسيع المدة أو إزالة الفلتر.");
+  const { b } = maps(); let lastDay = "";
+  return `<ul class="relative">${rows.map((a, i) => { const dayS = a.t.slice(0, 10), head = dayS !== lastDay ? (lastDay = dayS, `<li class="text-[12px] font-bold text-slate-500 mt-4 mb-2 first:mt-0">${esc(dayS)}</li>`) : "";
+    const tone = AUD_TONE(a.action), dot = { red: "bg-rose-500", amber: "bg-amber-500", blue: "bg-sky-500", green: "bg-emerald-500" }[tone];
+    const detail = a.module === "ReservationItems" ? `<div class="text-[12.5px] text-slate-600 mt-0.5">${esc(bookName(b, a.book))} · <span class="num">${fmt(a.oldQty)} ← ${fmt(a.newQty)}</span></div>${a.rule ? `<div class="text-[11.5px] text-slate-400 mt-0.5">${esc(a.rule)}</div>` : ""}` : "";
+    return head + `<li class="flex gap-3 pb-3"><span class="mt-1.5 w-2.5 h-2.5 rounded-full shrink-0 ${dot}"></span><div class="flex-1 min-w-0 rounded-2xl ring-1 ring-slate-100 p-3 ${a.before || a.after ? "cursor-pointer hover:bg-slate-50" : ""}" ${a.before || a.after ? `data-act="audOpen" data-id="${i}"` : ""}>
+      <div class="flex flex-wrap items-center justify-between gap-2"><div class="font-semibold text-[13.5px] text-slate-900">${esc(AUD_ACT[a.action] || a.action)} <span class="pill pill-gray !text-[10.5px]">${esc(AUD_MOD[a.module] || a.module)}</span></div><span class="text-[11.5px] text-slate-400 num">${esc(a.t.slice(11, 16))}</span></div>
+      <div class="text-[12px] text-slate-500 mt-0.5">${ic("user", "inline -mt-0.5")} ${esc(a.user)}${a.role && a.role !== "EMPLOYEE" ? " · " + esc(ar(a.role)) : ""} · <span class="num">${esc(a.key)}</span></div>${detail}<div class="aud-d" data-i="${i}"></div></div></li>`; }).join("")}</ul>`;
+}
+on("audOpen", i => { const el = $(`.aud-d[data-i="${i}"]`); if (!el) return; el.innerHTML = el.innerHTML ? "" : (audDiff(Q.audRows[i]) || `<div class="mt-2 text-[12px] text-slate-400">لا تفاصيل إضافية.</div>`); });
+Router.add("/a/audit", view => {
+  const f = Q.aud;
+  view.innerHTML = UI.pageHead("سجل التعديلات", "من عدّل ماذا ومتى — اضغط على أي حركة لرؤية التفاصيل قبل وبعد")
+    + `<section class="card card-pad"><div class="flex flex-wrap items-center gap-2 mb-3">${searchBox("audQ", f.q, "بحث بالاسم أو الرقم أو العملية")}
+      <select class="input !h-10 !w-auto !text-sm" data-change="audF" data-k="module"><option value="">كل الأقسام</option>${Object.keys(AUD_MOD).map(k => `<option value="${k}" ${f.module === k ? "selected" : ""}>${AUD_MOD[k]}</option>`).join("")}</select>
+      <div class="scroll-x !mx-0 !px-0">${[[1, "اليوم"], [7, "أسبوع"], [30, "شهر"], [0, "الكل"]].map(d => `<button class="chip !h-9" data-act="audDays" data-id="${d[0]}" aria-pressed="${n(f.days) === d[0]}">${d[1]}</button>`).join("")}</div>
+      <span id="audCount" class="text-[12px] text-slate-400 mr-auto"></span></div><div id="audList"></div></section>`;
+  loadAudit();
+});
+let audT = null;
+on("audQ", v => { Q.aud.q = v.trim(); clearTimeout(audT); audT = setTimeout(loadAudit, 400); });
+on("audF", (v, el) => { Q.aud[el.dataset.k] = v; loadAudit(); });
+on("audDays", v => { Q.aud.days = n(v); Shell.rerender(); });
