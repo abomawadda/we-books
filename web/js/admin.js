@@ -33,8 +33,58 @@ const NEXT = {
   Closed: ["جمّد الحصر وأرسل طلب التوريد", "go", "/a/po"], Ordered: ["أدخل فاتورة المكتبة ونتيجة الجرد", "go", "/a/receive"], Receiving: ["شغّل التوزيع بالأسبقية", "go", "/a/alloc"],
   Delivering: ["سلّم الكتب وحصّل المقدمات", "go", "/a/delivery"], Completed: ["المرحلة مكتملة — راجع التصفية", "go", "/a/reports"]
 };
+/* ---------- ملخصات عامة (لا تحتاج مرحلة): جاهزية الأسعار، الأعضاء، صحة المهام الليلية ---------- */
+const STAGE_ORDER = () => [...new Set(((A().catalog || {}).grades || []).map(g => g.stage))];
+function overviewKpis() {
+  const d = A(), bk = d.books.filter(x => x.Book_Status !== "Discontinued");
+  const pricing = bk.filter(x => x.Book_Status === "Pricing").length, priced = bk.length - pricing;
+  const active = d.employees.filter(e => !/موقوف|Suspended|Inactive/i.test(e.Employment_Status || "")).length;
+  return `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
+    ${UI.kpi("أعضاء المبادرة", fmt(d.employees.length), { icon: "users", tone: "brand", foot: `${fmt(active)} نشط · مزامنة يومية من MyNekaba` })}
+    ${UI.kpi("الكتب في الدليل", fmt(bk.length), { icon: "library-big", tone: "gray", foot: `${fmt(new Set(bk.map(x => x.Publisher)).size)} ناشر · ${fmt(new Set(bk.map(x => x.Subject)).size)} مادة` })}
+    ${UI.kpi("كتب مسعّرة", fmt(priced), { icon: "badge-check", tone: priced === bk.length ? "green" : "brand", pct: bk.length ? priced / bk.length * 100 : 0, foot: bk.length ? Math.round(priced / bk.length * 100) + "% من الدليل" : "" })}
+    ${UI.kpi("جاري التسعير", fmt(pricing), { icon: "hourglass", tone: pricing ? "amber" : "green", foot: pricing ? `<a href="#/a/books" data-act="goPricing" class="text-brand-700 font-semibold">سعّرها الآن ←</a>` : "كل الكتب مسعّرة" })}
+  </div>`;
+}
+function pricingByStage() {
+  const bk = A().books.filter(x => x.Book_Status !== "Discontinued"), g = {};
+  bk.forEach(x => { const k = x.Stage || "أخرى"; g[k] = g[k] || [0, 0]; g[k][1]++; if (x.Book_Status !== "Pricing") g[k][0]++; });
+  const ord = STAGE_ORDER(), keys = Object.keys(g).sort((a, b) => (ord.indexOf(a) + 99 * (ord.indexOf(a) < 0)) - (ord.indexOf(b) + 99 * (ord.indexOf(b) < 0)));
+  if (!keys.length) return UI.empty("library-big", "الدليل فارغ");
+  return UI.bars(keys.map(k => ({ label: `${k} — ${fmt(g[k][0])} من ${fmt(g[k][1])}`, value: Math.round(g[k][0] / g[k][1] * 100), tone: g[k][0] === g[k][1] ? "bg-emerald-500" : "bg-amber-500" })), v => v + "%");
+}
+function healthBox() {
+  setTimeout(loadHealth, 0);
+  return `<div id="sysHealth">${UI.skeleton(1)}</div>`;
+}
+async function loadHealth() {
+  const el = $("#sysHealth"); if (!el) return;
+  const NAMES = { SYNC_MEMBERS: ["مزامنة الأعضاء من MyNekaba", "refresh-cw"], DAILY_JOB: ["المهمة اليومية (الأقساط والحالات)", "calendar-clock"], SNAPSHOT: ["النسخة الاحتياطية اليومية", "database"] };
+  let h = null;
+  try { h = await (await fetch(API_URL + (API_URL.includes("?") ? "&" : "?") + "health")).json(); } catch (_) {}
+  if (!$("#sysHealth")) return;
+  if (!h || !h.jobs) { el.innerHTML = `<div class="text-sm text-slate-500">تعذر قراءة حالة المهام الآن.</div>`; return; }
+  el.innerHTML = `<ul class="space-y-2">${Object.keys(NAMES).map(k => { const j = h.jobs[k] || {}; return `<li class="flex items-center gap-3 rounded-2xl p-3 ring-1 ring-slate-100">
+    <span class="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center ${j.ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}">${ic(NAMES[k][1])}</span>
+    <span class="flex-1"><span class="block font-semibold text-[13.5px] text-slate-800">${NAMES[k][0]}</span><span class="block text-[12px] text-slate-500 num">${j.last ? "آخر تشغيل: " + esc(dt(j.last)) : "لم تعمل بعد"}</span></span>
+    ${j.ok ? pillTxt("سليمة", "green") : pillTxt("تحتاج مراجعة", "red")}</li>`; }).join("")}</ul>`;
+}
+const pillTxt = (t, c) => `<span class="text-[11.5px] font-bold rounded-full px-2.5 py-1 ${c === "green" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}">${t}</span>`;
+on("goPricing", () => { Q.bookF = { st: "Pricing" }; Router.go("/a/books"); });
+function overviewSections() {
+  return `<div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
+    ${UI.section(`${ic("badge-check", "text-brand-600")} جاهزية الأسعار`, "نسبة الكتب المسعّرة في كل مرحلة دراسية", pricingByStage(), can("SAVE_BOOK") ? `<a href="#/a/books" data-act="goPricing" class="btn btn-ghost btn-sm">الكتب ${ic("chevron-left")}</a>` : "")}
+    ${UI.section(`${ic("activity", "text-brand-600")} صحة المنظومة`, "المهام الليلية خلال آخر 26 ساعة", healthBox())}
+  </div>`;
+}
+
 Router.add("/a/dash", view => {
-  if (noPhase(view)) return;
+  if (!APP.phaseId) {
+    view.innerHTML = `<section class="hero text-white rounded-4xl p-5 sm:p-7 shadow-lift"><div class="text-brand-200 text-sm">لوحة القيادة</div><h1 class="text-2xl font-bold mt-0.5">لا توجد مرحلة حجز بعد</h1>
+      <p class="text-brand-200 text-[13px] mt-1">جهّز الأسعار ثم أنشئ أول مرحلة حجز.</p>${can("SAVE_PHASE") ? `<button class="btn btn-gold btn-sm mt-4" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>` : ""}</section>`
+      + overviewKpis() + overviewSections();
+    return;
+  }
   const d = A(), ph = phaseObj(), items = phaseItems(), { b } = maps();
   const invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId);
   const people = new Set(items.map(i => i.Emp_ID)).size;
@@ -65,6 +115,10 @@ Router.add("/a/dash", view => {
   const byM = {}; pays.forEach(p => byM[p.Payment_Method] = (byM[p.Payment_Method] || 0) + n(p.Amount));
   const MCOL = { CASH: "#059669", INSTAPAY: "#7c4bb6", WALLET: "#0ea5e9", PAYROLL: "#f0930b" };
   const recent = pays.slice(-5).reverse(), { e } = maps();
+  const sAgg = {}; items.forEach(i => { const k = (b[i.Book_ID] || {}).Stage || "أخرى"; sAgg[k] = (sAgg[k] || 0) + n(i.Requested_Qty); });
+  const so = STAGE_ORDER(), byStage = Object.keys(sAgg).sort((x, y) => so.indexOf(x) - so.indexOf(y)).map(k => ({ label: k, value: sAgg[k] }));
+  const dAgg = {}; [...new Set(items.map(i => i.Emp_ID))].forEach(id => { const k = (e[id] || {}).Department || "غير محدد"; dAgg[k] = (dAgg[k] || 0) + 1; });
+  const byDept = Object.keys(dAgg).sort((x, y) => dAgg[y] - dAgg[x]).slice(0, 8).map(k => ({ label: k, value: dAgg[k], tone: "bg-sky-500" }));
 
   view.innerHTML = `
   <section class="hero text-white rounded-4xl p-5 sm:p-7 shadow-lift relative overflow-hidden">
@@ -103,7 +157,13 @@ Router.add("/a/dash", view => {
   <div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
     ${UI.section(`${ic("wallet", "text-brand-600")} التحصيل حسب الوسيلة`, "", Object.keys(byM).length ? UI.ring(Object.keys(byM).map(k => ({ label: ar(k), value: byM[k], color: MCOL[k] || "#94a3b8" })), `<div class="text-lg font-bold num">${fmt(sum(Object.values(byM), x => x))}</div><div class="text-[11px] text-slate-500">ج.م</div>`) : UI.empty("wallet", "لا تحصيلات بعد"))}
     ${UI.section(`${ic("receipt", "text-brand-600")} آخر الإيصالات`, "", recent.length ? `<ul class="divide-y divide-slate-100">${recent.map(p => `<li class="flex items-center gap-3 py-2.5">${UI.avatar(empName(e, p.Emp_ID), "w-9 h-9 text-xs")}<div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${esc(empName(e, p.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(p.Receipt_No)} · ${esc(ar(p.Payment_Method))} · ${esc(dt(p.Payment_Date))}</div></div><div class="font-bold num text-emerald-600">${fmt(p.Amount)}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا إيصالات بعد"), `<a href="#/a/cash" class="btn btn-ghost btn-sm">الكل ${ic("chevron-left")}</a>`)}
-  </div>`;
+  </div>
+  <div class="grid gap-4 sm:gap-6 lg:grid-cols-2 mt-4 sm:mt-6">
+    ${UI.section(`${ic("graduation-cap", "text-brand-600")} الحجز حسب المرحلة الدراسية`, "عدد النسخ المحجوزة", byStage.length ? UI.bars(byStage) : UI.empty("graduation-cap", "لا حجوزات بعد"))}
+    ${UI.section(`${ic("building-2", "text-brand-600")} أكثر جهات العمل حجزاً`, "عدد الموظفين الحاجزين", byDept.length ? UI.bars(byDept) : UI.empty("building-2", "لا حجوزات بعد"))}
+  </div>
+  <h2 class="text-lg font-bold text-slate-800 mt-8">ملخص المنظومة</h2>
+  ${overviewKpis()}${overviewSections()}`;
 });
 on("setStatus", async st => { const lbl = (FLOW.find(f => f[0] === st) || [, ar(st)])[1]; await act("SET_PHASE_STATUS", { phaseId: APP.phaseId, status: st }, { title: "تغيير حالة المرحلة", message: `تغيير حالة «${phaseObj().Phase_Name}» إلى: ${lbl}؟` }); });
 on("statusMenu", async () => {
