@@ -29,6 +29,35 @@ const Q = {};
 const empLink = (id, name) => `<button class="text-right hover:text-brand-700 hover:underline" data-act="empProfile" data-id="${esc(id)}">${esc(name || id)}</button>`;   // نصوص البحث لكل صفحة
 const rerenderList = (key, fn) => { const el = $("#" + key); if (el) el.innerHTML = fn(); };
 
+/* ---------- تغيّر الحجوزات بعد تجميد طلب التوريد ----------
+   نقارن الطلب الحالي لكل كتاب في المرحلة بما جُمِّد في طلب التوريد، ونرصد الموظفين الذين عدّلوا بعد التجميد. */
+function poDrift(phaseId) {
+  const d = A(), snaps = d.poSnapshots.filter(p => p.Phase_ID === phaseId);
+  if (!snaps.length) return null;
+  const frozenAt = snaps.map(p => String(p.Frozen_At || "")).sort().pop();
+  const frozen = {}; snaps.forEach(p => { frozen[p.Book_ID] = (frozen[p.Book_ID] || 0) + n(p.Total_Requested_Qty); });
+  const now = {}; d.resItems.filter(i => i.Phase_ID === phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward")
+    .forEach(i => { now[i.Book_ID] = (now[i.Book_ID] || 0) + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)); });
+  const rows = [...new Set([...Object.keys(frozen), ...Object.keys(now)])].map(k => ({ id: k, frozen: frozen[k] || 0, now: now[k] || 0, diff: (now[k] || 0) - (frozen[k] || 0) })).filter(r => r.diff !== 0)
+    .sort((a, b) => b.diff - a.diff);
+  const changed = d.resHeaders.filter(h => h.Phase_ID === phaseId && String(h.Last_Modified_At || "").slice(0, 19) > frozenAt.slice(0, 19));
+  const hasInv = d.supInvHeaders.some(h => h.Phase_ID === phaseId);
+  return { frozenAt, rows, changed, more: rows.filter(r => r.diff > 0).reduce((s, r) => s + r.diff, 0), less: rows.filter(r => r.diff < 0).reduce((s, r) => s - r.diff, 0), hasInv };
+}
+function poDriftBox(dr) {
+  if (!dr || (!dr.rows.length && !dr.changed.length)) return "";
+  const { b, e } = maps();
+  return `<section class="card mb-4 ring-2 ring-amber-300"><div class="px-4 sm:px-5 pt-4 pb-3 flex flex-wrap items-start justify-between gap-3">
+    <div><h2 class="card-title text-amber-800">${ic("triangle-alert", "text-amber-500")} تغيّرت الحجوزات بعد تجميد طلب التوريد</h2>
+      <p class="card-sub">جُمِّد في <span class="num">${esc(dt(dr.frozenAt))}</span> · عدّل بعده ${fmt(dr.changed.length)} موظف${dr.more ? ` · زيادة <b class="text-rose-600">${fmt(dr.more)}</b> نسخة` : ""}${dr.less ? ` · نقص <b class="text-emerald-600">${fmt(dr.less)}</b> نسخة` : ""}</p></div>
+    ${!dr.hasInv && can("GENERATE_PO_SNAPSHOT") ? `<button class="btn btn-gold btn-sm" data-act="freezePO">${ic("refresh-cw")} أعد تجميد الحصر</button>` : `<span class="text-[12px] text-amber-700 max-w-xs">استُلمت فاتورة على المرحلة: اطلب الزيادة من المكتبة كتوريد إضافي، أو تُوزَّع بالأسبقية من المتاح.</span>`}</div>
+    <div class="px-4 sm:px-5 pb-4 grid gap-4 lg:grid-cols-2">
+      <div>${dr.rows.length ? UI.table([{ t: "الكتاب", v: r => `<b>${esc(bookName(b, r.id))}</b><div class="text-[11px] text-slate-400 num">${esc(r.id)}</div>` }, { t: "في الطلب", cls: "num", v: r => fmt(r.frozen) }, { t: "الآن", cls: "num", v: r => fmt(r.now) },
+        { t: "الفرق", cls: "num", v: r => `<b class="${r.diff > 0 ? "text-rose-600" : "text-emerald-600"}">${r.diff > 0 ? "+" : ""}${fmt(r.diff)}</b>` }], dr.rows, { maxH: 260, cardsOnMobile: false }) : `<div class="text-sm text-slate-500">لا فرق في الكميات (تغيّر توزيع الكتب بين الموظفين فقط).</div>`}</div>
+      <div><div class="label">الموظفون الذين عدّلوا بعد التجميد</div>${dr.changed.length ? `<ul class="divide-y divide-slate-100 max-h-[260px] overflow-auto">${dr.changed.map(h => `<li class="flex items-center justify-between gap-2 py-2 text-[13px]"><span>${empLink(h.Emp_ID, empName(e, h.Emp_ID))}${h.Res_Status === "Cancelled" ? ` ${pill("", "ألغى", "red")}` : ""}</span><span class="text-[11.5px] text-slate-400 num">${esc(dt(h.Last_Modified_At))}</span></li>`).join("")}</ul>` : `<div class="text-sm text-slate-500">—</div>`}</div>
+    </div></section>`;
+}
+
 // ============================================================ لوحة القيادة
 const FLOW = [["Open", "الحجز", "calendar-check"], ["Closed", "إغلاق الحجز", "lock"], ["Ordered", "طلب التوريد", "clipboard-list"], ["Receiving", "الاستلام والجرد", "truck"], ["Delivering", "التوزيع والتسليم", "package-check"], ["Completed", "الإغلاق", "circle-check"]];
 const NEXT = {
@@ -101,6 +130,8 @@ Router.add("/a/dash", view => {
   // تنبيهات قابلة للتنفيذ
   const alerts = [];
   const notPaidDown = invs.filter(i => n(i.Total_Paid_Amount) < n(i.Down_Payment_Required)).length;
+  const drift = poDrift(APP.phaseId);
+  if (drift && (drift.rows.length || drift.changed.length)) alerts.unshift(["triangle-alert", "red", `تغيّرت الحجوزات بعد طلب التوريد`, `${fmt(drift.changed.length)} موظف عدّل${drift.more ? ` · زيادة ${fmt(drift.more)} نسخة تحتاج توريداً` : ""}${drift.less ? ` · نقص ${fmt(drift.less)}` : ""}`, "/a/po"]);
   if (waiting) alerts.push(["hourglass", "amber", `${waiting} نسخة في قائمة الانتظار`, "أدخل فاتورة النواقص وشغّل التوزيع، أو رحّلهم للمرحلة التالية.", "/a/alloc"]);
   if (notPaidDown) alerts.push(["hand-coins", "amber", `${notPaidDown} موظف لم يسدد المقدم`, "لن يُسلَّم قبل سداد المقدم.", "/a/collect"]);
   const openPO = d.poSnapshots.filter(p => p.Line_Status === "Open").reduce((s, p) => s + n(p.Outstanding_Qty), 0);
@@ -399,6 +430,7 @@ Router.add("/a/po", view => {
   const snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId);
   view.innerHTML = UI.pageHead("الحصر وطلب التوريد", "يُخصم المخزون الحر والنواقص المستحقة على المكتبة بعد نصيب المنتظرين من المراحل السابقة",
     lockedBtn("GENERATE_PO_SNAPSHOT", `<button class="btn btn-gold btn-sm" data-act="freezePO">${ic("lock")} تجميد الحصر</button>`) + (snaps.length ? `<button class="btn btn-outline btn-sm" data-act="exportPO">${ic("download")} تصدير طلب التوريد</button>` : ""))
+    + poDriftBox(poDrift(APP.phaseId))
     + `<div class="grid grid-cols-3 gap-3 sm:gap-4 mb-4">${UI.kpi("كتب مختلفة", fmt(live.length), { icon: "library", tone: "brand" })}${UI.kpi("نسخ محجوزة", fmt(sum(live, "req")), { icon: "book-open", tone: "blue" })}${UI.kpi("المطلوب من المكتبة", fmt(sum(snaps, "Net_Order_To_Supplier_Qty")), { icon: "truck", tone: "green", foot: snaps.length ? "بعد التجميد" : "لم يُجمَّد بعد" })}</div>`
     + UI.section(`${ic("clipboard-list", "text-brand-600")} الحجوزات الحالية`, "تجميع لحظي يتغير مع حجوزات الموظفين", UI.table([
       { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.id))}</b><div class="text-[11.5px] text-slate-400">${esc(x.id)}</div>` },
@@ -818,6 +850,7 @@ Router.add("/a/res", view => {
   const its = phaseItems(), rel = its.filter(i => i.Beneficiary);
   view.innerHTML = UI.pageHead("الحجوزات", `${esc(phaseObj().Phase_Name)} · إضافة وتعديل وحذف الحجز نيابة عن الموظف`,
       lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-primary btn-sm" data-act="resNew">${ic("plus")} حجز لموظف</button>`))
+    + (() => { const dr = poDrift(APP.phaseId); return dr && (dr.rows.length || dr.changed.length) ? `<a href="#/a/po" class="mb-4 flex items-center gap-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 p-3.5 text-sm">${ic("triangle-alert", "text-amber-500 text-lg")}<span class="flex-1">تغيّرت الحجوزات بعد تجميد طلب التوريد (${fmt(dr.changed.length)} موظف). راجع الفرق في صفحة الحصر.</span>${ic("chevron-left")}</a>` : (dr ? `<div class="mb-4 rounded-2xl bg-sky-50 ring-1 ring-sky-100 text-sky-900 p-3 text-[13px] flex gap-2">${ic("info", "mt-0.5")}طلب التوريد مُجمَّد؛ أي تعديل الآن يظهر تنبيهاً بالفرق في صفحة الحصر.</div>` : ""); })()
     + `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">${UI.kpi("حجوزات سارية", fmt(act1.length), { icon: "notebook-pen", tone: "brand" })}${UI.kpi("النسخ", fmt(sum(its, "Requested_Qty")), { icon: "book-open", tone: "blue" })}${UI.kpi("نسخ للأقارب", fmt(sum(rel, "Requested_Qty")), { icon: "users", tone: "gray", foot: `${fmt(new Set(rel.map(i => i.Emp_ID + i.Beneficiary)).size)} قريب` })}${UI.kpi("ملغاة", fmt(all.length - act1.length), { icon: "ban", tone: "red" })}</div>
     <section class="card card-pad"><div class="flex flex-wrap items-center gap-3 mb-4">${searchBox("qRes", Q.res, "بحث بالموظف أو جهة العمل أو القريب")}
       <div class="scroll-x !mx-0 !px-0">${[["", "السارية"], ["c", "الملغاة"]].map(f => `<button class="chip !h-9" data-act="resF" data-id="${f[0]}" aria-pressed="${(Q.resF || "") === f[0]}">${f[1]}</button>`).join("")}</div>
@@ -880,7 +913,8 @@ function edBody() {
   const groups = {}; Object.keys(s.lines).forEach(k => { const ben = k.split(SEP)[1] || ""; (groups[ben] = groups[ben] || []).push(k); });
   const benOrder = ["", ...s.bens.filter(x => groups[x] || x === s.ben)];
   const sel = (k, label, opts) => `<select class="input !h-10 !text-sm" data-change="edF" data-k="${k}"><option value="">${label}</option>${opts.map(o => `<option ${s[k] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
-  return `
+  const frozen = A().poSnapshots.some(p => p.Phase_ID === APP.phaseId);
+  return `${frozen ? `<div class="mb-3 rounded-xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 text-[12.5px] p-2.5 flex gap-2">${ic("triangle-alert", "text-amber-500 mt-0.5")}طلب التوريد مُجمَّد لهذه المرحلة؛ أي زيادة ستظهر كفرق يحتاج توريداً إضافياً.</div>` : ""}
   <div class="mb-3"><div class="label">الحجز لـ</div><div class="flex flex-wrap gap-1.5">${benChip("", `${ic("user")} العضو وأبناؤه`)}${s.bens.map(x => benChip(x, `${ic("users")} ${esc(x)}`)).join("")}<button class="chip !h-8 !text-xs" data-act="edAddBen">${ic("plus")} قريب</button></div></div>
   <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto_auto] gap-2">${searchBox("edQ", s.q, "ابحث عن كتاب بالاسم أو الكود")}${sel("grade", "كل الصفوف", (c.grades || []).map(g => g.label))}${sel("subject", "كل المواد", c.subjects || [])}</div>
   <div class="mt-2 max-h-56 overflow-y-auto rounded-xl ring-1 ring-slate-100">${found.length ? `<ul class="divide-y divide-slate-100">${found.map(x => { const k = x.Book_ID + SEP + s.ben, qty = s.lines[k] || 0;
