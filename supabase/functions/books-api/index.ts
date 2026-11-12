@@ -168,6 +168,21 @@ async function syncMembers() {
     total: members.length, added: r.added, updated: r.updated, skipped: r.skipped, demoRemoved: d.removed };
 }
 
+// ---------------- متابعة المهام الليلية ----------------
+const logJob = (job: string, ok: boolean, message: string) =>
+  sql`insert into books.job_runs (job, ok, message) values (${job}, ${ok}, ${message.slice(0, 500)})`.catch(() => {});
+// فحص الصحة (GET ?health): هل نجحت كل مهمة ليلية خلال آخر 26 ساعة؟ لا يكشف أي بيانات
+async function health() {
+  const rows = await sql`select job, bool_or(ok) filter (where at > now() - interval '26 hours') as ok_recent,
+      (array_agg(ok order by at desc))[1] as last_ok, max(at) as last_at from books.job_runs group by job`;
+  const jobs: Record<string, any> = {};
+  for (const j of ['SYNC_MEMBERS', 'DAILY_JOB', 'SNAPSHOT']) {
+    const r = rows.find((x: any) => x.job === j);
+    jobs[j] = { ok: !!(r && r.ok_recent && r.last_ok), last: r ? r.last_at : null };
+  }
+  return { success: Object.values(jobs).every((j: any) => j.ok), jobs };
+}
+
 const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
@@ -180,7 +195,9 @@ async function handle(action: string, payload: any, token: string) {
   if (action === 'DAILY_JOB') {
     const k = await sql`select value from books.config where key = 'cron_key'`;
     if (!k.length || !payload || typeof payload.key !== 'string' || payload.key !== k[0].value) return { success: false, message: 'غير مصرح.' };
-    await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; });
+    try { await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; }); }
+    catch (e) { await logJob('DAILY_JOB', false, String(e?.message || e)); throw e; }
+    await logJob('DAILY_JOB', true, 'تم');
     return { success: true, message: 'تم تنفيذ المهمة اليومية.' };
   }
   // مزامنة الأعضاء: من الجدولة الليلية (مفتاح cron) أو يدوياً من حساب Admin
@@ -189,7 +206,8 @@ async function handle(action: string, payload: any, token: string) {
     const byCron = k.length && payload && typeof payload.key === 'string' && payload.key === k[0].value;
     const s: any = byCron ? null : await verify(token);
     if (!byCron && !(s && s.userType === 'ADMIN' && s.role === 'Admin')) return { success: false, message: 'هذه العملية لمدير المنظومة فقط.' };
-    return await syncMembers();
+    try { const r = await syncMembers(); await logJob('SYNC_MEMBERS', true, r.message); return r; }
+    catch (e) { await logJob('SYNC_MEMBERS', false, String(e?.message || e)); throw e; }
   }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);
@@ -207,6 +225,7 @@ async function handle(action: string, payload: any, token: string) {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   await ready;
+  if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) { const h = await health(); return reply(h, h.success ? 200 : 503); }
   if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION, db: dbMode });
   let body: any;
   try { body = JSON.parse(await req.text()); } catch { return reply({ success: false, message: 'طلب غير صالح.' }, 400); }
