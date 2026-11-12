@@ -188,7 +188,7 @@ const UI = {
   /** أعمدة أفقية بسيطة: [{label, value, tone}] */
   bars(items, fmtFn) {
     const mx = Math.max(1, ...items.map(i => n(i.value)));
-    return `<div class="space-y-3">${items.map(i => `<div><div class="flex justify-between text-[13px] mb-1"><span class="font-semibold text-slate-700 truncate">${esc(i.label)}</span><span class="num text-slate-500">${fmtFn ? fmtFn(i.value) : fmt(i.value)}</span></div>
+    return `<div class="space-y-3">${items.map(i => `<div${i.act ? ` role="button" tabindex="0" class="cursor-pointer rounded-lg -mx-1 px-1 hover:bg-slate-50" data-act="${i.act}" data-id="${esc(i.id)}"` : ""}><div class="flex justify-between text-[13px] mb-1"><span class="font-semibold text-slate-700 truncate">${esc(i.label)}</span><span class="num text-slate-500">${fmtFn ? fmtFn(i.value) : fmt(i.value)}</span></div>
       <div class="h-2.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full ${i.tone || "bg-brand-600"}" style="width:${n(i.value) / mx * 100}%"></div></div></div>`).join("")}</div>`;
   },
   /** مخطط حلقي متعدد الأجزاء: [{label, value, color}] */

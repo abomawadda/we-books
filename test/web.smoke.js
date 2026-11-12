@@ -78,6 +78,10 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   const routes = ['dash', 'books', 'phases', 'suppliers', 'employees', 'settings', 'po', 'receive', 'alloc', 'delivery', 'collect', 'cash', 'supplier', 'expenses', 'reports'];
   for (const r of routes) { await go('/a/' + r); check(view().length > 40 && !/تعذر عرض الصفحة/.test(view()), 'admin page ' + r); }
 
+  // الحاجزون لكتاب
+  await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
+  check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');
+  await click('[data-close]', dialog()); await settle();
   // كتاب جديد عبر النموذج
   await go('/a/books'); await click('[data-act="bookForm"]');
   fill('grade', '5 ابتدائي'); fill('schoolTypes', 'حكومي،لغات'); fill('publisher', 'الأضواء'); fill('subject', 'علوم'); fill('bookPart', 'شرح'); fill('coverPrice', '200'); fill('supplierDiscountPct', '30');
