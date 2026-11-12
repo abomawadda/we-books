@@ -68,6 +68,37 @@ const Emp = {
 };
 
 // ============================================================ الرئيسية
+// ============================================================ العد التنازلي للمواعيد (فتح الحجز، إغلاقه، التسليم)
+const toDate = v => { if (!v) return null; const d = new Date(String(v).replace(" ", "T")); return isNaN(d) ? null : d; };
+/** الموعد القادم المهم للموظف في المرحلة: {label, at, art, tone} */
+function nextMilestone(ph) {
+  if (!ph) return null;
+  const now = new Date(), st = toDate(ph.Start_DateTime), en = toDate(ph.End_DateTime), dl = toDate(ph.Delivery_Start_Date);
+  if (dl && /^\d{4}-\d{2}-\d{2}$/.test(String(ph.Delivery_Start_Date))) dl.setHours(9, 0, 0, 0);
+  if (st && st > now) return { label: "يفتح الحجز بعد", at: st, art: "calendar", note: "جهّز قائمة كتب أولادك من دلوقتي ✍️" };
+  if (ph.Booking_Open && en && en > now) return { label: "يقفل الحجز بعد", at: en, art: "books", note: "احجز أو عدّل قبل ما الوقت يخلص ⏳" };
+  if (dl && dl > now) return { label: "يبدأ التسليم بعد", at: dl, art: "truck", note: "كتبك في الطريق، جهّز المقدم 📦" };
+  return null;
+}
+function countdownHTML(m) {
+  if (!m) return "";
+  const box = (k, l) => `<div class="flex-1 rounded-2xl bg-white ring-1 ring-brand-100 py-2.5 text-center shadow-soft"><div class="font-display text-[26px] sm:text-3xl font-bold text-brand-800 num leading-none" data-cd="${k}">--</div><div class="text-[11px] text-slate-500 mt-1">${l}</div></div>`;
+  return `<section class="card card-pad mt-4 lg:mt-6 overflow-hidden"><div class="flex items-center gap-4">
+    <div class="hidden sm:block shrink-0">${Art[m.art]("w-36 h-auto")}</div>
+    <div class="flex-1 min-w-0"><div class="flex items-center justify-between gap-2"><h2 class="card-title">${ic("clock", "text-brand-600")} ${esc(m.label)}</h2><span class="text-[12px] text-slate-400 num">${esc(m.at.toLocaleDateString("ar-EG", { weekday: "long", day: "numeric", month: "long" }))}</span></div>
+      <div class="flex gap-2 mt-3" id="cdBox" data-at="${m.at.getTime()}">${box("d", "يوم")}${box("h", "ساعة")}${box("m", "دقيقة")}${box("s", "ثانية")}</div>
+      <div class="text-[12.5px] text-slate-500 mt-2.5">${esc(m.note)}</div></div></div></section>`;
+}
+/** تحديث العداد كل ثانية طالما هو ظاهر */
+function startCountdown() {
+  clearInterval(Emp._cd);
+  const tick = () => { const el = document.getElementById("cdBox"); if (!el) { clearInterval(Emp._cd); return; }
+    let ms = Math.max(0, Number(el.dataset.at) - Date.now()); const v = { d: Math.floor(ms / 864e5), h: Math.floor(ms / 36e5) % 24, m: Math.floor(ms / 6e4) % 60, s: Math.floor(ms / 1e3) % 60 };
+    Object.keys(v).forEach(k => { const x = el.querySelector(`[data-cd="${k}"]`); if (x) x.textContent = String(v[k]).padStart(2, "0"); });
+    if (!ms) { clearInterval(Emp._cd); setTimeout(() => reloadData(), 1500); } };
+  tick(); Emp._cd = setInterval(tick, 1000);
+}
+
 // ============================================================ حالة الكتاب بلغة بسيطة
 // التسلسل: تم الحجز ← جاري التجهيز ← جاري الشحن ← جاهز للتسليم ← استلمته
 const STAGES = [["تم الحجز", "notebook-pen"], ["جاري التجهيز", "boxes"], ["جاري الشحن", "truck"], ["جاهز للتسليم", "package-check"], ["استلمته", "circle-check"]];
@@ -102,7 +133,7 @@ const booksWord = c => c === 1 ? "كتاب واحد" : c === 2 ? "كتابان" 
 Router.add("/e/home", view => {
   const r = APP.emp, u = APP.user, ph = r.activePhase;
   const name = fullName3(u.fullName);
-  if (!ph) { view.innerHTML = UI.empty("calendar-clock", "لا يوجد حجز مفتوح حالياً", "هنبلغك هنا أول ما يفتح الحجز الجديد 🔔"); return; }
+  if (!ph) { view.innerHTML = Art.empty("calendar", "لا يوجد حجز مفتوح حالياً", "تابع إشعارات الإدارة لمعرفة موعد الحجز الجديد 🔔", `<button data-act="contact" class="btn btn-soft btn-sm mt-4">${ic("headset")} تواصل مع المسؤول</button>`); return; }
   const items = Emp.activeItems(), inv = Emp.invoice(), inst = Emp.installments();
   const reqQty = sum(items, "Requested_Qty"), alloc = sum(items, "Allocated_Qty"), deliv = sum(items, "Delivered_Qty");
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
@@ -118,7 +149,7 @@ Router.add("/e/home", view => {
   else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ ✅ ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "عدّل حجزك", href: "#/e/books" };
   else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم`, cta: "التفاصيل", href: "#/e/orders" };
   else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
-  else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "هنبلغك أول ما كتبك تبقى جاهزة للتسليم", cta: "تابع طلبك", href: "#/e/orders" };
+  else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
   else msg = { icon: "lock", title: "الحجز مقفول حالياً", sub: "ما حجزتش في المرحلة دي — استنى المرحلة الجاية", cta: "", href: "" };
 
   const anns = (r.announcements || []).slice(0, 4);
@@ -131,7 +162,7 @@ Router.add("/e/home", view => {
       <div class="relative flex items-start justify-between gap-4">
         <div class="min-w-0">
           <div class="text-brand-200 text-sm">${hi} 👋</div>
-          <h1 class="text-[22px] sm:text-3xl font-bold mt-0.5 leading-snug">${esc(name)}</h1>
+          <h1 class="font-bold mt-0.5 leading-snug break-words" style="font-size:clamp(18px,5.4vw,30px)">${esc(name)}</h1>
           <div class="flex flex-wrap items-center gap-2 mt-3">
             <span class="inline-flex items-center gap-1.5 rounded-full bg-gold-400 text-brand-950 px-3 py-1 text-[12.5px] font-bold">${ic("badge-percent")} خصم ${fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT)}%</span>
             <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[12.5px] font-semibold">${ic("calendar-range")} ${esc(ph.Phase_Name)}</span>
@@ -148,7 +179,9 @@ Router.add("/e/home", view => {
 
   </div>
 
-  ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>${tracker(step)}</section>` : ""}
+  ${countdownHTML(nextMilestone(ph))}
+  ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>
+    <div class="flex items-center gap-3"><div class="hidden sm:block w-28 shrink-0">${Art[["books", "calendar", "truck", "box", "party"][Math.max(0, step)]]("w-full h-auto")}</div><div class="flex-1 min-w-0">${tracker(step)}</div></div></section>` : ""}
   ${next ? `<section class="card card-pad mt-4 lg:mt-6">
       <div class="flex items-center justify-between"><h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2><a href="#/e/pay" class="text-[12.5px] font-semibold text-brand-700">كل الأقساط ←</a></div>
       <div class="mt-3 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4 flex flex-wrap items-end justify-between gap-2">
@@ -169,11 +202,12 @@ Router.add("/e/home", view => {
     <section class="card card-pad ${relOn() && ph.Booking_Open ? "lg:col-span-2" : "sm:col-span-2 lg:col-span-3"}">
       <div class="flex items-center justify-between gap-2"><h2 class="card-title">${ic("smartphone", "text-brand-600")} تدفع إزاي؟</h2><button data-act="contact" class="btn btn-soft btn-xs">${ic("headset")} تواصل مع المسؤول</button></div>
       <ul class="mt-3 space-y-2 text-[13.5px] text-slate-600">
-        <li class="flex gap-2.5">${ic("banknote", "text-emerald-600 mt-0.5")}نقداً لأمين الصندوق وتاخد إيصال</li>
-        <li class="flex gap-2.5">${ic("smartphone", "text-sky-600 mt-0.5")}محفظة أو إنستاباي باسم <b class="text-slate-800">${esc(r.settings.CASH_ACCOUNT_HOLDER || "")}</b> وابعت رقم التحويل</li>
+        <li class="flex gap-2.5">${ic("banknote", "text-emerald-600 mt-1 shrink-0")}<span>نقداً لأمين الصندوق وتاخد إيصال</span></li>
+        <li class="flex gap-2.5">${ic("smartphone", "text-sky-600 mt-1 shrink-0")}<span>محفظة أو إنستاباي باسم <b class="text-slate-800">${esc(r.settings.CASH_ACCOUNT_HOLDER || "")}</b> وابعت رقم التحويل</span></li>
       </ul>
     </section>
   </div>`;
+  startCountdown();
 });
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
@@ -212,7 +246,7 @@ function cartHTML() {
       <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500 num">${fmt(b.Emp_Selling_Price)} × ${APP.cart[id]} = <b class="text-slate-700">${fmt(n(b.Emp_Selling_Price) * APP.cart[id])}</b></div></div>
       ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(id)}" ${APP.cart[id] >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${APP.cart[id]}</span><button data-act="cartDec" data-id="${esc(id)}">${ic(APP.cart[id] === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${APP.cart[id]}</span>`}
     </li>`; }).join("")}</ul>`).join("")
-    : `<div class="text-center py-6 text-slate-400 text-sm">${ic("shopping-cart", "text-3xl mx-auto mb-2 block")}السلة فاضية — اختار كتب أولادك من «احجز» 😊</div>`}
+    : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊")}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
     <div class="flex justify-between text-slate-500"><span>بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
@@ -270,12 +304,12 @@ function renderBookGrid() {
     && (!f.type || String(b.School_Types || "").split("،").includes(f.type)) && (!f.subject || b.Subject === f.subject)
     && (!f.q || (b.Book_Name + " " + b.Subject + " " + b.Publisher + " " + b.Book_ID + " " + b.Grade).toLowerCase().includes(f.q.toLowerCase())))
     .sort((a, b) => (order[a.Grade] - order[b.Grade]) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
-  $("#bookGrid").innerHTML = list.length ? list.map(bookCard).join("") : `<div class="col-span-full">${UI.empty("search", "لا توجد كتب مطابقة", "جرّب تغيير المرحلة الدراسية أو كلمة البحث.")}</div>`;
+  $("#bookGrid").innerHTML = list.length ? list.map(bookCard).join("") : `<div class="col-span-full">${Art.empty("books", "لا توجد كتب مطابقة", "جرّب تغيير المرحلة الدراسية أو كلمة البحث.")}</div>`;
   $("#bookCount").textContent = list.length + " كتاب";
 }
 Router.add("/e/books", view => {
   const r = APP.emp, f = Emp.filter;
-  if (!r.activePhase) { view.innerHTML = UI.empty("calendar-clock", "لا توجد مرحلة حجز", "سيظهر الكتالوج عند فتح مرحلة حجز جديدة."); return; }
+  if (!r.activePhase) { view.innerHTML = Art.empty("calendar", "لا توجد مرحلة حجز", "سيظهر الكتالوج عند فتح مرحلة حجز جديدة."); return; }
   const order = gradeOrder(), byOrder = (a, b) => (order[a] ?? 99) - (order[b] ?? 99);
   const cat = r.catalog || {}, stageOf = {}; (cat.grades || []).forEach(g => { stageOf[g.label] = g.stage; });
   const stages = uniq((cat.grades || []).map(g => g.stage)).filter(st => r.books.some(b => b.Stage === st));
@@ -354,7 +388,7 @@ on("planDownType", v => { APP.plan.downType = v; APP.plan.down = v === "PERCENTA
 on("planCount", v => { APP.plan.count = n(v); Emp.dirty = true; refreshCartViews(); });
 on("planDown", v => { APP.plan.down = v; Emp.dirty = true; const html = planPreview(Emp.planCalc(Emp.totals().net)); $$(".plan-preview").forEach(el => el.innerHTML = html); });
 Router.add("/e/cart", view => {
-  if (!APP.emp.activePhase) { view.innerHTML = UI.empty("shopping-cart", "السلة فاضية"); return; }
+  if (!APP.emp.activePhase) { view.innerHTML = Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊", `<a href="#/e/books" class="btn btn-primary btn-sm mt-4">${ic("library")} ابدأ الحجز</a>`); return; }
   const t = Emp.totals();
   view.innerHTML = `<div class="max-w-xl mx-auto">${UI.pageHead(`${ic("shopping-cart", "text-brand-600")} سلة الكتب`, t.count ? booksWord(t.count) + " · " + esc(APP.emp.activePhase.Phase_Name) : esc(APP.emp.activePhase.Phase_Name), `<a href="#/e/books" class="btn btn-outline btn-sm">${ic("plus")} أضف كتب</a>`)}
     <section class="card card-pad"><div class="cart-body"></div></section></div>`;
@@ -386,7 +420,7 @@ on("submitRes", async () => {
 // ============================================================ حجوزاتي
 Router.add("/e/orders", view => {
   const r = APP.emp, items = Emp.phaseItems(), inv = Emp.invoice(), bm = Emp.bookMap();
-  if (!r.activePhase) { view.innerHTML = UI.empty("package", "لا توجد حجوزات"); return; }
+  if (!r.activePhase) { view.innerHTML = Art.empty("books", "لا توجد حجوزات"); return; }
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   view.innerHTML = `
   ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), (items.length ? `<button class="btn btn-outline btn-sm" data-act="printRes">${ic("download")} طلب الحجز</button>` : "") + (inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} الفاتورة</button>` : ""))}
@@ -406,7 +440,7 @@ Router.add("/e/orders", view => {
           ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
         </article>`;
-      }).join("") : `<div class="card">${UI.empty("shopping-bag", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
+      }).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>
     <aside class="space-y-4 lg:sticky lg:top-24">
       ${inv ? `<section class="card overflow-hidden">
@@ -464,11 +498,11 @@ Router.add("/e/pay", view => {
         <span class="relative z-[1] w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0 ${dot}">${st === "Paid" ? ic("check") : i + 1}</span>
         <div class="flex-1 rounded-2xl bg-slate-50 p-3"><div class="flex items-center justify-between gap-2"><span class="font-bold text-slate-800 text-[14px]">${esc(s.Admin_Custom_Notes || "قسط " + (i + 1))}</span>${pill(st, st === "Scheduled" ? "مجدول" : null)}</div>
           <div class="flex items-center justify-between mt-1.5 text-[13px]"><span class="text-slate-500 flex items-center gap-1">${ic("calendar-range")} ${esc(day(s.Due_Date))}</span><span class="num"><b class="text-slate-900">${fmt(s.Scheduled_Amount)}</b>${n(s.Paid_Amount) ? ` <span class="text-emerald-600 text-xs">(مسدد ${fmt(s.Paid_Amount)})</span>` : ""}</span></div></div></li>`;
-    }).join("")}</ol>` : UI.empty("calendar-clock", "لا يوجد جدول أقساط بعد", "يُنشأ الجدول تلقائياً بعد صدور الفاتورة."))}
+    }).join("")}</ol>` : Art.empty("wallet", "لا يوجد جدول أقساط بعد", "يُنشأ الجدول تلقائياً بعد صدور الفاتورة."))}
     ${UI.section(`${ic("receipt", "text-brand-600")} إيصالات السداد`, "", pays.length ? `<ul class="space-y-2.5">${pays.map(p => `<li class="flex items-center gap-3 rounded-2xl ring-1 ring-slate-100 p-3 ${isTrue(p.Is_Voided) ? "opacity-50" : ""}">
         <span class="w-11 h-11 rounded-xl ${n(p.Amount) < 0 ? "bg-sky-50 text-sky-600" : "bg-emerald-50 text-emerald-600"} flex items-center justify-center text-lg">${ic(p.Payment_Method === "CASH" ? "banknote" : p.Payment_Method === "PAYROLL" ? "building-2" : "smartphone")}</span>
         <div class="flex-1 min-w-0"><div class="font-semibold text-slate-800 text-[14px]">${n(p.Amount) < 0 ? "رد رصيد" : "سداد"} · ${esc(ar(p.Payment_Method))}</div><div class="text-[11.5px] text-slate-400 num">${esc(p.Receipt_No)} · ${esc(dt(p.Payment_Date))}${isTrue(p.Is_Voided) ? " · ملغى" : ""}</div></div>
-        <div class="font-bold num ${n(p.Amount) < 0 ? "text-sky-600" : "text-slate-900"}">${fmt(Math.abs(n(p.Amount)))}</div><button class="icon-btn w-9 h-9" data-act="printRcptE" data-id="${esc(p.Receipt_No)}" aria-label="الإيصال">${ic("download")}</button></li>`).join("")}</ul>` : UI.empty("wallet", "لا توجد مدفوعات بعد"))}
+        <div class="font-bold num ${n(p.Amount) < 0 ? "text-sky-600" : "text-slate-900"}">${fmt(Math.abs(n(p.Amount)))}</div><button class="icon-btn w-9 h-9" data-act="printRcptE" data-id="${esc(p.Receipt_No)}" aria-label="الإيصال">${ic("download")}</button></li>`).join("")}</ul>` : Art.empty("wallet", "لا توجد مدفوعات بعد", "إيصالاتك هتظهر هنا بعد أول سداد."))}
   </div>`;
 });
 
@@ -478,7 +512,7 @@ Router.add("/e/me", view => {
   view.innerHTML = `
   <div class="max-w-2xl mx-auto space-y-4">
     <section class="hero rounded-4xl text-white p-6 flex items-center gap-4 shadow-lift">${UI.avatar(u.fullName, "w-16 h-16 text-xl")}
-      <div class="min-w-0"><h1 class="text-xl font-bold truncate">${esc(u.fullName)}</h1><div class="text-brand-200 text-sm mt-0.5">رقم وظيفي ${esc(u.empId)}</div></div></section>
+      <div class="min-w-0"><h1 class="font-bold leading-snug break-words" style="font-size:clamp(16px,4.6vw,22px)">${esc(u.fullName)}</h1><div class="text-brand-200 text-sm mt-0.5">رقم وظيفي ${esc(u.empId)}</div></div></section>
     <section class="card divide-y divide-slate-100">
       ${[["building-2", "الإدارة", u.department || "—"], ["calendar-check", "التقسيط", r.employee.installmentAllowed ? "مسموح" : "غير مسموح"], ["scale", "الحد الائتماني", moneyTxt(r.employee.creditLimit)], ["badge-percent", "خصم العاملين", fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT) + "%"], ["smartphone", "حساب التحويل", r.settings.CASH_ACCOUNT_HOLDER || "—"]]
         .map(x => `<div class="flex items-center gap-3 px-4 py-3.5"><span class="w-10 h-10 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center">${ic(x[0])}</span><span class="flex-1 text-slate-600 text-[14px]">${x[1]}</span><span class="font-semibold text-slate-900 text-[14px]">${esc(x[2])}</span></div>`).join("")}
