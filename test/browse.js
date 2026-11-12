@@ -44,6 +44,12 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
     await run('admin-' + vp.n, vp, async p => {
       await adminLogin(p);
       for (const r of (process.argv[3] || 'dash,res,books,collect').split(',')) { await p.evaluate(h => location.hash = h, '#/a/' + r); await p.waitForTimeout(500); await shot(p, `a-${vp.n}-${r}`); }
+      if (vp.n === 'd' || vp.n === 'm') {
+        await p.evaluate(() => location.hash = '#/a/books'); await p.waitForTimeout(500); await p.click('[data-act="bulkPrice"]'); await p.waitForTimeout(400);
+        const code = await p.evaluate(() => APP.adm.books[0].Book_ID);
+        await p.fill('[data-input="bpTxt"]', code + '\t150\t25\nXX-1\t10'); await p.click('[data-act="bpPreview"]'); await p.waitForTimeout(700); await shot(p, 'a-' + vp.n + '-bulkprice');
+        await p.evaluate(() => document.querySelectorAll('[role=dialog]').forEach(d => d.closest('.fixed') && d.closest('.fixed').remove()));
+      }
       if (vp.n === 'd') {
         await p.evaluate(() => location.hash = '#/a/res'); await p.waitForTimeout(400);
         await p.click('[data-act="resNew"]'); await p.waitForTimeout(300); await p.fill('[data-input="qPickEmp"]', '100'); await p.waitForTimeout(300); await shot(p, 'a-d-pick');

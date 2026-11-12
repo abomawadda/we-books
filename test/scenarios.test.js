@@ -248,4 +248,16 @@ const lgE = ok(api('GET_AUDIT_LOG', { empId: '1001' }, coord), 'audit log by emp
 assert.ok(lgE.entries.some(a => a.module === 'ReservationItems') && lgE.entries.every(a => a.uid === '1001' || a.emp === '1001' || a.key.includes('-1001'))); passed++;
 assert.ok(ok(api('GET_AUDIT_LOG', { module: 'Invoices' }, A), 'audit by module').entries.every(a => a.module === 'Invoices')); passed++;
 fail(api('GET_AUDIT_LOG', {}, fin), 'finance cannot read audit by default', /صلاحية/);
+
+// 22) التسعير الجماعي
+const pricingBook = rows(S.BOOKS).find(b => b.Book_Status === 'Pricing');
+if (pricingBook) {
+  const dry = ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: pricingBook.Book_ID, coverPrice: 200 }, { bookId: 'ZZ-999', coverPrice: 10 }, { bookId: pricingBook.Book_ID, coverPrice: 5 }], defaults: { supplierId: 'SUP-01', supplierDiscountPct: 25 }, dryRun: true }, coord), 'bulk price preview');
+  assert.strictEqual(dry.priced, 1); assert.strictEqual(dry.rejected, 2);
+  assert.strictEqual(rows(S.BOOKS).find(b => b.Book_ID === pricingBook.Book_ID).Book_Status, 'Pricing'); passed++;
+  ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: pricingBook.Book_ID.toLowerCase(), coverPrice: '200', supplierDiscountPct: '' }], defaults: { supplierId: 'SUP-01', supplierDiscountPct: 25 } }, coord), 'bulk price apply');
+  const pb = rows(S.BOOKS).find(b => b.Book_ID === pricingBook.Book_ID);
+  assert.strictEqual(pb.Book_Status, 'Available'); assert.strictEqual(pb.Cover_Price, 200); assert.strictEqual(pb.Supplier_Discount_Pct, 25); assert.strictEqual(pb.Emp_Selling_Price, 164); passed++;
+}
+fail(api('BULK_PRICE_BOOKS', { rows: [] }, fin), 'finance cannot bulk price', /صلاحية/);
 console.log('\nALL PASSED:', passed, 'checks');

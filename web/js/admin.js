@@ -273,7 +273,7 @@ function booksTable() {
 Router.add("/a/books", view => {
   const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
+    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
     + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
       ${bookFilters()}
@@ -328,6 +328,64 @@ on("importBooks", async () => {
   const rows = parsePaste(v.txt).map(p => ({ Book_ID: p[0], Book_Name: p[1], Stage: p[2], Grade: p[3], Subject: p[4], Publisher: p[5], Supplier_ID: p[6], Cover_Price: p[7], Supplier_Discount_Pct: p[8] }));
   if (rows.length) await act("BULK_IMPORT_BOOKS", { booksArray: rows });
 });
+// ---------------- التسعير الجماعي: قالب ← لصق من Excel ← معاينة ← اعتماد
+const toEnDigits = v => String(v || "").replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[٫,]/g, ".").replace(/[^\d.]/g, "");
+const BP = { s: null };
+on("bulkPrice", () => {
+  const d = A(), pricing = d.books.filter(b => b.Book_Status === "Pricing").length;
+  BP.s = { txt: "", sup: (d.suppliers[0] || {}).Supplier_ID || "", disc: "", res: null, scope: "pricing" };
+  BP.m = UI.open(`<div id="bpBody">${bpBody()}</div>`, { title: "التسعير الجماعي", sub: `${fmt(pricing)} كتاب بانتظار السعر`, wide: true,
+    footer: `<div class="flex flex-wrap items-center justify-between gap-2"><span id="bpSum" class="text-sm text-slate-500"></span><div class="flex gap-2"><button class="btn btn-outline" data-act="bpPreview">${ic("eye")} معاينة</button><button class="btn btn-primary" data-act="bpApply" disabled>${ic("check")} اعتماد التسعير</button></div></div>` });
+});
+function bpRows() {
+  return parsePaste(BP.s.txt).map(c => c.map(x => String(x).trim())).filter(c => c[0] && /[A-Za-z]/.test(c[0]) && /\d/.test(c[0]))
+    .map(c => c.length >= 5 ? { bookId: c[0], coverPrice: toEnDigits(c[4]), supplierDiscountPct: toEnDigits(c[5] || "") } : { bookId: c[0], coverPrice: toEnDigits(c[1]), supplierDiscountPct: toEnDigits(c[2] || "") });
+}
+function bpBody() {
+  const d = A(), s = BP.s, rows = bpRows();
+  const res = s.res ? s.res.results : null;
+  return `<ol class="grid gap-3 sm:grid-cols-3 text-[12.5px] mb-4">${[["download", "نزّل القالب", "ملف Excel بالكتب وأعمدة السعر فارغة"], ["file-spreadsheet", "املأ الأسعار", "سعر الغلاف وخصم المكتبة % لكل كتاب"], ["upload", "الصق واعتمد", "انسخ الصفوف من Excel والصقها هنا"]].map((x, i) => `<li class="rounded-2xl bg-slate-50 p-3 flex gap-2.5"><span class="w-7 h-7 rounded-full bg-brand-700 text-white font-bold flex items-center justify-center shrink-0">${i + 1}</span><span><b class="block text-slate-800">${x[1]}</b><span class="text-slate-500">${x[2]}</span></span></li>`).join("")}</ol>
+  <div class="flex flex-wrap items-end gap-2 mb-3">
+    <div><div class="label">القالب يشمل</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="scope"><option value="pricing" ${s.scope === "pricing" ? "selected" : ""}>الكتب بانتظار السعر</option><option value="filtered" ${s.scope === "filtered" ? "selected" : ""}>الكتب الظاهرة بالفلاتر الحالية</option><option value="all" ${s.scope === "all" ? "selected" : ""}>كل الكتب</option></select></div>
+    <button class="btn btn-outline btn-sm !h-10" data-act="bpTemplate">${ic("download")} تنزيل القالب</button>
+    <div class="mr-auto"><div class="label">المكتبة الافتراضية</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="sup">${d.suppliers.map(x => `<option value="${esc(x.Supplier_ID)}" ${s.sup === x.Supplier_ID ? "selected" : ""}>${esc(x.Supplier_Name)}</option>`).join("")}</select></div>
+    <div><div class="label">خصم المكتبة الافتراضي %</div><input class="input !h-10 !w-28 num" inputmode="decimal" value="${esc(s.disc)}" placeholder="مثال 25" data-change="bpF" data-k="disc"></div>
+  </div>
+  <textarea class="input h-auto py-2.5 leading-relaxed num" rows="6" dir="ltr" placeholder="P4-012	سلاح التلميذ — عربي	4 ابتدائي	سلاح التلميذ	135	25&#10;أو بالمختصر:  P4-012	135	25" data-input="bpTxt">${esc(s.txt)}</textarea>
+  <div class="text-[12px] text-slate-500 mt-1.5">${rows.length ? `قُرئ ${fmt(rows.length)} سطراً` : "يُقبل القالب كما هو (6 أعمدة) أو 3 أعمدة: الكود، سعر الغلاف، خصم المكتبة. الخصم الفارغ يأخذ الافتراضي."} · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}% مقرَّباً لأعلى جنيه.</div>
+  ${res ? `<div class="mt-3">${UI.table([
+      { t: "الكتاب", v: r => `<b>${esc(r.name || r.bookId)}</b><div class="text-[11px] text-slate-400 num">${esc(r.bookId)} · سطر ${r.line}</div>` },
+      { t: "الغلاف", cls: "num", v: r => r.ok ? fmt(r.cover) + (n(r.oldCover) && n(r.oldCover) !== n(r.cover) ? `<div class="text-[11px] text-slate-400 line-through">${fmt(r.oldCover)}</div>` : "") : "" },
+      { t: "خصم المكتبة", cls: "num", v: r => r.ok ? r.disc + "%" : "" }, { t: "التكلفة", cls: "num", v: r => r.ok ? fmt(r.cost) : "" },
+      { t: "سعر الموظف", cls: "num", v: r => r.ok ? `<b class="text-brand-800">${fmt(r.emp)}</b>` : "" },
+      { t: "الهامش", cls: "num", v: r => r.ok ? `<span class="${r.margin < 0 ? "text-rose-600 font-bold" : "text-emerald-600"}">${fmt(r.margin)}</span>` : "" },
+      { t: "الحالة", v: r => r.ok ? (r.warning ? pill("", r.warning, "amber") : pill("", r.wasPricing ? "سيُتاح للحجز" : "تحديث سعر", "green")) : pill("", r.error, "red") }
+    ], res, { maxH: 320 })}</div>` : ""}`;
+}
+const bpRefresh = () => { const el = $("#bpBody"); if (el) el.innerHTML = bpBody(); const r = BP.s.res, ap = document.querySelector('[data-act="bpApply"]'), sm = $("#bpSum");
+  if (ap) ap.disabled = !(r && r.priced); if (sm) sm.innerHTML = r ? `<b class="text-emerald-600">${fmt(r.priced)}</b> صالح · <b class="text-rose-600">${fmt(r.rejected)}</b> مرفوض` : ""; };
+on("bpTxt", v => { BP.s.txt = v; BP.s.res = null; const ap = document.querySelector('[data-act="bpApply"]'); if (ap) ap.disabled = true; const sm = $("#bpSum"); if (sm) sm.innerHTML = ""; });
+on("bpF", (v, el) => { BP.s[el.dataset.k] = v; BP.s.res = null; bpRefresh(); });
+on("bpTemplate", () => {
+  const d = A(), f = Q.bookF || {}, q = (Q.books || "").toLowerCase(), sc = BP.s.scope;
+  const list = d.books.filter(x => x.Book_Status !== "Discontinued" && (sc === "all" || (sc === "pricing" ? x.Book_Status === "Pricing"
+    : (!q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject + x.Publisher).toLowerCase().includes(q)) && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type)) && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st))));
+  exportCSV("قالب_التسعير", ["الكود", "الكتاب", "الصف", "الناشر", "سعر الغلاف", "خصم المكتبة %"], list.map(x => [x.Book_ID, x.Book_Name, x.Grade, x.Publisher, x.Book_Status === "Pricing" ? "" : x.Cover_Price, x.Book_Status === "Pricing" ? "" : x.Supplier_Discount_Pct]));
+});
+const bpCall = dryRun => call("BULK_PRICE_BOOKS", { rows: bpRows(), defaults: { supplierId: BP.s.sup, supplierDiscountPct: BP.s.disc }, dryRun }, { block: true });
+on("bpPreview", async () => {
+  if (!bpRows().length) return toast("الصق صفوف الأسعار أولاً", "warning");
+  const r = await bpCall(true); if (!r.success) return toast(r.message, "danger");
+  BP.s.res = r; bpRefresh();
+});
+on("bpApply", async () => {
+  const r0 = BP.s.res; if (!r0 || !r0.priced) return;
+  if (!(await UI.confirm({ title: "اعتماد التسعير", message: `تسعير ${fmt(r0.priced)} كتاباً${r0.rejected ? ` (وتجاهل ${fmt(r0.rejected)} سطراً مرفوضاً)` : ""}؟ الكتب المسعّرة تُتاح للحجز فوراً.`, ok: "اعتماد" }))) return;
+  const r = await bpCall(false);
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) { if (BP.m) BP.m.close(); await Admin.load(); }
+});
+
 function parsePaste(txt) { return String(txt || "").trim().split(/\r?\n/).filter(Boolean).map(l => l.split(/\t|,(?=(?:[^"]*"[^"]*")*[^"]*$)/).map(s => s.trim().replace(/^"|"$/g, ""))); }
 
 // ============================================================ المراحل

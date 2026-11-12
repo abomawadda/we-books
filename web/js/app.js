@@ -5,7 +5,7 @@
 
 // صلاحيات العمليات (نسخة للعرض فقط؛ الخادم هو الحَكَم)
 const ACL = {
-  SAVE_SETTING: [], SAVE_SUPPLIER: ["Coordinator"], SAVE_BOOK: ["Coordinator"], BULK_IMPORT_BOOKS: ["Coordinator"], BULK_IMPORT_EMPLOYEES: ["Coordinator"],
+  SAVE_SETTING: [], SAVE_SUPPLIER: ["Coordinator"], SAVE_BOOK: ["Coordinator"], BULK_IMPORT_BOOKS: ["Coordinator"], BULK_PRICE_BOOKS: ["Coordinator"], BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"], SET_PHASE_STATUS: ["Coordinator"], GENERATE_PO_SNAPSHOT: ["Coordinator"], CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"], RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"], MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"], CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
   EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
