@@ -1,4 +1,4 @@
-// تشغيل منطق apps-script/Code.gs كما هو (عبر new Function، بلا node:vm) مع استبدال DB_Engine (Sheets)
+// تشغيل منطق العمل logic.js (عبر new Function، بلا node:vm) مع ربط DB_Engine
 // بوحدة عمل فوق مخزن: Postgres في Supabase، أو ذاكرة في الاختبارات. يعمل في Deno و Node.
 //
 // المحرك متزامن بينما قاعدة البيانات غير متزامنة: نحمّل الجداول اللازمة داخل transaction،
@@ -9,8 +9,8 @@ const pad = (n, l = 2) => String(n).padStart(l, '0');
 
 /**
  * @param {object} o
- * @param {string} o.code       نص Code.gs
- * @param {(s:string)=>number[]} o.sha256  بايتات SHA-256 لنص UTF-8 (موقّعة كما في Apps Script)
+ * @param {string} o.code       نص logic.js
+ * @param {(s:string)=>number[]} o.sha256  بايتات SHA-256 لنص UTF-8 (بايتات موقّعة -128..127)
  * @param {Function} [o.DateClass]
  */
 export function createRuntime({ code, sha256, DateClass }) {
@@ -187,7 +187,7 @@ return { callServerApi, DB_Engine, SYSTEM_CONFIG, Util, AuthEngine, TEXT_COLUMNS
   return { E, S, TABLES, HEADERS, run, runSync, apiFn, cache, scopeFor, hints };
 }
 
-/** Date بتوقيت Africa/Cairo (يدعم ما يستخدمه Code.gs: المكوّنات والقراءة) */
+/** Date بتوقيت Africa/Cairo (يدعم ما يستخدمه logic.js: المكوّنات والقراءة) */
 export function cairoDateClass() {
   const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Cairo', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric', hourCycle: 'h23' });
   const comp = t => { const p = {}; fmt.formatToParts(new Date(t)).forEach(x => { p[x.type] = +x.value; }); return p; };

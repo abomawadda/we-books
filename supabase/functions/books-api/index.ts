@@ -1,5 +1,5 @@
-// خادم مبادرة الكتب على Supabase Edge Functions — نفس عقد Apps Script:
-// POST {action, payload, token} ← JSON. منطق العمل كله من Code.gs بلا تعديل (engine.js).
+// خادم مبادرة الكتب على Supabase Edge Functions:
+// POST {action, payload, token} ← JSON. منطق العمل في logic.js ويشغّله engine.js.
 import postgres from 'npm:postgres@3.4.5';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { Buffer } from 'node:buffer';
@@ -7,17 +7,17 @@ import { createRuntime } from './engine.js';
 
 const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 8, prepare: false, idle_timeout: 20 });
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
-// منطق العمل = apps-script/Code.gs من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
+// منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
-const CODE_COMMIT = '512f1608e595910e28893e73eec90f252a7b7602';
-const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/apps-script/Code.gs`;
+const CODE_COMMIT = 'a0ddaa00904903797ea38c60e1f6f22af21275da';
+const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/supabase/functions/books-api/logic.js`;
 let rtP: Promise<any> | null = null;
-const runtime = () => (rtP ||= fetch(CODE_URL).then(r => { if (!r.ok) throw new Error('Code.gs ' + r.status); return r.text(); })
+const runtime = () => (rtP ||= fetch(CODE_URL).then(r => { if (!r.ok) throw new Error('logic.js ' + r.status); return r.text(); })
   .then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
 
 // ---------------- المخزن: Postgres مع أقفال استشارية بدل إعادة المحاولة ----------------
 // عمليات الموظف المحدودة (الحجز): قفل مشترك عام + قفل حصري للموظف ← حجوزات الموظفين تتوازى.
-// باقي عمليات الكتابة: قفل حصري عام ← تسلسل كامل كما في Apps Script. القراءة: لقطة ثابتة بلا أقفال.
+// باقي عمليات الكتابة: قفل حصري عام ← تسلسل كامل. القراءة: لقطة ثابتة بلا أقفال.
 const GLOBAL = 7001;
 const store = {
   transact(fn: any, { readOnly = false, scope = null }: any = {}) {

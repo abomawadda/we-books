@@ -1,22 +1,10 @@
 /**
  * ============================================================================
- * منظومة إدارة مبادرة الكتب الخارجية المدرسية بالتخفيض والتقسيط — الإصدار 2.2.0
- * ملف واحد يضم: النواة + العمليات. يحتاج بجانبه ملف Index.html فقط.
- * احذف أي ملفات .gs أخرى من المشروع (Core.gs / Operations.gs / Code.gs القديم).
+ * منظومة مبادرة الكتب الخارجية المدرسية بالتخفيض والتقسيط — منطق العمل (الإصدار 2.3.0)
+ * يعمل على Supabase: يحمّله ويشغّله engine.js فوق Postgres (schema books).
+ * كان أصله Google Apps Script؛ أُزيلت كل الأجزاء الخاصة بجوجل وبقي المنطق كما هو.
  * ============================================================================
  */
-/**
- * ============================================================================
- * منظومة إدارة مبادرة الكتب الخارجية المدرسية بالتخفيض والتقسيط
- * الملف 1 من 3: النواة — الإعدادات، الجداول، طبقة البيانات، المحرك المالي،
- * المصادقة والصلاحيات، الترقيم التسلسلي، والبيانات التجريبية.
- * الإصدار 2.0
- * ============================================================================
- */
-
-// معرّف ملف Google Sheets الذي يعمل كقاعدة بيانات.
-// يمكن تركه فارغاً إذا كان السكربت مرتبطاً بالشيت نفسه (Extensions > Apps Script).
-const DB_SPREADSHEET_ID = "1gvbF2BhoHMeektLSEFZFqFMWjUQPvEZuQsXdGuVJGiM";
 
 const SYSTEM_CONFIG = {
   APP_TITLE: "منظومة إدارة مبادرة الكتب المدرسية بالتخفيض والتقسيط",
@@ -64,64 +52,6 @@ const TEXT_COLUMNS = ["Emp_ID", "National_ID_Last4", "Mobile", "Phone", "Book_ID
   "Trans_Timestamp", "Trans_Date", "Payment_Date", "Frozen_At", "Issue_Date", "Due_Date", "Invoice_Date",
   "Start_DateTime", "End_DateTime", "Expense_Date", "Timestamp", "Closing_Date", "Approved_At", "Updated_At",
   "Last_Login", "Plan_Base_Date", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Closed_At"];
-
-/**
- * نقطة الدخول لتطبيق الويب.
- * ?diag=1 يعرض فحصاً سريعاً للنسخة المنشورة وقاعدة البيانات (بدون أي بيانات حساسة).
- */
-function doGet(e) {
-  if (e && e.parameter && e.parameter.diag === "1") {
-    return ContentService.createTextOutput(JSON.stringify(runDiagnostics_(), null, 2)).setMimeType(ContentService.MimeType.JSON);
-  }
-  // الواجهة مستضافة على Vercel؛ هذا الرابط واجهة برمجية فقط
-  return ContentService.createTextOutput(JSON.stringify({ ok: true, app: SYSTEM_CONFIG.APP_TITLE, version: SYSTEM_CONFIG.VERSION, api: "POST" }))
-    .setMimeType(ContentService.MimeType.JSON);
-}
-
-/**
- * واجهة برمجية للواجهة المستضافة خارج Google (Vercel).
- * الطلب: POST بنص JSON {action, payload, token} ونوع محتوى text/plain (حتى لا يحتاج المتصفح لطلب تمهيدي CORS).
- * الرد: JSON بنفس شكل ردود callServerApi.
- */
-function doPost(e) {
-  let res;
-  try {
-    const body = JSON.parse((e && e.postData && e.postData.contents) || "{}");
-    res = callServerApi(String(body.action || ""), body.payload || {}, body.token || null);
-  } catch (err) {
-    res = { success: false, message: "طلب غير صالح: " + (err && err.message || err) };
-  }
-  return ContentService.createTextOutput(JSON.stringify(res)).setMimeType(ContentService.MimeType.JSON);
-}
-
-/** فحص ذاتي: شغّله من المحرر (runDiagnostics) أو افتح رابط النشر مع ?diag=1 */
-function runDiagnostics() {
-  const r = runDiagnostics_();
-  console.log(JSON.stringify(r, null, 2));
-  return r;
-}
-
-function runDiagnostics_() {
-  const out = { version: SYSTEM_CONFIG.VERSION, time: Util.now(), ok: true, checks: [] };
-  const add = (name, fn) => {
-    try { out.checks.push({ name: name, ok: true, result: fn() }); }
-    catch (err) { out.ok = false; out.checks.push({ name: name, ok: false, error: String(err && err.message || err) }); }
-  };
-  add("فتح قاعدة البيانات", () => getDb_().getName());
-  add("الجداول", () => getDb_().getSheets().length + " جدول");
-  add("تأسيس/ترقية الجداول", () => { ensureDatabaseInitialized_(); return "تم"; });
-  add("عدد السجلات", () => {
-    const S = SYSTEM_CONFIG.SHEETS;
-    return { settings: DB_Engine.getAllRecords(S.SETTINGS).length, users: DB_Engine.getAllRecords(S.USERS).length,
-      employees: DB_Engine.getAllRecords(S.EMPLOYEES).length, books: DB_Engine.getAllRecords(S.BOOKS).length, phases: DB_Engine.getAllRecords(S.PHASES).length };
-  });
-  add("استدعاء الخادم من الواجهة", () => { const res = callServerApi("GET_PUBLIC_INIT_DATA", {}, null); if (!res.success) throw new Error(res.message); return res.settings.INITIATIVE_TITLE; });
-  return out;
-}
-
-function include(filename) {
-  return HtmlService.createHtmlOutputFromFile(filename).getContent();
-}
 
 // ============================================================================
 // القسم 1: أدوات عامة
@@ -187,73 +117,8 @@ function getDatabaseSchemaDefinition_() {
   ];
 }
 
-function getDb_() {
-  const propId = PropertiesService.getScriptProperties().getProperty("DB_SPREADSHEET_ID");
-  const id = propId || DB_SPREADSHEET_ID;
-  if (id) return SpreadsheetApp.openById(id);
-  const active = SpreadsheetApp.getActiveSpreadsheet();
-  if (!active) throw new Error("لم يتم ربط المنظومة بملف Google Sheets. ضع معرّف الملف في DB_SPREADSHEET_ID.");
-  return active;
-}
-
-/**
- * تأسيس الجداول أو ترقيتها: ينشئ الجداول الناقصة، ويضيف الأعمدة الجديدة في نهاية
- * الجداول القديمة دون المساس بالبيانات. آمن للتشغيل أكثر من مرة.
- */
-function initializeDatabaseSchema(seedDemoData) {
-  const ss = getDb_();
-  const schema = getDatabaseSchemaDefinition_();
-  schema.forEach(def => {
-    let sheet = ss.getSheetByName(def.name);
-    if (!sheet) sheet = ss.insertSheet(def.name);
-    sheet.setRightToLeft(true);
-    sheet.setTabColor(def.color);
-    const lastCol = sheet.getLastColumn();
-    if (lastCol === 0) {
-      writeHeaderRow_(sheet, def.headers, 1, def.color);
-    } else {
-      const existing = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
-      const missing = def.headers.filter(h => existing.indexOf(h) === -1);
-      if (missing.length) writeHeaderRow_(sheet, missing, lastCol + 1, def.color);
-    }
-    applyTextFormats_(sheet);
-  });
-  ["Sheet1", "ورقة1"].forEach(n => {
-    const s = ss.getSheetByName(n);
-    if (s && ss.getSheets().length > 1) ss.deleteSheet(s);
-  });
-  DB_Engine.clearCache();
-  if (seedDemoData !== false) seedInitialData_();
-  return { success: true, message: "تم تأسيس/ترقية جداول قاعدة البيانات (22 جدولاً) بنجاح." };
-}
-
-function writeHeaderRow_(sheet, headers, startCol, color) {
-  const r = sheet.getRange(1, startCol, 1, headers.length);
-  r.setValues([headers]);
-  r.setBackground(color).setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
-  sheet.setFrozenRows(1);
-}
-
-function applyTextFormats_(sheet) {
-  const lastCol = sheet.getLastColumn();
-  if (lastCol === 0) return;
-  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(h => String(h).trim());
-  const maxRows = Math.max(2, sheet.getMaxRows());
-  headers.forEach((h, i) => {
-    if (TEXT_COLUMNS.indexOf(h) !== -1) sheet.getRange(2, i + 1, maxRows - 1, 1).setNumberFormat("@");
-  });
-}
-
-/** يؤسس الجداول أو يرقّيها مرة واحدة لكل إصدار (يضيف الأعمدة الناقصة وتنسيق النص) */
-function ensureDatabaseInitialized_() {
-  const ss = getDb_();
-  const props = PropertiesService.getScriptProperties();
-  if (!ss.getSheetByName(SYSTEM_CONFIG.SHEETS.COUNTERS) || !ss.getSheetByName(SYSTEM_CONFIG.SHEETS.SETTINGS) ||
-      props.getProperty("SCHEMA_VERSION") !== SYSTEM_CONFIG.VERSION) {
-    initializeDatabaseSchema(true);
-    props.setProperty("SCHEMA_VERSION", SYSTEM_CONFIG.VERSION);
-  }
-}
+/** الجداول في Postgres (schema books) — لا يوجد تأسيس هنا */
+function ensureDatabaseInitialized_() {}
 
 // ============================================================================
 // القسم 3: المحرك المالي
@@ -347,127 +212,14 @@ const FinancialEngine = {
 // القسم 4: طبقة الوصول للبيانات مع ذاكرة مؤقتة لكل تنفيذ
 // ============================================================================
 
+// طبقة البيانات: تُستبدل دوالها كلها في engine.js بطبقة Postgres (books.records) داخل transaction
 const DB_Engine = {
-  _cache: {},
-  _sheets: {},
-  clearCache: function() { this._cache = {}; this._sheets = {}; },
-
-  sheet_: function(name) {
-    if (!this._sheets[name]) {
-      const s = getDb_().getSheetByName(name);
-      if (!s) throw new Error("الجدول غير موجود: " + name);
-      this._sheets[name] = s;
-    }
-    return this._sheets[name];
-  },
-
-  /** توسيع الجدول تلقائياً قبل تجاوز آخر صف متاح (الصفوف الجديدة ترث تنسيق النص) */
-  ensureRows_: function(sheet, lastNeededRow) {
-    const max = sheet.getMaxRows();
-    if (lastNeededRow > max) sheet.insertRowsAfter(max, lastNeededRow - max + 500);
-  },
-
-  headers_: function(sheet) {
-    return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(h => String(h).trim());
-  },
-
-  getAllRecords: function(sheetName) {
-    if (this._cache[sheetName]) return this._cache[sheetName].map(r => Object.assign({}, r));
-    const data = this.sheet_(sheetName).getDataRange().getValues();
-    const records = [];
-    if (data.length > 1) {
-      const headers = data[0].map(h => String(h).trim());
-      for (let r = 1; r < data.length; r++) {
-        const row = data[r];
-        if (row.every(v => v === "" || v === null)) continue;
-        const obj = { _rowIndex: r + 1 };
-        for (let c = 0; c < headers.length; c++) {
-          let v = row[c];
-          if (Object.prototype.toString.call(v) === "[object Date]") v = Util.dateStr(v);
-          obj[headers[c]] = v;
-        }
-        records.push(obj);
-      }
-    }
-    this._cache[sheetName] = records;
-    return records.map(r => Object.assign({}, r));
-  },
-
-  toRow_: function(headers, obj) {
-    return headers.map(h => {
-      const v = obj[h];
-      if (v === undefined || v === null) return "";
-      if (TEXT_COLUMNS.indexOf(h) !== -1) return String(v);
-      return v;
-    });
-  },
-
-  insertRecordsBatch: function(sheetName, objectsArray) {
-    if (!objectsArray || objectsArray.length === 0) return 0;
-    const sheet = this.sheet_(sheetName);
-    const headers = this.headers_(sheet);
-    const rows = objectsArray.map(o => this.toRow_(headers, o));
-    const start = sheet.getLastRow() + 1;
-    this.ensureRows_(sheet, start + rows.length - 1);
-    sheet.getRange(start, 1, rows.length, headers.length).setValues(rows);
-    delete this._cache[sheetName];
-    return rows.length;
-  },
-
-  updateRecordByPK: function(sheetName, pkField, pkValue, updatedFieldsObj) {
-    const sheet = this.sheet_(sheetName);
-    const data = sheet.getDataRange().getValues();
-    if (data.length <= 1) return false;
-    const headers = data[0].map(h => String(h).trim());
-    const pkIdx = headers.indexOf(pkField);
-    if (pkIdx === -1) throw new Error("حقل المفتاح " + pkField + " غير موجود في " + sheetName);
-    for (let r = 1; r < data.length; r++) {
-      if (String(data[r][pkIdx]).trim() === String(pkValue).trim()) {
-        const row = data[r].slice();
-        while (row.length < headers.length) row.push("");
-        Object.keys(updatedFieldsObj).forEach(k => {
-          const i = headers.indexOf(k);
-          if (i !== -1) {
-            const v = updatedFieldsObj[k];
-            row[i] = (v === undefined || v === null) ? "" : (TEXT_COLUMNS.indexOf(k) !== -1 ? String(v) : v);
-          }
-        });
-        sheet.getRange(r + 1, 1, 1, headers.length).setValues([row]);
-        delete this._cache[sheetName];
-        return true;
-      }
-    }
-    return false;
-  },
-
-  /** كتابة جدول كامل دفعة واحدة (تستخدم تحت القفل فقط) */
-  overwriteTableData: function(sheetName, objectsArray) {
-    const sheet = this.sheet_(sheetName);
-    const headers = this.headers_(sheet);
-    const lastRow = sheet.getLastRow();
-    if (lastRow > 1) sheet.getRange(2, 1, lastRow - 1, headers.length).clearContent();
-    if (objectsArray && objectsArray.length) {
-      const matrix = objectsArray.map(o => this.toRow_(headers, o));
-      this.ensureRows_(sheet, matrix.length + 1);
-      sheet.getRange(2, 1, matrix.length, headers.length).setValues(matrix);
-    }
-    delete this._cache[sheetName];
-  },
-
-  executeWithLock: function(callbackFn) {
-    const lock = LockService.getScriptLock();
-    if (!lock.tryLock(SYSTEM_CONFIG.LOCK_TIMEOUT_MS)) {
-      throw new Error("النظام مشغول بمعالجة عملية أخرى، يرجى المحاولة بعد ثوانٍ.");
-    }
-    try {
-      this.clearCache();
-      const result = callbackFn();
-      SpreadsheetApp.flush();
-      return result;
-    } finally {
-      lock.releaseLock();
-    }
-  },
+  clearCache: function() {},
+  getAllRecords: function(sheetName) { throw new Error("DB_Engine غير مهيأ"); },
+  insertRecordsBatch: function(sheetName, objectsArray) { throw new Error("DB_Engine غير مهيأ"); },
+  updateRecordByPK: function(sheetName, pkField, pkValue, updatedFieldsObj) { throw new Error("DB_Engine غير مهيأ"); },
+  overwriteTableData: function(sheetName, objectsArray) { throw new Error("DB_Engine غير مهيأ"); },
+  executeWithLock: function(callbackFn) { return callbackFn(); },
 
   logAudit: function(userId, userRole, moduleName, action, recordPK, beforeObj, afterObj) {
     try {
@@ -742,14 +494,6 @@ function seedInitialData_() {
   }
 }
 
-/** إعداد المهام المجدولة: إغلاق المراحل المنتهية وتحديث حالة الأقساط المتأخرة يومياً */
-function setupDailyTriggers() {
-  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === "dailyMaintenanceJob") ScriptApp.deleteTrigger(t); });
-  ScriptApp.newTrigger("dailyMaintenanceJob").timeBased().everyDays(1).atHour(1).create();
-  return "تم ضبط المهمة اليومية.";
-}
-
-
 /**
  * ============================================================================
  * منظومة إدارة مبادرة الكتب الخارجية المدرسية بالتخفيض والتقسيط
@@ -799,7 +543,7 @@ const ACTION_ACL = {
   CLOSE_CASH_DAY: ["Finance"]
 };
 
-/** الدالة التي تستدعيها الواجهة عبر google.script.run */
+/** نقطة تنفيذ العمليات: تستدعيها books-api لكل طلب {action, payload, token} */
 function callServerApi(action, payload, sessionToken) {
   payload = payload || {};
   try {
