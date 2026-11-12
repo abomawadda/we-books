@@ -21,20 +21,32 @@ try {
 const ready = Promise.resolve();
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
-// لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
-const CODE_COMMIT = 'a0ddaa00904903797ea38c60e1f6f22af21275da';
-const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/supabase/functions/books-api/logic.js`;
-let rtP: Promise<any> | null = null;
+// لتحديث المنطق بلا إعادة نشر: update books.config set value = '<commit>' where key = 'logic_commit';
+// (تلتقطه نسخ الخادم خلال 5 دقائق). CODE_COMMIT احتياطي إن لم يوجد الإعداد.
+const CODE_COMMIT = 'dad29b74d0aa523c0ffc5c126f75583b316cb412';
+const codeUrl = (c: string) => `https://raw.githubusercontent.com/abomawadda/we-books/${c}/supabase/functions/books-api/logic.js`;
+let rtP: Promise<any> | null = null, rtCommit = '', rtChecked = 0;
 // يُقرأ أولاً من books.logic؛ وإن لم يوجد يُجلب من GitHub مرة واحدة ويُحفظ هناك (لا اعتماد على GitHub بعدها)
-async function loadLogic() {
-  const [row] = await sql`select code from books.logic where commit_sha = ${CODE_COMMIT}`;
+async function loadLogic(commit: string) {
+  const [row] = await sql`select code from books.logic where commit_sha = ${commit}`;
   if (row) return row.code;
-  const r = await fetch(CODE_URL); if (!r.ok) throw new Error('logic.js ' + r.status);
+  const r = await fetch(codeUrl(commit)); if (!r.ok) throw new Error('logic.js ' + r.status);
   const code = await r.text();
-  await sql`insert into books.logic (commit_sha, code) values (${CODE_COMMIT}, ${code}) on conflict do nothing`;
+  await sql`insert into books.logic (commit_sha, code) values (${commit}, ${code}) on conflict do nothing`;
   return code;
 }
-const runtime = () => (rtP ||= loadLogic().then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
+async function runtime() {
+  if (!rtP || Date.now() - rtChecked > 5 * 60 * 1000) {
+    rtChecked = Date.now();
+    const [c] = await sql`select value from books.config where key = 'logic_commit'`;
+    const commit = (c && c.value) || CODE_COMMIT;
+    if (commit !== rtCommit || !rtP) {
+      rtCommit = commit;
+      rtP = loadLogic(commit).then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; rtCommit = ''; throw e; });
+    }
+  }
+  return rtP;
+}
 
 // ---------------- المخزن: Postgres مع أقفال استشارية بدل إعادة المحاولة ----------------
 // عمليات الموظف المحدودة (الحجز): قفل مشترك عام + قفل حصري للموظف ← حجوزات الموظفين تتوازى.
