@@ -784,7 +784,7 @@ const OperationsEngine = {
       else {
         const title = Util.str(payload.title); Util.require(title, "اكتب عنوان الإعلان.");
         list.unshift({ id: "ANN-" + new Date().getTime(), title: title.slice(0, 120), body: Util.str(payload.body).slice(0, 600), tone: ["info", "success", "warning"].indexOf(payload.tone) !== -1 ? payload.tone : "info",
-          until: Util.str(payload.until), at: Util.now(), by: Util.actor(session) });
+          until: Util.str(payload.until), phaseId: Util.str(payload.phaseId), at: Util.now(), by: Util.actor(session) });
         list = list.slice(0, 20);
       }
       const val = JSON.stringify(list), row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "ANNOUNCEMENTS");
@@ -819,7 +819,7 @@ const OperationsEngine = {
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
       },
-      brand: this.brand_(settings), announcements: this.announcements_().filter(a => !a.until || a.until >= Util.today()),
+      brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT },
       books: books,
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),

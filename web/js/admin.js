@@ -110,7 +110,7 @@ function overviewSections() {
     ${UI.section(`${ic("badge-check", "text-brand-600")} جاهزية الأسعار`, "نسبة الكتب المسعّرة في كل مرحلة دراسية", pricingByStage(), can("SAVE_BOOK") ? `<a href="#/a/books" data-act="goPricing" class="btn btn-ghost btn-sm">الكتب ${ic("chevron-left")}</a>` : "")}
     ${UI.section(`${ic("activity", "text-brand-600")} صحة المنظومة`, "المهام الليلية خلال آخر 26 ساعة", healthBox())}
   </div>
-  <div class="mt-4 sm:mt-6">${UI.section(`${ic("megaphone", "text-brand-600")} الإعلانات للموظفين`, "تظهر في أعلى الصفحة الرئيسية للموظف وفي إشعاراته", annList(), lockedBtn("POST_ANNOUNCEMENT", `<button class="btn btn-primary btn-sm" data-act="annNew">${ic("plus")} إعلان جديد</button>`))}</div>`;
+  <div class="mt-4 sm:mt-6">${UI.section(`${ic("megaphone", "text-brand-600")} الإعلانات للموظفين`, "إشعارات الموظفين: أخبار المرحلة ومواعيد الحجز والتسليم — تظهر في رئيسيته وجرس الإشعارات", annList(), lockedBtn("POST_ANNOUNCEMENT", `<button class="btn btn-primary btn-sm" data-act="annNew">${ic("plus")} إعلان جديد</button>`))}</div>`;
 }
 
 Router.add("/a/dash", view => {
@@ -1178,13 +1178,14 @@ function annList() {
   const list = A().announcements || [];
   if (!list.length) return `<div class="text-sm text-slate-500">لا إعلانات منشورة. مثال: «الحجز يفتح السبت 10 صباحاً» أو «التسليم من مقر النقابة يوم الأحد».</div>`;
   return `<ul class="space-y-2">${list.map(a => `<li class="flex items-start gap-3 rounded-2xl ring-1 ring-slate-100 p-3"><span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${a.tone === "warning" ? "bg-amber-50 text-amber-600" : a.tone === "success" ? "bg-emerald-50 text-emerald-600" : "bg-brand-50 text-brand-600"}">${ic("megaphone")}</span>
-    <div class="flex-1 min-w-0"><b class="block text-[14px]">${esc(a.title)}</b>${a.body ? `<p class="text-[12.5px] text-slate-500 whitespace-pre-line">${esc(a.body)}</p>` : ""}<div class="text-[11px] text-slate-400 mt-1 num">${esc(a.at || "")} · ${esc(a.by || "")}${a.until ? " · حتى " + esc(a.until) : ""}</div></div>
+    <div class="flex-1 min-w-0"><b class="block text-[14px]">${esc(a.title)}</b>${a.body ? `<p class="text-[12.5px] text-slate-500 whitespace-pre-line">${esc(a.body)}</p>` : ""}<div class="text-[11px] text-slate-400 mt-1 num">${esc(a.at || "")} · ${esc(a.by || "")}${a.until ? " · حتى " + esc(a.until) : ""}${a.phaseId ? " · " + esc((A().phases.find(p => p.Phase_ID === a.phaseId) || {}).Phase_Name || a.phaseId) : " · كل المراحل"}</div></div>
     ${can("POST_ANNOUNCEMENT") ? `<button class="icon-btn w-9 h-9 text-rose-500" data-act="annDel" data-id="${esc(a.id)}" aria-label="حذف">${ic("trash-2")}</button>` : ""}</li>`).join("")}</ul>`;
 }
 on("annNew", async () => {
   const v = await UI.form({ title: "إعلان جديد للموظفين", fields: [{ name: "title", label: "العنوان", required: true, placeholder: "مثال: الحجز يفتح السبت 10 صباحاً" }, { name: "body", label: "التفاصيل (اختياري)", type: "textarea", rows: 3 },
-    { name: "tone", label: "النوع", type: "seg", value: "info", options: [["info", "معلومة"], ["success", "خبر سعيد"], ["warning", "تنبيه"]] }, { name: "until", label: "يظهر حتى (اختياري)", type: "date" }], ok: "نشر", icon: "megaphone" });
-  if (v) await act("POST_ANNOUNCEMENT", { op: "add", title: v.title, body: v.body, tone: v.tone, until: v.until });
+    { name: "phaseId", label: "يظهر لموظفي", type: "select", value: APP.phaseId || "", options: [["", "كل المراحل"]].concat(A().phases.map(p => [p.Phase_ID, p.Phase_Name])) },
+    { name: "tone", label: "النوع", type: "seg", value: "info", options: [["info", "معلومة"], ["success", "خبر سعيد"], ["warning", "تنبيه"]] }, { name: "until", label: "يظهر حتى (اختياري)", type: "date" }], ok: "نشر للموظفين", icon: "megaphone" });
+  if (v) await act("POST_ANNOUNCEMENT", { op: "add", title: v.title, body: v.body, tone: v.tone, until: v.until, phaseId: v.phaseId });
 });
 on("annDel", id => act("POST_ANNOUNCEMENT", { op: "delete", id }, { title: "حذف الإعلان", message: "حذف هذا الإعلان من عند الموظفين؟", ok: "حذف", tone: "danger" }));
 /** رسائل واتساب جاهزة للموظف من ملفه */
