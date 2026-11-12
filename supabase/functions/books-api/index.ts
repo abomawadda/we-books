@@ -1,7 +1,7 @@
 // خادم مبادرة الكتب على Supabase Edge Functions:
 // POST {action, payload, token} ← JSON. منطق العمل في logic.js ويشغّله engine.js.
 import postgres from 'npm:postgres@3.4.5';
-import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, createSign, timingSafeEqual } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { createRuntime } from './engine.js';
 
@@ -82,6 +82,46 @@ async function verify(token: string) {
   return t.exp > Date.now() / 1000 ? t.s : null;
 }
 
+// ---------------- أعضاء MyNekaba (Firestore: nekaba2026/employees) — قراءة فقط ----------------
+// يحتاج سر NEKABA_SA_JSON = مفتاح حساب خدمة بصلاحية قراءة Firestore فقط (Cloud Datastore Viewer).
+async function googleToken(sa: any) {
+  const now = Math.floor(Date.now() / 1000);
+  const enc = (o: any) => b64(JSON.stringify(o));
+  const unsigned = enc({ alg: 'RS256', typ: 'JWT' }) + '.' + enc({ iss: sa.client_email, scope: 'https://www.googleapis.com/auth/datastore',
+    aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600 });
+  const sig = createSign('RSA-SHA256').update(unsigned).sign(sa.private_key, 'base64url');
+  const r = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: unsigned + '.' + sig }) });
+  const j = await r.json(); if (!j.access_token) throw new Error('Google token: ' + (j.error_description || j.error));
+  return j.access_token;
+}
+const FIELDS = ['jobId', 'nationalId', 'name', 'phone', 'workplace', 'jobTitle', 'memberState'];
+const fval = (v: any) => v == null ? '' : (v.stringValue ?? v.integerValue ?? v.doubleValue ?? (v.booleanValue != null ? String(v.booleanValue) : ''));
+async function fetchMembers() {
+  const raw = Deno.env.get('NEKABA_SA_JSON');
+  if (!raw) throw new Error('لم يُضبط مفتاح قراءة MyNekaba (NEKABA_SA_JSON).');
+  const sa = JSON.parse(raw);
+  const tok = await googleToken(sa);
+  const base = `https://firestore.googleapis.com/v1/projects/${sa.project_id}/databases/(default)/documents/employees`;
+  const mask = FIELDS.map(f => 'mask.fieldPaths=' + f).join('&');
+  const out: any[] = [];
+  let page = '';
+  do {
+    const r = await fetch(`${base}?pageSize=300&${mask}${page ? '&pageToken=' + encodeURIComponent(page) : ''}`, { headers: { Authorization: 'Bearer ' + tok } });
+    const j = await r.json(); if (!r.ok) throw new Error('Firestore: ' + (j.error?.message || r.status));
+    for (const d of j.documents || []) { const o: any = {}; FIELDS.forEach(f => { o[f] = String(fval(d.fields?.[f])); }); out.push(o); }
+    page = j.nextPageToken || '';
+  } while (page);
+  return out;
+}
+async function syncMembers() {
+  const members = await fetchMembers();
+  const [r] = await sql`select * from books.sync_employees_from_json(${sql.json(members)})`;
+  const [d] = await sql`select books.remove_demo_employees() as removed`;
+  return { success: true, message: `مزامنة MyNekaba: ${members.length} عضو — أُضيف ${r.added}، حُدِّث ${r.updated}، تُجوِّز ${r.skipped} (بيانات ناقصة)، أُزيل ${d.removed} تجريبي.`,
+    total: members.length, added: r.added, updated: r.updated, skipped: r.skipped, demoRemoved: d.removed };
+}
+
 const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
@@ -96,6 +136,14 @@ async function handle(action: string, payload: any, token: string) {
     if (!k.length || !payload || typeof payload.key !== 'string' || payload.key !== k[0].value) return { success: false, message: 'غير مصرح.' };
     await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; });
     return { success: true, message: 'تم تنفيذ المهمة اليومية.' };
+  }
+  // مزامنة الأعضاء: من الجدولة الليلية (مفتاح cron) أو يدوياً من حساب Admin
+  if (action === 'SYNC_MEMBERS') {
+    const k = await sql`select value from books.config where key = 'cron_key'`;
+    const byCron = k.length && payload && typeof payload.key === 'string' && payload.key === k[0].value;
+    const s: any = byCron ? null : await verify(token);
+    if (!byCron && !(s && s.userType === 'ADMIN' && s.role === 'Admin')) return { success: false, message: 'هذه العملية لمدير المنظومة فقط.' };
+    return await syncMembers();
   }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const res = await rt.run(store, action, rt.apiFn(action, payload, null), { readOnly: READ_ONLY.has(action) });

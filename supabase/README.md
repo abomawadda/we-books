@@ -25,13 +25,14 @@ node ../supabase/live.test.mjs                     # اختبار حي على ا
 - النتيجة في `net._http_response`. ملف الإعداد: `supabase/migrations/books_daily_job.sql`.
 
 ## مزامنة الموظفين من MyNekaba
-- `books.sync_employees_from_members()` تقرأ `public.members` (نفس المشروع) وتضيف/تحدّث موظفي المبادرة:
-  `job_id`←الرقم الوظيفي، آخر 4 من `national_id`، `phone` بعد توحيد الصيغة، `workplace`، `job_title`.
-- الحالة: بقرار المستخدم **الجميع مسموح لهم بالحجز** (كل قيم `member_state` في `active_member_states`). لإيقاف حالة ما احذفها من القائمة.
-  القائمة قابلة للتعديل في `books.config` (`active_member_states`). `membership_status` نوع العضوية وليس الحالة.
-- إعدادات المبادرة لكل موظف (التقسيط، الحد الائتماني، الملاحظات) لا تُمس عند التحديث. لا تُحذف بيانات أي موظف.
-- الموظفون التجريبيون 1001/1002/1003 يُزالون تلقائياً بعد أول مزامنة فيها أعضاء حقيقيون (إن لم تكن لهم حركة).
-- تعمل تلقائياً كل ليلة 22:30 UTC، ويدوياً: `select * from books.sync_employees_from_members();`
+- المصدر: أعضاء MyNekaba الحقيقيون في Firestore (`nekaba2026` / مجموعة `employees`).
+- `books-api` بالعملية `SYNC_MEMBERS` يقرأهم بمفتاح حساب خدمة **قراءة فقط** (سر الدالة `NEKABA_SA_JSON`، دور Cloud Datastore Viewer)
+  ثم يستدعي `books.sync_employees_from_json` و`books.remove_demo_employees`.
+- الحقول: `jobId`←الرقم الوظيفي، آخر 4 من `nationalId`، `phone` بعد التوحيد، `workplace`، `jobTitle`، `memberState`.
+- بقرار المستخدم **الجميع مسموح لهم بالحجز** (`active_member_states`). إعدادات المبادرة لكل موظف لا تُمس.
+- الموظفون التجريبيون 1001/1002/1003 يُزالون تلقائياً بعد أول مزامنة حقيقية (إن لم تكن لهم حركة).
+- تعمل كل ليلة 22:30 UTC، ويدوياً من حساب Admin: `call("SYNC_MEMBERS")`، أو `select books.run_member_sync();`
+- ملف الإعداد: `supabase/migrations/books_sync_from_firestore.sql`.
 
 ## المتبقي
 - تغيير كلمات مرور الإدارة المؤقتة وحذف البيانات التجريبية قبل التشغيل الفعلي.
