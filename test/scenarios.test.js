@@ -230,4 +230,14 @@ const anyDeliveredOrPaid = rows(S.EMP_PAYMENTS).some(p => p.Emp_Inv_ID === invA.
 const delRes = api('DELETE_EMP_INVOICE', { invId: invA.Emp_Inv_ID, reason: 'طلب الموظف' }, A);
 if (anyDeliveredOrPaid) { assert.strictEqual(delRes.success, false); passed++; }
 else { assert.ok(delRes.success, delRes.message); assert.ok(!rows(S.EMP_INVOICES).some(i => i.Emp_Inv_ID === invA.Emp_Inv_ID)); passed++; }
+
+// 20) صلاحيات قابلة للتخصيص
+fail(api('SAVE_ROLE_PERMISSIONS', { acl: { RECORD_EMPLOYEE_PAYMENT: ['Warehouse'] } }, fin), 'only admin edits permissions', /صلاحية/);
+fail(api('ADJUST_EMP_INVOICE', { invId: 'x', amount: 0 }, store), 'warehouse cannot adjust by default', /صلاحية/);
+ok(api('SAVE_ROLE_PERMISSIONS', { acl: { ADJUST_EMP_INVOICE: ['Finance', 'Warehouse'], RECORD_EMPLOYEE_PAYMENT: [], SAVE_SETTING: ['Finance'] } }, A), 'admin saves permissions');
+const r20 = api('ADJUST_EMP_INVOICE', { invId: 'x', amount: 0 }, store); assert.ok(!/صلاحية/.test(r20.message), 'warehouse now allowed: ' + r20.message); passed++;
+fail(api('RECORD_EMPLOYEE_PAYMENT', { empInvId: 'x', amount: 1, paymentMethod: 'CASH' }, fin), 'finance revoked', /صلاحية/);
+fail(api('SAVE_SETTING', { key: 'MAX_RELATIVES', value: 3 }, fin), 'fixed actions cannot be granted', /صلاحية/);
+assert.deepStrictEqual(api('GET_ADMIN_DASHBOARD_DATA', {}, A).acl.ADJUST_EMP_INVOICE, ['Finance', 'Warehouse']); passed++;
+ok(api('SAVE_ROLE_PERMISSIONS', { acl: {} }, A), 'reset permissions');
 console.log('\nALL PASSED:', passed, 'checks');

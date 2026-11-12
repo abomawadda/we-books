@@ -12,7 +12,8 @@ const ACL = {
   RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [],
   RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"]
 };
-const can = action => !!APP.user && (APP.user.role === "Admin" || (ACL[action] || []).indexOf(APP.user.role) !== -1);
+// الصلاحيات الفعلية تأتي من الخادم (بعد تخصيص المدير)، والجدول أعلاه احتياطي
+const can = action => !!APP.user && (APP.user.role === "Admin" || (((APP.adm && APP.adm.acl) || ACL)[action] || []).indexOf(APP.user.role) !== -1);
 
 // تفويض الأحداث: <button data-act="name" data-id="..."> بدل onclick داخل النصوص
 const ACTIONS = {};
