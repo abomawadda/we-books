@@ -50,7 +50,11 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   d.getElementById('fEmp').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle();
   check(w.location.hash === '#/e/home' && /الخير/.test(view()), 'employee home');
   await go('/e/books');
-  check(d.querySelectorAll('#bookGrid article').length >= 5, 'catalog grid shows books');
+  check(d.querySelectorAll('#bookGrid [data-act="fGrade"]').length >= 2, 'grade picker shown first');
+  { const g = w.eval('APP').emp.books.find(b => b.Book_ID === 'BK-101').Grade; await click(`#bookGrid [data-act="fGrade"][data-id="${g}"]`); }
+  check(d.querySelectorAll('#bookGrid article').length >= 1 && /الصف|رياض|تأسيس/.test(view()), 'grade books with clear title');
+  w.eval('Emp').filter.q = 'BK'; w.eval('Emp').filter.grade = ''; w.eval('renderBookGrid')();
+  check(d.querySelectorAll('#bookGrid article').length >= 5, 'search shows books across grades');
   await click('[data-act="cartInc"][data-id="BK-101"]');
   await click('[data-act="cartInc"][data-id="BK-201"]');
   // الحجز لقريب

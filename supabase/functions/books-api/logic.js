@@ -1291,6 +1291,8 @@ const OperationsEngine = {
       booksArray.forEach((inp, idx) => {
         const id = Util.str(inp.Book_ID);
         if (!id) return;
+        // حماية من لصق أعمدة بترتيب خاطئ (مثل وضع السعر مكان اسم الكتاب)
+        if (/^[\d.,\s%]+$/.test(Util.str(inp.Book_Name)) || /^[\d.,\s%]+$/.test(Util.str(inp.Stage))) { errors.push("سطر " + (idx + 1) + " (" + id + "): الاسم أو المرحلة رقم — راجع ترتيب الأعمدة"); return; }
         const sup = sups[Util.str(inp.Supplier_ID)] || sups[Object.keys(sups)[0]];
         if (!(Util.num(inp.Cover_Price) > 0)) { // بلا سعر: يُضاف بحالة «جاري التسعير»
           const base = map[id] || {};
@@ -1307,10 +1309,11 @@ const OperationsEngine = {
         const p = FinancialEngine.calculateBookPricing(inp.Cover_Price, inp.Supplier_Discount_Pct,
           inp.Volume_Discount_Share_Pct !== undefined && inp.Volume_Discount_Share_Pct !== "" ? inp.Volume_Discount_Share_Pct : sup.Volume_Discount_Pct,
           inp.Emp_Discount_Pct !== undefined && inp.Emp_Discount_Pct !== "" ? inp.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
+        const old = map[id] || {};
         if (map[id]) updated++; else added++;
         map[id] = {
-          Book_ID: id, Book_Name: Util.str(inp.Book_Name), Stage: inp.Stage || "", Grade: inp.Grade || "", Subject: inp.Subject || "",
-          Publisher: inp.Publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
+          Book_ID: id, Book_Name: Util.str(inp.Book_Name) || old.Book_Name || "", Stage: inp.Stage || old.Stage || "", Grade: inp.Grade || old.Grade || "", Subject: inp.Subject || old.Subject || "",
+          Publisher: inp.Publisher || old.Publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
           Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
           Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
           Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
