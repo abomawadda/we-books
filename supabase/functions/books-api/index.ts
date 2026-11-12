@@ -5,15 +5,36 @@ import { createHash, createHmac, createSign, timingSafeEqual } from 'node:crypto
 import { Buffer } from 'node:buffer';
 import { createRuntime } from './engine.js';
 
-const sql = postgres(Deno.env.get('SUPABASE_DB_URL')!, { max: 8, prepare: false, idle_timeout: 20 });
+// الاتصال بقاعدة البيانات عبر مجمّع الاتصالات (Supavisor، وضع transaction، المنفذ 6543): يوم الحجز تعمل نسخ
+// كثيرة من الخادم معاً، والاتصال المباشر محدود بـ 60 فلا يُستخدم إلا إن تعذّر بناء عنوان المجمّع.
+const DIRECT = Deno.env.get('SUPABASE_DB_URL')!;
+const POOLER_HOST = 'aws-0-eu-central-1.pooler.supabase.com';
+let sql: any, dbMode = 'direct';
+try {
+  const u = new URL(DIRECT);
+  const ref = (u.hostname.match(/^db\.([a-z0-9]+)\./) || [])[1] || (u.username.split('.')[1] || '');
+  if (!ref) throw new Error('no ref');
+  sql = postgres(`postgres://postgres.${ref}:${encodeURIComponent(decodeURIComponent(u.password))}@${POOLER_HOST}:6543/postgres`,
+    { max: 3, prepare: false, idle_timeout: 10, connect_timeout: 15 });
+  dbMode = 'pooler';
+} catch (_) { sql = postgres(DIRECT, { max: 2, prepare: false, idle_timeout: 10, connect_timeout: 10 }); }
+const ready = Promise.resolve();
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
 const CODE_COMMIT = 'a0ddaa00904903797ea38c60e1f6f22af21275da';
 const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/supabase/functions/books-api/logic.js`;
 let rtP: Promise<any> | null = null;
-const runtime = () => (rtP ||= fetch(CODE_URL).then(r => { if (!r.ok) throw new Error('logic.js ' + r.status); return r.text(); })
-  .then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
+// يُقرأ أولاً من books.logic؛ وإن لم يوجد يُجلب من GitHub مرة واحدة ويُحفظ هناك (لا اعتماد على GitHub بعدها)
+async function loadLogic() {
+  const [row] = await sql`select code from books.logic where commit_sha = ${CODE_COMMIT}`;
+  if (row) return row.code;
+  const r = await fetch(CODE_URL); if (!r.ok) throw new Error('logic.js ' + r.status);
+  const code = await r.text();
+  await sql`insert into books.logic (commit_sha, code) values (${CODE_COMMIT}, ${code}) on conflict do nothing`;
+  return code;
+}
+const runtime = () => (rtP ||= loadLogic().then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
 
 // ---------------- المخزن: Postgres مع أقفال استشارية بدل إعادة المحاولة ----------------
 // عمليات الموظف المحدودة (الحجز): قفل مشترك عام + قفل حصري للموظف ← حجوزات الموظفين تتوازى.
@@ -79,8 +100,33 @@ async function verify(token: string) {
   const good = Buffer.from(await sign(body)), got = Buffer.from(sig);
   if (good.length !== got.length || !timingSafeEqual(good, got)) return null;
   const t = JSON.parse(unb64(body));
-  return t.exp > Date.now() / 1000 ? t.s : null;
+  if (!(t.exp > Date.now() / 1000)) return null;
+  // حساب الإدارة الموقوف تسقط جلسته فوراً (لا ينتظر انتهاء الـ 12 ساعة)
+  if (t.s && t.s.userType === 'ADMIN') {
+    const [u] = await sql`select data->>'Is_Active' as a, data->>'Role' as r from books.records where tbl = '02_Users_Roles' and data->>'User_ID' = ${String(t.s.userId)} limit 1`;
+    if (!u || String(u.a).toLowerCase() !== 'true' || u.r !== t.s.role) return null;
+  }
+  return t.s;
 }
+
+// ---------------- حدّ محاولات الدخول الخاطئة (في قاعدة البيانات) ----------------
+const MAX_FAILS = 5, LOCK_MIN = 15;
+const LOCKED = { success: false, message: 'تم إيقاف الدخول مؤقتاً بسبب تكرار المحاولات الخاطئة. حاول بعد 15 دقيقة.' };
+const failKey = (action: string, p: any) => action === 'LOGIN_ADMIN'
+  ? 'ADM:' + String(p?.username || '').trim().toLowerCase() : 'EMP:' + String(p?.empId || '').trim();
+async function isLocked(k: string) {
+  const [r] = await sql`select locked_until from books.auth_fails where k = ${k}`;
+  return !!(r && r.locked_until && new Date(r.locked_until) > new Date());
+}
+async function registerFail(k: string) {
+  await sql`insert into books.auth_fails as f (k, fails, updated_at) values (${k}, 1, now())
+    on conflict (k) do update set
+      fails = case when f.updated_at < now() - interval '15 minutes' then 1 else f.fails + 1 end,
+      locked_until = case when (case when f.updated_at < now() - interval '15 minutes' then 1 else f.fails + 1 end) >= ${MAX_FAILS}
+                          then now() + make_interval(mins => ${LOCK_MIN}) else f.locked_until end,
+      updated_at = now()`;
+}
+const clearFails = (k: string) => sql`update books.auth_fails set fails = 0, locked_until = null, updated_at = now() where k = ${k}`;
 
 // ---------------- أعضاء MyNekaba (Firestore: nekaba2026/employees) — قراءة فقط ----------------
 // يحتاج سر NEKABA_SA_JSON = مفتاح حساب خدمة بصلاحية قراءة Firestore فقط (Cloud Datastore Viewer).
@@ -146,8 +192,11 @@ async function handle(action: string, payload: any, token: string) {
     return await syncMembers();
   }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
+    const fk = failKey(action, payload);
+    if (await isLocked(fk)) return LOCKED;
     const res = await rt.run(store, action, rt.apiFn(action, payload, null), { readOnly: READ_ONLY.has(action) });
-    if (res && res.success) res.sessionToken = await issue(res.user);
+    if (res && res.success) { await clearFails(fk); res.sessionToken = await issue(res.user); }
+    else if (res && /غير مطابقة|غير صحيحة/.test(res.message || '')) await registerFail(fk);
     return res;
   }
   let session = null;
@@ -157,10 +206,19 @@ async function handle(action: string, payload: any, token: string) {
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
-  if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION });
+  await ready;
+  if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION, db: dbMode });
   let body: any;
   try { body = JSON.parse(await req.text()); } catch { return reply({ success: false, message: 'طلب غير صالح.' }, 400); }
   if (!body || typeof body.action !== 'string') return reply({ success: false, message: 'طلب غير صالح.' }, 400);
-  try { return reply(await handle(body.action, body.payload || {}, body.token)); }
+  // عند امتلاء اتصالات قاعدة البيانات لحظياً (53300) تُعاد المحاولة بانتظار متزايد — آمن لأنها أخطاء فتح اتصال، فلم يبدأ شيء ولم يُكتب شيء
+  // 57014 = انتهت مهلة انتظار القفل (أُلغيت الـ transaction كاملة فلا شيء كُتب)
+  const busy = (e: any) => e && (['53300', '57P03', '57014', '40001', '40P01'].includes(e.code) || /too many clients|connection slots|max client|CONNECT_TIMEOUT/i.test(String(e.message || e.code)));
+  try {
+    for (let i = 0; ; i++) {
+      try { return reply(await handle(body.action, body.payload || {}, body.token)); }
+      catch (e) { if (!busy(e) || i >= 8) throw e; await new Promise(r => setTimeout(r, Math.min(4000, 150 * 2 ** i) * (0.5 + Math.random()))); }
+    }
+  }
   catch (err) { console.error(body.action, err); return reply({ success: false, message: 'حدث خطأ في الخادم أثناء تنفيذ العملية. حاول مرة أخرى.' }); }
 });
