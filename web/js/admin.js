@@ -110,7 +110,7 @@ Router.add("/a/dash", view => {
 
   // أكثر الكتب طلباً
   const agg = {}; items.forEach(i => agg[i.Book_ID] = (agg[i.Book_ID] || 0) + n(i.Requested_Qty));
-  const top = Object.keys(agg).sort((x, y) => agg[y] - agg[x]).slice(0, 6).map((k, i) => ({ label: bookName(b, k), value: agg[k], tone: i === 0 ? "bg-gradient-to-l from-brand-500 to-brand-700" : "bg-brand-400/80" }));
+  const top = Object.keys(agg).sort((x, y) => agg[y] - agg[x]).slice(0, 6).map((k, i) => ({ label: bookName(b, k), value: agg[k], act: "bookRes", id: k, tone: i === 0 ? "bg-gradient-to-l from-brand-500 to-brand-700" : "bg-brand-400/80" }));
   const pays = d.empPayments.filter(p => !isTrue(p.Is_Voided) && n(p.Amount) > 0 && String(p.Emp_Inv_ID || "").indexOf("-" + APP.phaseId + "-") > 0);
   const byM = {}; pays.forEach(p => byM[p.Payment_Method] = (byM[p.Payment_Method] || 0) + n(p.Amount));
   const MCOL = { CASH: "#059669", INSTAPAY: "#7c4bb6", WALLET: "#0ea5e9", PAYROLL: "#f0930b" };
@@ -181,6 +181,42 @@ function bookPrice(f) {
   const first = r2(cover * (1 - sd / 100)), cost = r2(first - Math.round(first * vd) / 100), emp = ceil(cover * (1 - ed / 100));
   return { first, cost, emp, margin: r2(emp - cost), vd, ed };
 }
+/** عدد الحاجزين والنسخ لكل كتاب في المرحلة المختارة */
+function resCount() {
+  const m = {}, seen = {};
+  if (APP.phaseId) phaseItems().forEach(i => { const c = m[i.Book_ID] = m[i.Book_ID] || { p: 0, q: 0 }; c.q += n(i.Requested_Qty); const k = i.Book_ID + "|" + i.Emp_ID; if (!seen[k]) { seen[k] = 1; c.p++; } });
+  return m;
+}
+/** نافذة الحاجزين لكتاب خلال المرحلة المختارة، بترتيب الأسبقية */
+function bookResRows(bookId) {
+  const { e } = maps(), q = (Q.bookRes || "").toLowerCase();
+  return phaseItems().filter(i => i.Book_ID === bookId).sort((a, b) => String(a.Priority_Timestamp).localeCompare(String(b.Priority_Timestamp)))
+    .map((i, k) => ({ i, k: k + 1, emp: e[i.Emp_ID] || {} }))
+    .filter(r => !q || (String(r.emp.Full_Name || "") + r.i.Emp_ID + (r.emp.Department || "")).toLowerCase().includes(q));
+}
+function bookResList(bookId) {
+  const rows = bookResRows(bookId);
+  if (!rows.length) return UI.empty("users", Q.bookRes ? "لا نتائج للبحث" : "لا يوجد حاجزون لهذا الكتاب", Q.bookRes ? "" : "في المرحلة المختارة.");
+  return `<ul class="divide-y divide-slate-100">${rows.map(({ i, k, emp }) => { const w = Math.max(0, n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+    return `<li class="flex items-center gap-3 py-2.5"><span class="w-7 text-center text-xs font-bold text-slate-400 num">${k}</span>${UI.avatar(emp.Full_Name || i.Emp_ID, "w-9 h-9 text-xs")}
+    <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${esc(emp.Full_Name || i.Emp_ID)}</div><div class="text-[11.5px] text-slate-400 truncate"><span class="num">${esc(i.Emp_ID)}</span>${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="num text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div>
+    <div class="text-left shrink-0"><div class="font-bold num">${fmt(i.Requested_Qty)} <span class="text-[11px] font-normal text-slate-400">نسخة</span></div>${w ? `<span class="text-[11px] text-amber-600 font-semibold">انتظار ${fmt(w)}</span>` : n(i.Delivered_Qty) ? `<span class="text-[11px] text-emerald-600 font-semibold">سُلّم ${fmt(i.Delivered_Qty)}</span>` : n(i.Allocated_Qty) ? `<span class="text-[11px] text-sky-600 font-semibold">مخصص ${fmt(i.Allocated_Qty)}</span>` : ""}</div></li>`; }).join("")}</ul>`;
+}
+on("bookRes", id => {
+  const { b } = maps(), bk = b[id] || {}; Q.bookRes = ""; Q.bookResId = id;
+  if (!APP.phaseId) { toast("لا توجد مرحلة حجز بعد.", "info"); return; }
+  const all = phaseItems().filter(i => i.Book_ID === id);
+  const req = sum(all, "Requested_Qty"), al = sum(all, "Allocated_Qty"), dl = sum(all, "Delivered_Qty");
+  const wait = all.reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty))), 0);
+  UI.open(`<div class="grid grid-cols-4 gap-2 mb-3">${UI.stat("الحاجزون", fmt(new Set(all.map(i => i.Emp_ID)).size))}${UI.stat("محجوز", fmt(req))}${UI.stat("مُسلَّم", fmt(dl))}${UI.stat("انتظار", fmt(wait), wait ? "!bg-amber-50" : "")}</div>
+    ${all.length > 6 ? `<div class="mb-2">${searchBox("qBookRes", "", "بحث بالاسم أو الرقم أو جهة العمل")}</div>` : ""}
+    <div class="text-[11.5px] text-slate-400 mb-1">بترتيب الأسبقية في الحجز${al ? ` · مخصص ${fmt(al)}` : ""}</div><div id="bookResList">${bookResList(id)}</div>`,
+    { title: esc(bk.Book_Name || id), sub: `${esc(id)} · ${esc(bk.Grade || "")} · ${esc(phaseObj().Phase_Name || "")}`, wide: true,
+      footer: all.length ? `<button class="btn btn-outline btn-sm w-full sm:w-auto" data-act="exportBookRes" data-id="${esc(id)}">${ic("download")} تصدير القائمة</button>` : "" });
+});
+on("qBookRes", v => { Q.bookRes = v.trim(); rerenderList("bookResList", () => bookResList(Q.bookResId)); });
+on("exportBookRes", id => { const { b } = maps(); exportCSV("حاجزو " + ((b[id] || {}).Book_Name || id), ["الأسبقية", "رقم الموظف", "الاسم", "جهة العمل", "الموبايل", "محجوز", "مخصص", "مُسلَّم"], (Q.bookRes = "", bookResRows(id)).map(({ i, k, emp }) => [k, i.Emp_ID, emp.Full_Name, emp.Department, emp.Mobile, i.Requested_Qty, i.Allocated_Qty, i.Delivered_Qty])); });
+
 function booksTable() {
   const d = A(), st = d.stockMap || {}, q = (Q.books || "").toLowerCase();
   const f = Q.bookF || {};
@@ -188,8 +224,9 @@ function booksTable() {
     && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type))
     && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st));
   return UI.table([
-    { t: "الكتاب", v: x => `<div class="font-semibold text-slate-900">${esc(x.Book_Name)}</div><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div>` },
+    { t: "الكتاب", v: x => `<button class="text-right font-semibold text-slate-900 hover:text-brand-700 hover:underline" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div>` },
     { t: "الحالة", v: x => pill(x.Book_Status) },
+    { t: "الحاجزون", cls: "num", v: x => { const c = resCount()[x.Book_ID]; return c ? `<button class="btn btn-ghost btn-xs" data-act="bookRes" data-id="${esc(x.Book_ID)}">${ic("users")} ${fmt(c.p)} · ${fmt(c.q)} نسخة</button>` : `<span class="text-slate-300">0</span>`; } },
     { t: "الغلاف", cls: "num", v: x => x.Book_Status === "Pricing" ? `<span class="text-amber-600 font-semibold">جاري التسعير</span>` : fmt(x.Cover_Price) },
     { t: "خصم المكتبة", cls: "num", v: x => fmt(x.Supplier_Discount_Pct) + "%" },
     { t: "التكلفة", cls: "num", v: x => fmt(x.Standard_Net_Cost) },

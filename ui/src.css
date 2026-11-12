@@ -93,6 +93,13 @@
   .mesh { background: radial-gradient(60% 50% at 85% 10%, rgba(249,178,36,.18), transparent 60%), radial-gradient(60% 60% at 10% 90%, rgba(124,75,182,.35), transparent 60%), linear-gradient(160deg, #2a1347 0%, #1a0b2e 100%); }
   .scroll-x { @apply flex gap-2 overflow-x-auto pb-1 -mx-4 px-4; scrollbar-width: none; }
   .scroll-x::-webkit-scrollbar { display: none; }
+  /* الشريط الجانبي: مضغوط ليتسع لكل الأقسام بلا شريط تمرير (ويبقى قابلاً للتمرير بلا شريط ظاهر في الشاشات القصيرة جداً) */
+  .side-nav { scrollbar-width: none; }
+  .side-nav::-webkit-scrollbar { display: none; }
+  .side-nav .nav-item { @apply rounded-lg; }
+  @media (min-width: 1024px) { .side-nav .nav-item { height: 2.4rem; font-size: 13.5px; } }
+  @media (min-width: 1024px) and (max-height: 820px) { .side-nav .nav-item { height: 2rem; } .side-nav .grp { padding-top: .35rem; padding-bottom: .15rem; } }
+  @media (max-width: 1023px) and (max-height: 900px) { .side-nav .nav-item { padding-top: .35rem; padding-bottom: .35rem; } }
   .safe-b { padding-bottom: env(safe-area-inset-bottom); }
   .pb-nav { padding-bottom: calc(5.5rem + env(safe-area-inset-bottom)); }
 }
