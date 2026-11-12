@@ -114,6 +114,13 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');
+  // تعديل حجز بعد التجميد ← تنبيه بالفرق
+  check(!/تغيّرت الحجوزات بعد/.test(view()), 'no drift right after freeze');
+  await click('[data-act="resEdit"]', null).catch(() => {}); await closeAll();
+  w.eval('ACTIONS.resEdit("1003")'); await settle(); w.eval('Ed.s.lines["BK-302|"] = (Ed.s.lines["BK-302|"] || 0) + 1');
+  await click('[data-act="edSave"]', dialog()); await settle(); expectNoErrorToasts('edit after freeze');
+  await go('/a/po'); check(/تغيّرت الحجوزات بعد تجميد طلب التوريد/.test(view()), 'PO page shows drift after late edit');
+  await go('/a/dash'); check(/تغيّرت الحجوزات بعد طلب التوريد/.test(view()), 'dashboard alert for late edit');
   check(w.eval('APP').adm.poSnapshots.length > 0, 'PO frozen');
   await go('/a/receive'); d.getElementById('siNo').value = 'INV-1';
   await click('[data-act="submitSI"]'); await ok(); expectNoErrorToasts('supplier invoice');
