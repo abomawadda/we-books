@@ -123,11 +123,14 @@ function bookPrice(f) {
 }
 function booksTable() {
   const d = A(), st = d.stockMap || {}, q = (Q.books || "").toLowerCase();
-  const list = d.books.filter(x => !q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject).toLowerCase().includes(q));
+  const f = Q.bookF || {};
+  const list = d.books.filter(x => (!q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject + x.Publisher).toLowerCase().includes(q))
+    && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type))
+    && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st));
   return UI.table([
-    { t: "الكتاب", v: x => `<div class="font-semibold text-slate-900">${esc(x.Book_Name)}</div><div class="text-[11.5px] text-slate-400">${esc(x.Book_ID)} · ${esc(x.Grade)} · ${esc(x.Subject)}</div>` },
+    { t: "الكتاب", v: x => `<div class="font-semibold text-slate-900">${esc(x.Book_Name)}</div><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div>` },
     { t: "الحالة", v: x => pill(x.Book_Status) },
-    { t: "الغلاف", cls: "num", v: x => fmt(x.Cover_Price) },
+    { t: "الغلاف", cls: "num", v: x => x.Book_Status === "Pricing" ? `<span class="text-amber-600 font-semibold">جاري التسعير</span>` : fmt(x.Cover_Price) },
     { t: "خصم المكتبة", cls: "num", v: x => fmt(x.Supplier_Discount_Pct) + "%" },
     { t: "التكلفة", cls: "num", v: x => fmt(x.Standard_Net_Cost) },
     { t: "سعر الموظف", cls: "num", v: x => `<b class="text-brand-800">${fmt(x.Emp_Selling_Price)}</b>` },
@@ -141,24 +144,40 @@ Router.add("/a/books", view => {
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
     lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
-    + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الصف")}
+    + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
+      ${bookFilters()}
       <button class="btn btn-ghost btn-sm" data-act="exportBooks">${ic("download")} تصدير</button></div><div id="booksList">${booksTable()}</div></section>`;
 });
 on("qBooks", v => { Q.books = v.trim(); rerenderList("booksList", booksTable); });
-on("exportBooks", () => exportCSV("الكتالوج", ["الكود", "الكتاب", "المرحلة", "الصف", "المادة", "الغلاف", "خصم المكتبة", "التكلفة", "سعر الموظف"], A().books.map(x => [x.Book_ID, x.Book_Name, x.Stage, x.Grade, x.Subject, x.Cover_Price, x.Supplier_Discount_Pct, x.Standard_Net_Cost, x.Emp_Selling_Price])));
+/** فلاتر الكتالوج: الصف، نوع المدرسة، الناشر، المادة، الحالة */
+function bookFilters() {
+  const c = A().catalog || {}, f = Q.bookF || {};
+  const sel = (k, label, opts) => `<select class="input !h-10 !w-auto !text-sm" data-change="bookF" data-k="${k}"><option value="">${label}</option>${opts.map(o => `<option value="${esc(o[0])}" ${f[k] === o[0] ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>`;
+  const pricing = A().books.filter(b => b.Book_Status === "Pricing").length;
+  return `<div class="flex flex-wrap gap-2">${sel("grade", "كل الصفوف", (c.grades || []).map(g => [g.label, g.label]))}${sel("type", "كل الأنواع", (c.schoolTypes || []).map(t => [t, t]))}${sel("pub", "كل الناشرين", (c.publishers || []).map(t => [t, t]))}${sel("sub", "كل المواد", (c.subjects || []).map(t => [t, t]))}${sel("st", "كل الحالات", [["Pricing", `جاري التسعير (${pricing})`], ["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد"], ["Suspended", "موقوف"], ["Discontinued", "ملغى"]])}</div>`;
+}
+on("bookF", (v, el) => { Q.bookF = Object.assign({}, Q.bookF, { [el.dataset.k]: v }); rerenderList("booksList", booksTable); });
+on("exportBooks", () => exportCSV("الكتالوج", ["الكود", "الكتاب", "المرحلة", "الصف", "نوع المدرسة", "الناشر", "المادة", "الجزء", "الحالة", "كود المكتبة", "الغلاف", "خصم المكتبة %", "التكلفة", "سعر الموظف"], A().books.map(x => [x.Book_ID, x.Book_Name, x.Stage, x.Grade, x.School_Types, x.Publisher, x.Subject, x.Book_Part, ar(x.Book_Status), x.Supplier_ID, x.Cover_Price, x.Supplier_Discount_Pct, x.Standard_Net_Cost, x.Emp_Selling_Price])));
+/** خيارات نوع المدرسة: كل نوع منفرداً أو مشتركاً (حكومي، حكومي + لغات، ...) */
+function typeCombos(types) {
+  const out = [];
+  for (let m = 1; m < (1 << types.length); m++) { const pick = types.filter((t, i) => m & (1 << i)); out.push([pick.join("،"), pick.length > 1 ? "مشترك: " + pick.join(" + ") : pick[0]]); }
+  return out.sort((a, b) => a[0].split("،").length - b[0].split("،").length);
+}
 on("bookForm", async id => {
-  const x = id ? A().books.find(b => b.Book_ID === id) : {};
+  const x = id ? A().books.find(b => b.Book_ID === id) : {}, c = A().catalog || {};
   const v = await UI.form({
     title: id ? "تعديل كتاب" : "كتاب جديد", sub: id ? x.Book_Name : "", wide: true, icon: "check",
     fields: [
-      { name: "bookId", label: "الكود", value: x.Book_ID || "", cols: 1, placeholder: "مثال BK-101", required: true },
-      { name: "bookName", label: "اسم الكتاب", value: x.Book_Name || "", cols: 1, required: true },
-      { name: "stage", label: "المرحلة الدراسية", type: "select", value: x.Stage || "المرحلة الابتدائية", cols: 1, options: ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"].map(s => [s, s]) },
-      { name: "grade", label: "الصف", value: x.Grade || "", cols: 1 },
-      { name: "subject", label: "المادة", value: x.Subject || "", cols: 1 },
+      { name: "bookId", type: "html", html: id ? `<div class="rounded-xl bg-slate-50 px-4 py-3 text-sm">الكود: <b class="num">${esc(x.Book_ID)}</b></div>` : `<div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">يُولَّد الكود تلقائياً من الصف (مثل P4-012).</div>` },
+      { name: "grade", label: "الصف الدراسي", type: "select", value: x.Grade || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.grades || []).map(g => [g.label, g.label + " · " + g.stage])) },
+      { name: "schoolTypes", label: "نوع المدرسة", type: "select", value: x.School_Types || "حكومي", cols: 1, required: true, options: typeCombos(c.schoolTypes || []) },
+      { name: "publisher", label: "الناشر", type: "select", value: x.Publisher || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.publishers || []).map(t => [t, t])) },
+      { name: "subject", label: "المادة", type: "select", value: x.Subject || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.subjects || []).map(t => [t, t])) },
+      { name: "bookPart", label: "جزء الكتاب", type: "select", value: x.Book_Part || "", cols: 1, options: [["", "كتاب واحد"]].concat((c.parts || []).map(t => [t, t])) },
       { name: "supplierId", label: "المكتبة", type: "select", value: x.Supplier_ID || "", cols: 1, options: A().suppliers.map(s => [s.Supplier_ID, s.Supplier_Name]) },
-      { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status || "Available", options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
-      { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, required: true },
+      { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
+      { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
       { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
       { name: "volumeDiscountSharePct", label: "خصم الكمية %", type: "number", value: x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct, cols: 1, placeholder: "من عقد المكتبة" },
       { name: "empDiscountPct", label: "خصم الموظف %", type: "number", value: x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct, cols: 1, placeholder: "الخصم الموحد" },
@@ -169,7 +188,7 @@ on("bookForm", async id => {
       el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
     }
   });
-  if (v) { delete v._pv; await act("SAVE_BOOK", v); }
+  if (v) { delete v._pv; v.bookId = id || ""; await act("SAVE_BOOK", v); }
 });
 on("importBooks", async () => {
   const v = await UI.form({ title: "استيراد الكتالوج", wide: true, intro: "انسخ الصفوف من Excel والصقها هنا. الأعمدة بالترتيب:<br><b>الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، سعر الغلاف، خصم المكتبة %</b>",

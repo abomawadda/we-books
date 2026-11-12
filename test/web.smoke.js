@@ -80,10 +80,15 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
 
   // كتاب جديد عبر النموذج
   await go('/a/books'); await click('[data-act="bookForm"]');
-  fill('bookId', 'BK-999'); fill('bookName', 'كتاب اختبار'); fill('grade', 'الخامس'); fill('subject', 'علوم'); fill('coverPrice', '200'); fill('supplierDiscountPct', '30');
+  fill('grade', '5 ابتدائي'); fill('schoolTypes', 'حكومي،لغات'); fill('publisher', 'الأضواء'); fill('subject', 'علوم'); fill('bookPart', 'شرح'); fill('coverPrice', '200'); fill('supplierDiscountPct', '30');
   check(/سعر الموظف/.test(dialog().textContent), 'live price preview');
   await ok(); expectNoErrorToasts('save book');
-  check(w.eval('APP').adm.books.some(b => b.Book_ID === 'BK-999'), 'book saved');
+  check(w.eval('APP').adm.books.some(b => b.Book_ID === 'P5-001' && b.Book_Name === 'الأضواء — علوم (شرح)' && b.Stage === 'المرحلة الابتدائية'), 'book saved with generated code');
+  // كتاب بلا سعر ← جاري التسعير
+  await click('[data-act="bookForm"]');
+  fill('grade', '1 ثانوي'); fill('schoolTypes', 'أزهر'); fill('publisher', 'المرشد'); fill('subject', 'تفسير');
+  await ok(); expectNoErrorToasts('save unpriced book');
+  check(w.eval('APP').adm.books.some(b => b.Book_ID === 'S1-001' && b.Book_Status === 'Pricing'), 'unpriced book saved as Pricing');
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');

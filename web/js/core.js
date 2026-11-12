@@ -37,7 +37,7 @@ const AR = {
   Pending: "قيد المراجعة", Fully_Allocated: "مخصص بالكامل", Partially_Allocated: "مخصص جزئياً", Waitlisted: "في قائمة الانتظار", Cancelled_By_Employee: "ألغاه الموظف", Carried_Forward: "رُحِّل لمرحلة تالية",
   Unpaid: "غير مسدد", Partially_Paid: "مسدد جزئياً", Paid_In_Full: "مسدد بالكامل", Overdue: "متأخر", Refund_Due: "مستحق رد", Zero_Allocation: "لا تخصيص",
   Paid: "مسدد", Partial: "مسدد جزئياً", INSTALLMENT: "تقسيط", CASH: "نقدي", WALLET: "محفظة إلكترونية", INSTAPAY: "إنستاباي", PAYROLL: "خصم من المرتب", FULL: "دفعة واحدة",
-  Available: "متاح", Not_Yet_Printed: "لم يُطبع بعد", Suspended: "موقوف مؤقتاً", Discontinued: "ملغى",
+  Available: "متاح", Pricing: "جاري التسعير", Not_Yet_Printed: "لم يُطبع بعد", Suspended: "موقوف مؤقتاً", Discontinued: "ملغى",
   EXACT: "مطابق", SHORTAGE: "نقص", SURPLUS: "زيادة", NOT_PRINTED: "لم يُطبع", NOT_RECEIVED: "لم يصل", UNORDERED_ITEM: "غير مطلوب",
   Fulfilled: "مكتمل", Covered_From_Stock: "مغطى من المخزون", Cancelled: "ملغى",
   Admin: "مدير المنظومة", Coordinator: "مسؤول المبادرة", Finance: "أمين الصندوق", Warehouse: "أمين المخزن", Employee: "موظف"
@@ -47,7 +47,7 @@ const TONE = {
   Open: "green", Scheduled: "blue", Closed: "amber", Ordered: "brand", Receiving: "brand", Delivering: "brand", Completed: "gray", Draft: "gray",
   Fully_Allocated: "green", Partially_Allocated: "amber", Waitlisted: "gray", Pending: "blue", Cancelled_By_Employee: "red", Carried_Forward: "gray",
   Paid_In_Full: "green", Paid: "green", Partially_Paid: "amber", Partial: "amber", Unpaid: "gray", Overdue: "red", Refund_Due: "blue", Zero_Allocation: "gray",
-  Available: "green", Not_Yet_Printed: "amber", Suspended: "gray", Discontinued: "red",
+  Available: "green", Pricing: "amber", Not_Yet_Printed: "amber", Suspended: "gray", Discontinued: "red",
   EXACT: "green", SHORTAGE: "red", SURPLUS: "amber", NOT_PRINTED: "amber", NOT_RECEIVED: "red", Fulfilled: "green", Covered_From_Stock: "blue", Cancelled: "gray"
 };
 const pill = (code, label, tone) => `<span class="pill pill-${tone || TONE[code] || "gray"}">${esc(label || ar(code))}</span>`;
