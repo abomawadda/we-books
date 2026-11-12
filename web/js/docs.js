@@ -12,13 +12,13 @@ const Doc = {
 @page { size: ${size} portrait; margin: 0; }
 * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 html, body { margin: 0; padding: 0; }
-body { font-family: "Readex Pro", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif; color: #1e1b2e; background: #e7e5ee; direction: rtl; }
+body { font-family: "Cairo", "Segoe UI", Tahoma, sans-serif; color: #1e1b2e; background: #e7e5ee; direction: rtl; }
 .page { width: ${W}; min-height: ${H}; margin: 14px auto; background: #fff; padding: ${A4 ? "14mm 13mm" : "9mm 9mm 8mm"}; position: relative; overflow: hidden; box-shadow: 0 6px 24px rgba(30,20,60,.18); display: flex; flex-direction: column; font-size: ${A4 ? "11pt" : "8.6pt"}; line-height: 1.55; }
 @media print { body { background: #fff; } .page { margin: 0; box-shadow: none; page-break-after: always; break-after: page; } .page:last-child { page-break-after: auto; break-after: auto; } }
 .band { position: absolute; inset: 0 0 auto 0; height: ${A4 ? "6mm" : "4.5mm"}; background: linear-gradient(90deg, #f9b224, #7c4bb6 35%, #3a2059); }
 .wm { position: absolute; left: 50%; top: 55%; transform: translate(-50%,-50%) rotate(-24deg); font-size: ${A4 ? "64pt" : "44pt"}; font-weight: 800; color: rgba(85,44,131,.05); white-space: nowrap; pointer-events: none; }
 .wm.red { color: rgba(225,29,72,.10); }
-.dt .t, .org, .big-amt .v, h4, th { font-family: "Alexandria", "IBM Plex Sans Arabic", sans-serif; }
+.dt .t, .org, .big-amt .v, h4, th { font-family: "Cairo", sans-serif; font-weight: 700; }
 .hd { display: flex; justify-content: space-between; align-items: center; gap: 4mm; margin-top: ${A4 ? "4mm" : "3mm"}; padding-bottom: 3mm; border-bottom: 1.4px solid #3a2059; }
 .brand { display: flex; gap: 2.6mm; align-items: center; }
 .lg { height: ${A4 ? "17mm" : "13mm"}; width: auto; object-fit: contain; }
