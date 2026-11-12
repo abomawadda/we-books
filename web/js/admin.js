@@ -101,8 +101,16 @@ async function loadHealth() {
   el.innerHTML = `<ul class="space-y-2">${Object.keys(NAMES).map(k => { const j = h.jobs[k] || {}; return `<li class="flex items-center gap-3 rounded-2xl p-3 ring-1 ring-slate-100">
     <span class="w-9 h-9 rounded-xl shrink-0 flex items-center justify-center ${j.ok ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"}">${ic(NAMES[k][1])}</span>
     <span class="flex-1"><span class="block font-semibold text-[13.5px] text-slate-800">${NAMES[k][0]}</span><span class="block text-[12px] text-slate-500 num">${j.last ? "آخر تشغيل: " + esc(dt(j.last)) : "لم تعمل بعد"}</span></span>
-    ${j.ok ? pillTxt("سليمة", "green") : pillTxt("تحتاج مراجعة", "red")}</li>`; }).join("")}</ul>`;
+    ${j.ok ? pillTxt("سليمة", "green") : pillTxt("تحتاج مراجعة", "red")}${k === "SYNC_MEMBERS" ? syncBtn("btn-xs") : ""}</li>`; }).join("")}</ul>`;
 }
+/** مزامنة يدوية للموظفين من MyNekaba (مدير المنظومة فقط؛ الخادم يتحقق أيضاً) */
+const syncBtn = cls => APP.user && APP.user.role === "Admin" ? `<button class="btn btn-outline ${cls}" data-act="syncNow" title="مزامنة الموظفين الآن من MyNekaba">${ic("refresh-cw")}<span class="${cls === "btn-xs" ? "hidden sm:inline" : ""}">مزامنة الآن</span></button>` : "";
+on("syncNow", async () => {
+  if (!await UI.confirm({ title: "مزامنة الموظفين", message: "جلب أحدث بيانات الأعضاء من MyNekaba الآن (إضافة الجدد وتحديث بيانات الموجودين). لا تُحذف حجوزات أو فواتير.", ok: "مزامنة" })) return;
+  const r = await call("SYNC_MEMBERS", {}, { block: true });
+  toast(r.message || (r.success ? "تمت المزامنة." : "تعذرت المزامنة."), r.success ? "success" : "danger");
+  if (r.success) { await Admin.load(); loadHealth(); }
+});
 const pillTxt = (t, c) => `<span class="text-[11.5px] font-bold rounded-full px-2.5 py-1 ${c === "green" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}">${t}</span>`;
 on("goPricing", () => { Q.bookF = { st: "Pricing" }; Router.go("/a/books"); });
 function overviewSections() {
@@ -476,7 +484,7 @@ function empTable() {
 }
 Router.add("/a/employees", view => {
   view.innerHTML = UI.pageHead("الموظفون", `${fmt(A().employees.length)} موظف مسجل`,
-    lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-outline btn-sm" data-act="reserveFor">${ic("notebook-pen")} حجز نيابة عن موظف</button>`) + lockedBtn("BULK_IMPORT_EMPLOYEES", `<button class="btn btn-primary btn-sm" data-act="importEmps">${ic("file-spreadsheet")} استيراد / تحديث</button>`))
+    syncBtn("btn-sm") + lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-outline btn-sm" data-act="reserveFor">${ic("notebook-pen")} حجز نيابة عن موظف</button>`) + lockedBtn("BULK_IMPORT_EMPLOYEES", `<button class="btn btn-primary btn-sm" data-act="importEmps">${ic("file-spreadsheet")} استيراد / تحديث</button>`))
     + `<section class="card card-pad"><div class="mb-4">${searchBox("qEmp", Q.emp, "بحث بالاسم أو الرقم أو الموبايل")}</div><div id="empList">${empTable()}</div></section>`;
 });
 on("qEmp", v => { Q.emp = v.trim(); rerenderList("empList", empTable); });
