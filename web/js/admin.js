@@ -429,7 +429,7 @@ Router.add("/a/po", view => {
   const live = Object.keys(agg).map(k => ({ id: k, req: agg[k].req, emps: agg[k].emps.size, free: d.stockMap[k] ? d.stockMap[k].free : 0 }));
   const snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId);
   view.innerHTML = UI.pageHead("الحصر وطلب التوريد", "يُخصم المخزون الحر والنواقص المستحقة على المكتبة بعد نصيب المنتظرين من المراحل السابقة",
-    lockedBtn("GENERATE_PO_SNAPSHOT", `<button class="btn btn-gold btn-sm" data-act="freezePO">${ic("lock")} تجميد الحصر</button>`) + (snaps.length ? `<button class="btn btn-outline btn-sm" data-act="exportPO">${ic("download")} تصدير طلب التوريد</button>` : ""))
+    lockedBtn("GENERATE_PO_SNAPSHOT", `<button class="btn btn-gold btn-sm" data-act="freezePO">${ic("lock")} تجميد الحصر</button>`) + (snaps.length ? `<button class="btn btn-primary btn-sm" data-act="printPO">${ic("printer")} أمر التوريد PDF</button><button class="btn btn-outline btn-sm" data-act="exportPO">${ic("download")} تصدير طلب التوريد</button>` : ""))
     + poDriftBox(poDrift(APP.phaseId))
     + `<div class="grid grid-cols-3 gap-3 sm:gap-4 mb-4">${UI.kpi("كتب مختلفة", fmt(live.length), { icon: "library", tone: "brand" })}${UI.kpi("نسخ محجوزة", fmt(sum(live, "req")), { icon: "book-open", tone: "blue" })}${UI.kpi("المطلوب من المكتبة", fmt(sum(snaps, "Net_Order_To_Supplier_Qty")), { icon: "truck", tone: "green", foot: snaps.length ? "بعد التجميد" : "لم يُجمَّد بعد" })}</div>`
     + UI.section(`${ic("clipboard-list", "text-brand-600")} الحجوزات الحالية`, "تجميع لحظي يتغير مع حجوزات الموظفين", UI.table([
@@ -633,10 +633,8 @@ on("empReturn", async id => {
 });
 function printDoc(no) {
   const d = A(), { e, b } = maps(), lines = d.deliveryReturns.filter(x => x.Printed_Receipt_No === no); if (!lines.length) return;
-  const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : "إذن ارتجاع";
-  openPrint(title, `<h1 style="text-align:center">${title} رقم ${esc(no)}</h1><p>الموظف: <b>${esc(empName(e, f.Party_ID))}</b> (${esc(f.Party_ID)}) · التاريخ: ${esc(f.Trans_Date)} · المرحلة: ${esc(f.Phase_ID)}</p>
-    <table><tr><th>الكتاب</th><th>العدد</th><th>سعر النسخة</th><th>القيمة</th></tr>${lines.map(l => `<tr><td>${esc(bookName(b, l.Book_ID))}</td><td>${l.Qty}</td><td>${fmt(l.Unit_Price_Applied)}</td><td>${fmt(Math.abs(n(l.Total_Amount_Impact)))}</td></tr>`).join("")}</table>
-    <p>المستلم: ${esc(f.Received_By || "")} · المسلِّم: ${esc(f.Handled_By)}</p><div style="display:flex;justify-content:space-between;margin-top:50px"><div>توقيع المستلم: ..................</div><div>توقيع أمين المخزن: ..................</div></div>`);
+  const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : "إذن ارتجاع كتب";
+  Doc.show(title + " " + no, Doc.delivery({ title, no, date: f.Trans_Date, emp: { name: empName(e, f.Party_ID), id: f.Party_ID }, lines: lines.map(l => ({ code: l.Book_ID, name: bookName(b, l.Book_ID), qty: n(l.Qty) })), note: f.Received_By ? "المستلم: " + f.Received_By + " · المسلِّم: " + (f.Handled_By || "") : "" }), { file: no });
 }
 on("printDoc", id => printDoc(id));
 
@@ -675,6 +673,7 @@ function finList() {
     { t: "", actions: true, v: i => (n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
       + (n(i.Credit_Balance) && can("REFUND_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline btn-xs" data-act="refund" data-id="${esc(i.Emp_Inv_ID)}">${ic("undo-2")} رد الرصيد</button>` : "")
       + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : "")
+      + `<button class="btn btn-ghost btn-xs" data-act="printInvA" data-id="${esc(i.Emp_Inv_ID)}">${ic("printer")} الفاتورة</button>`
       + (can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : "")
       + (can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-ghost btn-xs" data-act="resEdit" data-id="${esc(i.Emp_ID)}">${ic("notebook-pen")} الحجز</button>` : "")
       + (can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : "") }
@@ -717,12 +716,39 @@ on("changePlan", async resId => {
 function printReceipt(no) {
   const p = A().empPayments.find(x => x.Receipt_No === no); if (!p) return;
   const { e } = maps(), inv = A().empInvoices.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {};
-  openPrint("إيصال", `<h1 style="text-align:center">إيصال ${n(p.Amount) < 0 ? "رد" : "استلام نقدية"} رقم ${esc(no)}</h1><table>
-    <tr><th>الموظف</th><td>${esc(empName(e, p.Emp_ID))} (${esc(p.Emp_ID)})</td></tr><tr><th>المبلغ</th><td><b>${fmt(Math.abs(n(p.Amount)))} ج.م</b></td></tr>
-    <tr><th>الوسيلة / المرجع</th><td>${esc(ar(p.Payment_Method))} / ${esc(p.Transaction_Ref)}</td></tr><tr><th>التاريخ</th><td>${esc(p.Payment_Date)}</td></tr>
-    <tr><th>الفاتورة</th><td>${esc(p.Emp_Inv_ID)} · الصافي ${fmt(inv.Net_Final_Invoice_Amount)} · المتبقي بعد السداد ${fmt(inv.Remaining_Balance)}</td></tr></table>
-    <div style="display:flex;justify-content:space-between;margin-top:50px"><div>المحصِّل: ${esc(p.Collected_By)} ..............</div><div>توقيع الموظف: ..............</div></div>`);
+  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: { name: empName(e, p.Emp_ID), id: p.Emp_ID }, amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By, voided: isTrue(p.Is_Voided), voidReason: p.Void_Reason }), { file: no });
 }
+/** فاتورة موظف (A5) من بيانات الإدارة */
+function invoiceData(invId) {
+  const d = A(), i = d.empInvoices.find(x => x.Emp_Inv_ID === invId); if (!i) return null;
+  const { e, b } = maps(), emp = e[i.Emp_ID] || {}, h = resHeaderOf(i.Res_ID), ph = d.phases.find(x => x.Phase_ID === i.Phase_ID) || {};
+  return { no: i.Emp_Inv_ID, date: i.Issue_Date, phase: ph.Phase_Name || i.Phase_ID, status: i.Invoice_Status, method: i.Payment_Plan_Type,
+    emp: { name: emp.Full_Name || i.Emp_ID, id: i.Emp_ID, dept: emp.Department },
+    lines: d.resItems.filter(x => x.Res_ID === i.Res_ID).map(x => ({ code: x.Book_ID, name: bookName(b, x.Book_ID), grade: (b[x.Book_ID] || {}).Grade, ben: x.Beneficiary, alloc: n(x.Allocated_Qty), deliv: n(x.Delivered_Qty), ret: n(x.Returned_Qty), price: x.Unit_Emp_Price, cover: x.Unit_Cover_Price })),
+    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: i.Total_Paid_Amount, remaining: i.Remaining_Balance, credit: i.Credit_Balance, down: i.Down_Payment_Required,
+    schedule: d.installments.filter(x => x.Emp_Inv_ID === i.Emp_Inv_ID).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date))).map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) };
+}
+on("printInvA", id => { const d = invoiceData(id); if (d) Doc.show("فاتورة " + id, Doc.invoice(d), { file: id }); });
+/** طلب حجز موظف (A5) من بيانات الإدارة */
+on("printResA", empId => {
+  const d = A(), h = d.resHeaders.find(x => x.Phase_ID === APP.phaseId && x.Emp_ID === empId); if (!h) return toast("لا حجز لهذا الموظف في المرحلة", "info");
+  const { e, b } = maps(), emp = e[empId] || {}, lines = resLines(empId);
+  Doc.show("طلب حجز " + h.Res_ID, Doc.reservation({ no: h.Res_ID, date: h.Created_At, phase: phaseObj().Phase_Name, status: h.Res_Status === "Cancelled" ? "ملغي" : "مؤكد",
+    emp: { name: emp.Full_Name || empId, id: empId, dept: emp.Department, mobile: emp.Mobile },
+    lines: Object.entries(lines).map(([k, q]) => { const bk = b[k.split(SEP)[0]] || {}; return { code: bk.Book_ID || k.split(SEP)[0], name: bk.Book_Name, grade: bk.Grade, ben: k.split(SEP)[1], qty: q, cover: bk.Cover_Price, price: bk.Emp_Selling_Price }; }),
+    plan: { method: h.Payment_Method_Selected, down: h.Calculated_Down_Payment, count: n(h.Installment_Count), per: h.Installment_Value } }), { file: h.Res_ID });
+});
+/** أوامر التوريد للمكتبات (A4، صفحة لكل مكتبة) */
+on("printPO", () => {
+  const d = A(), { b, s } = maps(), snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId && n(p.Net_Order_To_Supplier_Qty) > 0);
+  if (!snaps.length) return toast("لا يوجد مطلوب من المكتبات في هذه المرحلة", "info");
+  const bySup = {}; snaps.forEach(p => (bySup[p.Supplier_ID || "—"] = bySup[p.Supplier_ID || "—"] || []).push(p));
+  const pages = Object.keys(bySup).map(sid => { const sp = s[sid] || {}, lines = bySup[sid];
+    return Doc.purchaseOrder({ no: "PO-" + APP.phaseId + "-" + sid, date: (lines[0].Frozen_At || "").slice(0, 10), phase: phaseObj().Phase_Name, by: lines[0].Frozen_By,
+      supplier: { name: sp.Supplier_Name || sid, contact: sp.Contact_Person, phone: sp.Phone, terms: sp.Payment_Terms, returnDays: sp.Return_Policy_Days },
+      lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, name: bk.Book_Name || p.Book_ID, grade: bk.Grade, publisher: bk.Publisher, qty: n(p.Net_Order_To_Supplier_Qty), cover: bk.Cover_Price, disc: bk.Supplier_Discount_Pct, cost: n(bk.Initial_Purchase_Price) || n(bk.Standard_Net_Cost) }; }).sort((x, y) => String(x.code).localeCompare(String(y.code))) }); }).join("");
+  Doc.show("أوامر التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "أمر-توريد-" + APP.phaseId });
+});
 
 // ============================================================ الإيصالات والخزينة
 Router.add("/a/cash", view => {
@@ -841,7 +867,7 @@ function resTable() {
     { t: "السداد", v: r => esc(ar(r.h.Payment_Method_Selected)) + (n(r.h.Installment_Count) ? ` · ${r.h.Installment_Count} أقساط` : "") },
     { t: "للأقارب", v: r => r.rel.length ? r.rel.map(x => `<span class="pill pill-blue mb-0.5">${esc(x)}</span>`).join(" ") : `<span class="text-slate-300">—</span>` },
     { t: "آخر تعديل", v: r => `<div class="text-[12px] num">${esc(dt(r.h.Last_Modified_At))}</div>${r.h.Created_By ? `<div class="text-[11px] text-slate-400">أنشأته الإدارة: ${esc(r.h.Created_By)}</div>` : ""}` },
-    { t: "", actions: true, v: r => edit ? `<button class="btn btn-outline btn-xs" data-act="resEdit" data-id="${esc(r.h.Emp_ID)}">${ic("pencil")} تعديل</button>${r.h.Res_Status !== "Cancelled" && !r.delivered ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="resDel" data-id="${esc(r.h.Emp_ID)}">${ic("trash-2")} حذف</button>` : ""}` : "" }
+    { t: "", actions: true, v: r => `<button class="btn btn-ghost btn-xs" data-act="printResA" data-id="${esc(r.h.Emp_ID)}">${ic("printer")}</button>` + (edit ? `<button class="btn btn-outline btn-xs" data-act="resEdit" data-id="${esc(r.h.Emp_ID)}">${ic("pencil")} تعديل</button>${r.h.Res_Status !== "Cancelled" && !r.delivered ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="resDel" data-id="${esc(r.h.Emp_ID)}">${ic("trash-2")} حذف</button>` : ""}` : "") }
   ], rows, { maxH: 680, emptyIcon: "notebook-pen", empty: Q.res ? "لا نتائج للبحث" : "لا حجوزات في هذه المرحلة" });
 }
 Router.add("/a/res", view => {
@@ -970,7 +996,7 @@ function epBody(id) {
     : UI.empty("notebook-pen", "لا حجوزات", "", can("SUBMIT_OR_UPDATE_RESERVATION") && APP.phaseId ? `<button class="btn btn-primary btn-sm mt-4" data-act="epEditRes" data-id="${esc(id)}">${ic("plus")} حجز له</button>` : "");
   if (t === "inv") body = invs.length ? `<ul class="space-y-2">${invs.slice().reverse().map(i => `<li class="rounded-2xl ring-1 ring-slate-100 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="font-bold text-[13.5px]">${esc((ph[i.Phase_ID] || {}).Phase_Name || i.Phase_ID)} <span class="num text-[11px] text-slate-400">${esc(i.Emp_Inv_ID)}</span></div><div class="text-[11.5px] text-slate-500">${esc(ar(i.Payment_Plan_Type))}${n(i.Installments_Count) ? " · " + i.Installments_Count + " أقساط" : ""} · صدرت ${esc(i.Issue_Date)}</div></div>${pill(i.Invoice_Status)}</div>
       <div class="grid grid-cols-4 gap-2 mt-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المقدم", fmt(i.Down_Payment_Required))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>`)}${UI.stat("المتبقي", `<span class="${n(i.Remaining_Balance) ? "text-rose-600" : ""}">${fmt(i.Remaining_Balance)}</span>`)}</div>
-      <div class="flex flex-wrap gap-1.5 mt-2">${n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : ""}${can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : ""}${can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : ""}${can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : ""}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا فواتير", "تصدر بعد التوزيع.");
+      <div class="flex flex-wrap gap-1.5 mt-2"><button class="btn btn-outline btn-xs" data-act="printInvA" data-id="${esc(i.Emp_Inv_ID)}">${ic("printer")} الفاتورة</button>${n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : ""}${can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : ""}${can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : ""}${can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : ""}</div></li>`).join("")}</ul>` : UI.empty("receipt", "لا فواتير", "تصدر بعد التوزيع.");
   if (t === "inst") body = insts.length ? UI.table([{ t: "القسط", v: i => `${esc(i.Admin_Custom_Notes || ("قسط " + i.Installment_No))}<div class="text-[11px] text-slate-400 num">${esc(i.Emp_Inv_ID)}</div>` }, { t: "الاستحقاق", cls: "num", v: "Due_Date" }, { t: "القيمة", cls: "num", v: i => fmt(i.Scheduled_Amount) }, { t: "المسدد", cls: "num", v: i => fmt(i.Paid_Amount) }, { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Inst_Amount) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Inst_Amount)}</b>` }, { t: "الحالة", v: i => pill(i.Status) }], insts, { cardsOnMobile: false }) : UI.empty("calendar-range", "لا أقساط");
   if (t === "pay") body = pays.length ? `<ul class="divide-y divide-slate-100">${pays.slice().reverse().map(p => `<li class="flex items-center gap-3 py-2.5"><div class="flex-1"><div class="font-semibold text-[13px] num">${esc(p.Receipt_No)} <span class="text-slate-400 font-normal">· ${esc(ar(p.Payment_Method))}${p.Transaction_Ref ? " · " + esc(p.Transaction_Ref) : ""}</span></div><div class="text-[11.5px] text-slate-400 num">${esc(dt(p.Payment_Date))} · ${esc(p.Collected_By || "")}</div></div>
       ${isTrue(p.Is_Voided) ? pill("", "ملغى", "red") : `<b class="num ${n(p.Amount) < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(p.Amount)}</b><button class="icon-btn w-8 h-8" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة">${ic("printer")}</button>`}</li>`).join("")}</ul>` : UI.empty("wallet", "لا إيصالات");

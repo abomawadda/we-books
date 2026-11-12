@@ -231,6 +231,7 @@ function cartHTML() {
   </div>` : `<div class="mt-3 text-[12.5px] text-slate-500 flex gap-2">${ic("info", "text-brand-500 mt-0.5")}<span>يُسدَّد كامل المبلغ عند استلام الكتب${p.method !== "CASH" ? ` عبر ${ar(p.method)} باسم <b>${esc(s.CASH_ACCOUNT_HOLDER || "")}</b>` : ""}.</span></div>`}
 
   ${open ? `<button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4" ${!ids.length && !hadRes ? "disabled" : ""}>${ic(ids.length ? "check-check" : "ban")} ${ids.length ? (hadRes ? "احفظ التعديل" : "أكّد الحجز") : "إلغاء حجزي"}</button>
+    ${ids.length ? `<button data-act="printRes" class="btn btn-ghost btn-sm w-full mt-2">${ic("download")} احفظ طلب الحجز (صورة أو PDF)</button>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-2.5 leading-relaxed">${ic("info", "inline -mt-0.5")} أسبقيتك محفوظة بوقت حجز كل كتاب — لو زوّدت كتب، الكتب القديمة تفضل في دورها.</p>`
     : `<div class="mt-4 rounded-2xl bg-amber-50 text-amber-800 text-sm p-3.5 flex gap-2">${ic("lock", "mt-0.5")}الحجز مغلق في هذه المرحلة.</div>`}`;
 }
@@ -375,7 +376,7 @@ on("submitRes", async () => {
   UI.open(`<div class="text-center py-2"><div class="w-20 h-20 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-4xl animate-pop-in">${ic("circle-check")}</div>
     <h3 class="text-xl font-bold text-slate-900 mt-4">${items.length ? "تمام! حجزك اتسجل 🎉" : "تم إلغاء الحجز"}</h3><p class="text-sm text-slate-500 mt-2 leading-relaxed">${esc(r.message || "")}</p>
     ${items.length ? `<div class="grid grid-cols-2 gap-2 mt-5 text-right">${UI.stat("عدد الكتب", fmt(t.count))}${UI.stat("الإجمالي", money(t.net))}</div>` : ""}</div>`,
-    { footer: `<div class="flex gap-2"><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
+    { footer: `<div class="flex gap-2">${items.length ? `<button data-act="printRes" class="btn btn-outline">${ic("download")} احفظ الطلب</button>` : ""}<a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
 });
 
 // ============================================================ حجوزاتي
@@ -384,7 +385,7 @@ Router.add("/e/orders", view => {
   if (!r.activePhase) { view.innerHTML = UI.empty("package", "لا توجد حجوزات"); return; }
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   view.innerHTML = `
-  ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} طباعة الفاتورة</button>` : "")}
+  ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), (items.length ? `<button class="btn btn-outline btn-sm" data-act="printRes">${ic("download")} طلب الحجز</button>` : "") + (inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} الفاتورة</button>` : ""))}
   ${items.length ? `<section class="card card-pad mb-4">${tracker(Math.min(...Emp.activeItems().map(i => itemStage(i).step).filter(x => x >= 0).concat([4])))}</section>` : ""}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-[1fr_360px] items-start">
     <div class="space-y-3">
@@ -414,12 +415,28 @@ Router.add("/e/orders", view => {
     </aside>
   </div>`;
 });
+/** بيانات العضو للمستندات */
+const docEmp = () => { const u = APP.user; return { name: u.fullName, id: u.empId, dept: u.department, mobile: u.mobile }; };
 on("printInv", () => {
-  const inv = Emp.invoice(), bm = Emp.bookMap(), u = APP.user;
-  const rows = Emp.phaseItems().filter(i => n(i.Allocated_Qty) || n(i.Delivered_Qty));
-  openPrint("فاتورة كتب", `<h1>فاتورة كتب — ${esc(u.fullName)} (${esc(u.empId)})</h1><p>${esc(APP.emp.activePhase.Phase_Name)} · ${esc(inv.Emp_Inv_ID)}</p>
-    <table><tr><th>الكتاب</th><th>مخصص</th><th>مستلم</th><th>سعر الكتاب</th><th>القيمة</th></tr>${rows.map(i => `<tr><td>${esc((bm[i.Book_ID] || {}).Book_Name || i.Book_ID)}${i.Beneficiary ? " — لـ " + esc(i.Beneficiary) : ""}</td><td>${i.Allocated_Qty}</td><td>${i.Delivered_Qty}</td><td>${fmt(i.Unit_Emp_Price)}</td><td>${fmt(n(i.Allocated_Qty) * n(i.Unit_Emp_Price))}</td></tr>`).join("")}</table>
-    <table><tr><th>بسعر الغلاف</th><td>${moneyTxt(inv.Total_Cover_Amount)}</td><th>التوفير</th><td>${moneyTxt(inv.Total_Savings)}</td></tr><tr><th>الصافي</th><td><b>${moneyTxt(inv.Net_Final_Invoice_Amount)}</b></td><th>المسدد</th><td>${moneyTxt(inv.Total_Paid_Amount)}</td></tr><tr><th>المتبقي</th><td colspan="3"><b>${moneyTxt(inv.Remaining_Balance)}</b></td></tr></table>`);
+  const inv = Emp.invoice(), bm = Emp.bookMap(), r = APP.emp; if (!inv) return;
+  const h = r.myReservations.find(x => x.Res_ID === inv.Res_ID) || {};
+  Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, emp: docEmp(),
+    lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
+    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, down: inv.Down_Payment_Required,
+    schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID });
+});
+/** طلب الحجز كمستند (صورة أو PDF) — من السلة الحالية */
+on("printRes", () => {
+  const r = APP.emp, bm = Emp.bookMap(), h = r.myReservations.find(x => x.Phase_ID === APP.phaseId) || {};
+  const lines = Object.keys(APP.cart).map(k => { const b = bm[bk(k)] || {}; return { code: bk(k), name: b.Book_Name || bk(k), grade: b.Grade, ben: bn(k), qty: APP.cart[k], cover: b.Cover_Price, price: b.Emp_Selling_Price }; });
+  if (!lines.length) return toast("السلة فاضية", "info");
+  const pc = Emp.planCalc(Emp.totals().net);
+  Doc.show("طلب حجز", Doc.reservation({ no: h.Res_ID || "مسودة", date: h.Created_At || new Date().toISOString(), phase: r.activePhase.Phase_Name, status: Emp.dirty || !h.Res_ID ? "غير محفوظ" : "مؤكد", emp: docEmp(), lines,
+    plan: { method: APP.plan.method, down: pc.down, count: pc.cnt, per: pc.per, last: pc.last } }), { file: "طلب-حجز-" + (h.Res_ID || APP.user.empId) });
+});
+on("printRcptE", no => {
+  const p = APP.emp.myPayments.find(x => x.Receipt_No === no); if (!p) return; const inv = APP.emp.myInvoices.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {};
+  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: docEmp(), amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By }), { file: no });
 });
 
 // ============================================================ مدفوعاتي
@@ -447,7 +464,7 @@ Router.add("/e/pay", view => {
     ${UI.section(`${ic("receipt", "text-brand-600")} إيصالات السداد`, "", pays.length ? `<ul class="space-y-2.5">${pays.map(p => `<li class="flex items-center gap-3 rounded-2xl ring-1 ring-slate-100 p-3 ${isTrue(p.Is_Voided) ? "opacity-50" : ""}">
         <span class="w-11 h-11 rounded-xl ${n(p.Amount) < 0 ? "bg-sky-50 text-sky-600" : "bg-emerald-50 text-emerald-600"} flex items-center justify-center text-lg">${ic(p.Payment_Method === "CASH" ? "banknote" : p.Payment_Method === "PAYROLL" ? "building-2" : "smartphone")}</span>
         <div class="flex-1 min-w-0"><div class="font-semibold text-slate-800 text-[14px]">${n(p.Amount) < 0 ? "رد رصيد" : "سداد"} · ${esc(ar(p.Payment_Method))}</div><div class="text-[11.5px] text-slate-400 num">${esc(p.Receipt_No)} · ${esc(dt(p.Payment_Date))}${isTrue(p.Is_Voided) ? " · ملغى" : ""}</div></div>
-        <div class="font-bold num ${n(p.Amount) < 0 ? "text-sky-600" : "text-slate-900"}">${fmt(Math.abs(n(p.Amount)))}</div></li>`).join("")}</ul>` : UI.empty("wallet", "لا توجد مدفوعات بعد"))}
+        <div class="font-bold num ${n(p.Amount) < 0 ? "text-sky-600" : "text-slate-900"}">${fmt(Math.abs(n(p.Amount)))}</div><button class="icon-btn w-9 h-9" data-act="printRcptE" data-id="${esc(p.Receipt_No)}" aria-label="الإيصال">${ic("download")}</button></li>`).join("")}</ul>` : UI.empty("wallet", "لا توجد مدفوعات بعد"))}
   </div>`;
 });
 
