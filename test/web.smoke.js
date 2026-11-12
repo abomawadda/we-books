@@ -48,7 +48,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   // ------------------------------------------------ الموظف
   d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '4512'; d.getElementById('lgMob').value = '01012345678';
   d.getElementById('fEmp').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle();
-  check(w.location.hash === '#/e/home' && /مرحباً/.test(view()), 'employee home');
+  check(w.location.hash === '#/e/home' && /الخير/.test(view()), 'employee home');
   await go('/e/books');
   check(d.querySelectorAll('#bookGrid article').length >= 5, 'catalog grid shows books');
   await click('[data-act="cartInc"][data-id="BK-101"]');
@@ -59,10 +59,10 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(Object.keys(w.eval('APP').cart).some(k => k === 'BK-101|أحمد — ابن أخ'), 'relative line in cart');
   check(/BK-101|سلاح/.test(d.querySelector('.cart-body').textContent) || true, 'cart updated');
   await click('[data-act="openCart"]');
-  check(dialog() && /استمارة الحجز/.test(dialog().textContent), 'cart sheet opened');
+  check(dialog() && /سلة الكتب/.test(dialog().textContent), 'cart sheet opened');
   await click('[data-act="planCount"][data-id="3"]', dialog());
   await click('[data-act="submitRes"]', dialog());
-  check(/تم حفظ حجزك/.test(d.body.textContent), 'reservation saved with success dialog');
+  check(/حجزك اتسجل/.test(d.body.textContent), 'reservation saved with success dialog');
   expectNoErrorToasts('reservation');
   await closeAll();
   for (const r of ['/e/orders', '/e/pay', '/e/me', '/e/home']) { await go(r); check(view().length > 50, 'employee page ' + r); }

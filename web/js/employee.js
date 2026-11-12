@@ -66,24 +66,58 @@ const Emp = {
 };
 
 // ============================================================ الرئيسية
+// ============================================================ حالة الكتاب بلغة بسيطة
+// التسلسل: تم الحجز ← جاري التجهيز ← جاري الشحن ← جاهز للتسليم ← استلمته
+const STAGES = [["تم الحجز", "notebook-pen"], ["جاري التجهيز", "boxes"], ["جاري الشحن", "truck"], ["جاهز للتسليم", "package-check"], ["استلمته", "circle-check"]];
+function itemStage(i) {
+  const ph = APP.emp.activePhase || {}, st = ph.Effective_Status || ph.Phase_Status;
+  const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty);
+  if (String(i.Allocation_Status).startsWith("Cancelled")) return { step: -1, label: "ملغي", tone: "red", icon: "ban" };
+  if (i.Allocation_Status === "Carried_Forward") return { step: -1, label: "انتقل للمرحلة التالية", tone: "gray", icon: "arrow-left-right" };
+  if (req && dl >= req) return { step: 4, label: "استلمته 🎉", tone: "green", icon: "circle-check" };
+  if (dl) return { step: 3, label: "استلمت جزءاً والباقي جاهز", tone: "green", icon: "package-check" };
+  if (req && al >= req) return { step: 3, label: "جاهز للتسليم", tone: "green", icon: "package-check" };
+  if (al) return { step: 3, label: "جزء جاهز والباقي في الطريق", tone: "amber", icon: "package-check" };
+  if (["Delivering", "Completed"].includes(st)) return { step: 2, label: "بانتظار وصول كمية إضافية", tone: "amber", icon: "hourglass" };
+  if (st === "Receiving") return { step: 2, label: "جاري الشحن", tone: "blue", icon: "truck" };
+  if (["Closed", "Ordered"].includes(st)) return { step: 1, label: "جاري التجهيز", tone: "blue", icon: "boxes" };
+  return { step: 0, label: "تم الحجز", tone: "brand", icon: "notebook-pen" };
+}
+const stagePill = g => `<span class="pill pill-${g.tone}">${ic(g.icon)} ${esc(g.label)}</span>`;
+/** متتبع الرحلة مثل تتبع الشحنات */
+function tracker(step) {
+  return `<ol class="flex items-start justify-between relative">${STAGES.map((s, i) => `<li class="flex-1 flex flex-col items-center text-center relative">
+    ${i ? `<span class="absolute top-[18px] left-1/2 w-full h-1 rounded-full ${i <= step ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
+    <span class="relative z-[1] w-9 h-9 rounded-full flex items-center justify-center text-[16px] ${i < step ? "bg-brand-600 text-white" : i === step ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(i < step ? "check" : s[1])}</span>
+    <span class="mt-1.5 text-[10.5px] sm:text-[11.5px] font-semibold leading-tight ${i <= step ? "text-slate-800" : "text-slate-400"}">${s[0]}</span></li>`).join("")}</ol>`;
+}
+// الاسم الثلاثي مع الأسماء المركبة (عبد الرحمن، أبو بكر، محمد علي...)
+const fullName3 = nm => { const w = String(nm || "").trim().split(/\s+/), out = [];
+  for (let i = 0; i < w.length && out.length < 3; i++) { const t = w[i]; if (/^(عبد|عبدال|أبو|ابو|أبي|ابي)$/.test(t) && w[i + 1]) { out.push(t + " " + w[++i]); } else if (/^(ال|الدين|الله)$/.test(t) && out.length) { out[out.length - 1] += " " + t; } else out.push(t); }
+  return out.join(" "); };
+const booksWord = c => c === 1 ? "كتاب واحد" : c === 2 ? "كتابان" : c >= 3 && c <= 10 ? c + " كتب" : c + " كتاباً";
+
 Router.add("/e/home", view => {
   const r = APP.emp, u = APP.user, ph = r.activePhase;
-  const first = String(u.fullName || "").split(" ")[0];
-  if (!ph) { view.innerHTML = UI.empty("calendar-clock", "لا توجد مراحل حجز حالياً", "سيظهر هنا موعد الحجز القادم فور فتحه من إدارة المبادرة."); return; }
+  const name = fullName3(u.fullName);
+  if (!ph) { view.innerHTML = UI.empty("calendar-clock", "لا يوجد حجز مفتوح حالياً", "هنبلغك هنا أول ما يفتح الحجز الجديد 🔔"); return; }
   const items = Emp.activeItems(), inv = Emp.invoice(), inst = Emp.installments();
   const reqQty = sum(items, "Requested_Qty"), alloc = sum(items, "Allocated_Qty"), deliv = sum(items, "Delivered_Qty");
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
-  const left = Emp.daysLeft();
-  const next = inst.find(i => n(i.Remaining_Inst_Amount) > 0);
-  const t = Emp.totals();
+  const left = Emp.daysLeft(), next = inst.find(i => n(i.Remaining_Inst_Amount) > 0), t = Emp.totals();
+  const steps = items.map(i => itemStage(i).step).filter(x => x >= 0), step = steps.length ? Math.min(...steps) : -1;
+  const ready = items.reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+  const rels = [...new Set(items.map(i => i.Beneficiary).filter(Boolean))];
+  const hi = new Date().getHours() < 12 ? "صباح الخير" : "مساء الخير";
 
-  // مراحل رحلة الطلب
-  const stepIdx = !reqQty ? 0 : !alloc && !inv ? 1 : deliv < alloc ? 2 : inv && n(inv.Remaining_Balance) > 0 ? 3 : 4;
-  const steps = [["shopping-bag", "الحجز"], ["truck", "التوريد"], ["list-ordered", "التخصيص"], ["package-check", "الاستلام"], ["circle-check", "السداد"]];
-  const journey = `<ol class="flex items-start justify-between relative">${steps.map((s, i) => `<li class="flex-1 flex flex-col items-center text-center relative">
-      ${i ? `<span class="absolute top-5 left-1/2 w-full h-0.5 ${i <= stepIdx ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
-      <span class="relative z-[1] w-10 h-10 rounded-full flex items-center justify-center text-[17px] ${i < stepIdx ? "bg-brand-600 text-white" : i === stepIdx ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(i < stepIdx ? "check" : s[0])}</span>
-      <span class="mt-2 text-[11.5px] font-semibold ${i <= stepIdx ? "text-slate-800" : "text-slate-400"}">${s[1]}</span></li>`).join("")}</ol>`;
+  // رسالة واحدة واضحة حسب موقفك الآن
+  let msg;
+  if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز", href: "#/e/books" };
+  else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ ✅ ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "عدّل حجزك", href: "#/e/books" };
+  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم`, cta: "التفاصيل", href: "#/e/orders" };
+  else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
+  else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "هنبلغك أول ما كتبك تبقى جاهزة للتسليم", cta: "تابع طلبك", href: "#/e/orders" };
+  else msg = { icon: "lock", title: "الحجز مقفول حالياً", sub: "ما حجزتش في المرحلة دي — استنى المرحلة الجاية", cta: "", href: "" };
 
   view.innerHTML = `
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-3">
@@ -91,53 +125,53 @@ Router.add("/e/home", view => {
       <div class="absolute -left-16 -top-16 w-56 h-56 rounded-full bg-white/5"></div><div class="absolute left-10 -bottom-20 w-40 h-40 rounded-full bg-gold-400/10"></div>
       <div class="relative flex items-start justify-between gap-4">
         <div class="min-w-0">
-          <div class="text-brand-200 text-sm">مرحباً،</div>
-          <h1 class="text-2xl sm:text-3xl font-bold mt-0.5 truncate">${esc(first)} 👋</h1>
-          <div class="text-brand-200/90 text-[13px] mt-1 truncate">${esc(u.department || "")} · رقم ${esc(u.empId)}</div>
-          <div class="flex flex-wrap items-center gap-2 mt-4">
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-gold-400 text-brand-950 px-3 py-1 text-[13px] font-bold">${ic("badge-percent")} خصم ${fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT)}%</span>
-            <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[13px] font-semibold">${ic("calendar-range")} ${esc(ph.Phase_Name)}</span>
+          <div class="text-brand-200 text-sm">${hi} 👋</div>
+          <h1 class="text-[22px] sm:text-3xl font-bold mt-0.5 leading-snug">${esc(name)}</h1>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-gold-400 text-brand-950 px-3 py-1 text-[12.5px] font-bold">${ic("badge-percent")} خصم ${fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT)}%</span>
+            <span class="inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[12.5px] font-semibold">${ic("calendar-range")} ${esc(ph.Phase_Name)}</span>
           </div>
         </div>
-        ${inv ? `<div class="relative shrink-0">${UI.donut(paidPct, 112, "مسدد")}</div>` : `<div class="hidden sm:flex shrink-0 w-24 h-24 rounded-3xl bg-white/10 items-center justify-center text-5xl text-gold-300">${ic("library")}</div>`}
+        ${inv ? `<div class="relative shrink-0">${UI.donut(paidPct, 104, "مسدد")}</div>` : ""}
       </div>
-      <div class="relative mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-white/10 ring-1 ring-white/10 p-3.5">
-        <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-xl ${ph.Booking_Open ? "bg-emerald-400/20 text-emerald-300" : "bg-white/10 text-brand-200"} flex items-center justify-center">${ic(ph.Booking_Open ? "clock" : "lock")}</span>
-          <div><div class="font-bold text-[15px]">${ph.Booking_Open ? "الحجز مفتوح الآن" : esc(ar(ph.Effective_Status))}</div>
-          <div class="text-[12.5px] text-brand-200">${ph.Booking_Open ? (left !== null ? (left <= 0 ? "ينتهي اليوم" : `يتبقى ${left} يوم · حتى ${esc(day(ph.End_DateTime))}`) : "") : "تابع موقف حجزك من «حجوزاتي»"}</div></div></div>
-        <a href="#/e/${ph.Booking_Open ? "books" : "orders"}" class="btn btn-gold btn-sm">${ph.Booking_Open ? (reqQty ? "تعديل الحجز" : "ابدأ الحجز") : "موقف الحجز"} ${ic("chevron-left")}</a>
-      </div>
+      <a ${msg.href ? `href="${msg.href}"` : ""} class="relative mt-5 flex items-center gap-3 rounded-2xl bg-white/10 ring-1 ring-white/15 p-3.5 ${msg.href ? "active:scale-[.98] transition" : ""}">
+        <span class="w-11 h-11 rounded-xl bg-gold-400/20 text-gold-300 flex items-center justify-center text-xl shrink-0">${ic(msg.icon)}</span>
+        <span class="flex-1 min-w-0"><span class="block font-bold text-[15.5px]">${esc(msg.title)}</span><span class="block text-[12.5px] text-brand-200 mt-0.5">${esc(msg.sub)}</span></span>
+        ${msg.cta ? `<span class="btn btn-gold btn-sm shrink-0 !text-brand-950">${esc(msg.cta)} ${ic("chevron-left")}</span>` : ""}
+      </a>
     </section>
 
     <section class="card card-pad">
       <h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2>
       ${next ? `<div class="mt-4 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4">
-          <div class="text-[13px] ${next.Status === "Overdue" ? "text-rose-700" : "text-brand-700"} font-semibold">${esc(next.Admin_Custom_Notes || "قسط")} · ${next.Status === "Overdue" ? "متأخر" : "يستحق"} ${esc(day(next.Due_Date))}</div>
+          <div class="text-[13px] ${next.Status === "Overdue" ? "text-rose-700" : "text-brand-700"} font-semibold">${esc(next.Admin_Custom_Notes || "قسط")} · ${next.Status === "Overdue" ? "متأخر من" : "موعده"} ${esc(day(next.Due_Date))}</div>
           <div class="text-3xl font-bold text-slate-900 num mt-1">${money(next.Remaining_Inst_Amount)}</div></div>
-          <a href="#/e/pay" class="btn btn-soft w-full mt-3">جدول الأقساط ${ic("chevron-left")}</a>`
-        : `<div class="mt-2">${UI.empty("calendar-check", inv ? "لا توجد أقساط مستحقة" : "لا توجد أقساط بعد", inv ? "حسابك منتظم." : "يظهر جدول الأقساط بعد صدور الفاتورة عند التوزيع.")}</div>`}
+          <a href="#/e/pay" class="btn btn-soft w-full mt-3">كل الأقساط ${ic("chevron-left")}</a>`
+        : `<div class="mt-2">${UI.empty("calendar-check", inv ? "مفيش أقساط مستحقة 👌" : "لسه مفيش أقساط", inv ? "حسابك تمام." : "الأقساط بتبدأ بعد استلام الكتب.")}</div>`}
     </section>
   </div>
 
+  ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>${tracker(step)}</section>` : ""}
+
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4 lg:mt-6">
-    ${UI.kpi("نسخ محجوزة", fmt(reqQty), { icon: "book-open", tone: "brand", foot: Emp.dirty ? "لديك تعديلات غير محفوظة" : "" })}
-    ${UI.kpi("مخصص لك", fmt(alloc) + (reqQty ? ` <span class="text-sm text-slate-400">/ ${fmt(reqQty)}</span>` : ""), { icon: "list-ordered", tone: "green", pct: reqQty ? alloc / reqQty * 100 : 0 })}
-    ${UI.kpi("قيمة الفاتورة", inv ? money(inv.Net_Final_Invoice_Amount) : money(t.net), { icon: "receipt", tone: "blue", foot: inv ? `وفّرت ${moneyTxt(inv.Total_Savings)}` : t.cover ? `توفير متوقع ${moneyTxt(t.cover - t.net)}` : "" })}
+    ${UI.kpi("كتب محجوزة", fmt(reqQty), { icon: "book-open", tone: "brand", foot: Emp.dirty ? "عندك تعديلات لم تُحفظ" : rels.length ? `منها لـ ${rels.length} من الأقارب` : "" })}
+    ${UI.kpi("جاهز للتسليم", fmt(alloc) + (reqQty ? ` <span class="text-sm text-slate-400">/ ${fmt(reqQty)}</span>` : ""), { icon: "package-check", tone: "green", pct: reqQty ? alloc / reqQty * 100 : 0, foot: deliv ? `استلمت ${fmt(deliv)}` : "" })}
+    ${UI.kpi("وفّرت", inv ? money(inv.Total_Savings) : money(t.cover - t.net), { icon: "piggy-bank", tone: "green", foot: "مقارنة بسعر الغلاف" })}
     ${UI.kpi("المتبقي عليك", inv ? money(inv.Remaining_Balance) : money(0), { icon: "hand-coins", tone: inv && n(inv.Remaining_Balance) ? "amber" : "green", foot: inv && n(inv.Credit_Balance) ? `لك رصيد ${moneyTxt(inv.Credit_Balance)}` : "" })}
   </div>
 
-  <div class="grid gap-4 lg:gap-6 lg:grid-cols-3 mt-4 lg:mt-6">
-    <section class="card card-pad lg:col-span-2"><h2 class="card-title mb-5">${ic("sparkles", "text-gold-500")} رحلة طلبك</h2>${journey}</section>
-    <section class="card card-pad">
-      <h2 class="card-title">${ic("smartphone", "text-brand-600")} وسائل السداد</h2>
-      <ul class="mt-3 space-y-2.5 text-[13.5px] text-slate-600">
-        <li class="flex gap-2.5">${ic("banknote", "text-emerald-600 mt-0.5")}نقداً لأمين الصندوق مقابل إيصال</li>
-        <li class="flex gap-2.5">${ic("smartphone", "text-sky-600 mt-0.5")}محفظة إلكترونية أو إنستاباي باسم <b class="text-slate-800">${esc(r.settings.CASH_ACCOUNT_HOLDER || "")}</b></li>
-        <li class="flex gap-2.5">${ic("info", "text-amber-500 mt-0.5")}احتفظ برقم التحويل وأرسله لأمين الصندوق</li>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-4 lg:mt-6">
+    ${relOn() && ph.Booking_Open ? `<button data-act="relQuick" class="card card-pad text-right flex items-center gap-3 active:scale-[.98] transition"><span class="w-12 h-12 rounded-2xl bg-sky-50 text-sky-600 flex items-center justify-center text-2xl shrink-0">${ic("users")}</span><span class="flex-1"><span class="block font-bold text-slate-900">احجز لقريب</span><span class="block text-[12.5px] text-slate-500 mt-0.5">${rels.length ? "حجزت لـ " + rels.map(esc).join("، ") : "ابن أخوك أو أختك أو حفيدك؟ احجز له على حسابك"}</span></span>${ic("chevron-left", "text-slate-300")}</button>` : ""}
+    <section class="card card-pad ${relOn() && ph.Booking_Open ? "lg:col-span-2" : "sm:col-span-2 lg:col-span-3"}">
+      <h2 class="card-title">${ic("smartphone", "text-brand-600")} تدفع إزاي؟</h2>
+      <ul class="mt-3 space-y-2 text-[13.5px] text-slate-600">
+        <li class="flex gap-2.5">${ic("banknote", "text-emerald-600 mt-0.5")}نقداً لأمين الصندوق وتاخد إيصال</li>
+        <li class="flex gap-2.5">${ic("smartphone", "text-sky-600 mt-0.5")}محفظة أو إنستاباي باسم <b class="text-slate-800">${esc(r.settings.CASH_ACCOUNT_HOLDER || "")}</b> وابعت رقم التحويل</li>
       </ul>
     </section>
   </div>`;
 });
+on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
 // ============================================================ الكتالوج والسلة
 function bookCard(b) {
@@ -154,13 +188,13 @@ function bookCard(b) {
     <div class="flex-1 min-w-0 flex flex-col sm:p-3.5 sm:pt-3">
       <h3 class="font-bold text-slate-900 leading-snug text-[14.5px] line-clamp-2">${esc(b.Book_Name)}</h3>
       <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} <span class="text-slate-300">·</span> ${esc(String(b.School_Types || "").split("،").join(" / "))} <span class="text-slate-300">·</span> <span class="num text-slate-400">${esc(b.Book_ID)}</span></div>
-      <div class="flex flex-wrap gap-1 mt-1.5">${elsewhere ? pill("", `${elsewhere} نسخة لمستفيد آخر`, "blue") : ""}${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
+      <div class="flex flex-wrap gap-1 mt-1.5">${elsewhere ? pill("", `${elsewhere} كتاب لمستفيد آخر`, "blue") : ""}${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
       ${b.Book_Status === "Pricing" ? `<div class="mt-auto pt-2 flex items-center justify-between gap-2"><span class="pill pill-amber">${ic("hourglass")} جاري التسعير</span><span class="text-[11px] text-slate-400">يُتاح للحجز فور إعلان سعره</span></div>` : `
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
         <div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>
           <div class="flex items-center gap-1.5"><span class="text-lg font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)}</span><span class="text-[11px] text-slate-500">ج.م</span>${save > 0 ? `<span class="pill pill-green !px-1.5">-${save}%</span>` : ""}</div></div>
         ${q ? `<div class="stepper"><button data-act="cartInc" data-id="${esc(b.Book_ID)}" ${!open || q >= mx ? "disabled" : ""} aria-label="زيادة">${ic("plus")}</button><span>${q}</span><button data-act="cartDec" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"} aria-label="تقليل">${ic(q === 1 ? "trash-2" : "minus")}</button></div>`
-          : `<button class="btn btn-soft btn-sm" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("plus")} أضف</button>`}
+          : `<button class="btn btn-soft btn-sm" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("shopping-cart")} أضف للسلة</button>`}
       </div>`}
     </div></article>`;
 }
@@ -174,7 +208,7 @@ function cartHTML() {
       <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500 num">${fmt(b.Emp_Selling_Price)} × ${APP.cart[id]} = <b class="text-slate-700">${fmt(n(b.Emp_Selling_Price) * APP.cart[id])}</b></div></div>
       ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(id)}" ${APP.cart[id] >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${APP.cart[id]}</span><button data-act="cartDec" data-id="${esc(id)}">${ic(APP.cart[id] === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${APP.cart[id]}</span>`}
     </li>`; }).join("")}</ul>`).join("")
-    : `<div class="text-center py-6 text-slate-400 text-sm">${ic("shopping-bag", "text-3xl mx-auto mb-2 block")}لم تضف كتباً بعد</div>`}
+    : `<div class="text-center py-6 text-slate-400 text-sm">${ic("shopping-cart", "text-3xl mx-auto mb-2 block")}السلة فاضية — اختار كتب أولادك من «احجز» 😊</div>`}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
     <div class="flex justify-between text-slate-500"><span>بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
@@ -196,8 +230,8 @@ function cartHTML() {
     <div class="plan-preview">${planPreview(pc)}</div>
   </div>` : `<div class="mt-3 text-[12.5px] text-slate-500 flex gap-2">${ic("info", "text-brand-500 mt-0.5")}<span>يُسدَّد كامل المبلغ عند استلام الكتب${p.method !== "CASH" ? ` عبر ${ar(p.method)} باسم <b>${esc(s.CASH_ACCOUNT_HOLDER || "")}</b>` : ""}.</span></div>`}
 
-  ${open ? `<button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4" ${!ids.length && !hadRes ? "disabled" : ""}>${ic(ids.length ? "check-check" : "ban")} ${ids.length ? (hadRes ? "حفظ تعديل الحجز" : "تأكيد الحجز") : "إلغاء حجزي في المرحلة"}</button>
-    <p class="text-[11.5px] text-slate-400 mt-2.5 leading-relaxed">${ic("info", "inline -mt-0.5")} الأسبقية تُحسب لكل نسخة بوقت حجزها؛ زيادة الكمية لا تؤخر نسخك السابقة، والتخفيض يحذف أحدث نسخة أولاً.</p>`
+  ${open ? `<button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4" ${!ids.length && !hadRes ? "disabled" : ""}>${ic(ids.length ? "check-check" : "ban")} ${ids.length ? (hadRes ? "احفظ التعديل" : "أكّد الحجز") : "إلغاء حجزي"}</button>
+    <p class="text-[11.5px] text-slate-400 mt-2.5 leading-relaxed">${ic("info", "inline -mt-0.5")} أسبقيتك محفوظة بوقت حجز كل كتاب — لو زوّدت كتب، الكتب القديمة تفضل في دورها.</p>`
     : `<div class="mt-4 rounded-2xl bg-amber-50 text-amber-800 text-sm p-3.5 flex gap-2">${ic("lock", "mt-0.5")}الحجز مغلق في هذه المرحلة.</div>`}`;
 }
 function planPreview(pc) {
@@ -216,11 +250,13 @@ function refreshCartViews() {
   if (bar) {
     bar.classList.toggle("hidden", !t.count && !Emp.activeItems().length);
     bar.innerHTML = `<button data-act="openCart" class="w-full flex items-center gap-3 rounded-2xl bg-brand-800 text-white px-4 py-3 shadow-glow active:scale-[.98] transition">
-      <span class="relative w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg">${ic("shopping-bag")}<span class="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 rounded-full bg-gold-400 text-brand-950 text-[11px] font-bold flex items-center justify-center num">${t.count}</span></span>
-      <span class="flex-1 text-right"><span class="block text-[12px] text-brand-200">${Emp.dirty ? "تعديلات غير محفوظة" : "حجزك الحالي"}</span><span class="block font-bold num">${moneyTxt(t.net)}</span></span>
-      <span class="font-semibold text-[14px] flex items-center gap-1">مراجعة الحجز ${ic("chevron-left")}</span></button>`;
+      <span class="relative w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg">${ic("shopping-cart")}<span class="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 rounded-full bg-gold-400 text-brand-950 text-[11px] font-bold flex items-center justify-center num">${t.count}</span></span>
+      <span class="flex-1 text-right"><span class="block text-[12px] text-brand-200">${Emp.dirty ? "السلة · لم تُحفظ بعد" : "السلة · حجزك محفوظ ✅"}</span><span class="block font-bold num">${booksWord(t.count)} · ${moneyTxt(t.net)}</span></span>
+      <span class="font-semibold text-[14px] flex items-center gap-1">${Emp.dirty ? "إتمام الحجز" : "السلة"} ${ic("chevron-left")}</span></button>`;
   }
   const hc = $("#cartCount"); if (hc) hc.textContent = t.count;
+  const badge = $("#cartBadge"); if (badge) { badge.textContent = t.count; badge.classList.toggle("hidden", !t.count); }
+  if (Router.current === "/e/cart") { const bar2 = $("#cartBar"); if (bar2) bar2.classList.add("hidden"); }
 }
 function renderBookGrid() {
   const r = APP.emp, f = Emp.filter;
@@ -257,12 +293,12 @@ Router.add("/e/books", view => {
         ${f.stage && grades.length > 1 ? `<div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fGrade" data-id="" aria-pressed="${!f.grade}">كل الصفوف</button>${grades.map(g => `<button class="chip !h-8 !text-xs" data-act="fGrade" data-id="${esc(g)}" aria-pressed="${f.grade === g}">${esc(g)}</button>`).join("")}</div>` : ""}
         ${subjects.length > 1 ? `<div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fSubject" data-id="" aria-pressed="${!f.subject}">كل المواد</button>${subjects.map(x => `<button class="chip !h-8 !text-xs" data-act="fSubject" data-id="${esc(x)}" aria-pressed="${f.subject === x}">${ic("book-marked")} ${esc(x)}</button>`).join("")}</div>` : ""}
       </div>
-      <div class="flex items-center justify-between mb-3 mt-1"><span id="bookCount" class="text-sm text-slate-500"></span><span class="text-xs text-slate-400">الحد الأقصى ${fmt(r.settings.MAX_QTY_PER_BOOK || 3)} نسخ لكل كتاب</span></div>
+      <div class="flex items-center justify-between mb-3 mt-1"><span id="bookCount" class="text-sm text-slate-500"></span><span class="text-xs text-slate-400">أقصى ${fmt(r.settings.MAX_QTY_PER_BOOK || 3)} من نفس الكتاب</span></div>
       <div id="bookGrid" class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"></div>
     </div>
     <aside class="hidden lg:block sticky top-24">
       <section class="card">
-        <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100"><h2 class="card-title">${ic("shopping-bag", "text-brand-600")} استمارة الحجز</h2><span class="pill pill-brand"><span id="cartCount">0</span> نسخة</span></div>
+        <div class="flex items-center justify-between px-5 pt-5 pb-3 border-b border-slate-100"><h2 class="card-title">${ic("shopping-cart", "text-brand-600")} سلة الكتب</h2><span class="pill pill-brand"><span id="cartCount">0</span> كتاب</span></div>
         <div class="cart-body px-5 py-4 max-h-[calc(100dvh-12rem)] overflow-y-auto"></div>
       </section>
     </aside>
@@ -301,7 +337,8 @@ const keyFor = id => String(id).includes("|") ? id : ck(id, Emp.ben);
 on("cartInc", id => {
   id = keyFor(id);
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3;
-  if ((APP.cart[id] || 0) >= mx) return toast("الحد الأقصى " + mx + " نسخ من الكتاب", "warning");
+  if ((APP.cart[id] || 0) >= mx) return toast("أقصى عدد من نفس الكتاب " + mx, "warning");
+  if (!Object.keys(APP.cart).length && !Emp.activeItems().length) toast("اتضاف للسلة 🛒 كمّل اختيار باقي الكتب", "info");
   APP.cart[id] = (APP.cart[id] || 0) + 1;
   if (navigator.vibrate) navigator.vibrate(8);
   cartChanged(id);
@@ -311,8 +348,15 @@ on("planMethod", v => { APP.plan.method = v; Emp.dirty = true; refreshCartViews(
 on("planDownType", v => { APP.plan.downType = v; APP.plan.down = v === "PERCENTAGE" ? Math.max(25, n(APP.emp.settings.MIN_DOWN_PAYMENT_PCT)) : ceil(Emp.planCalc(Emp.totals().net).minDown); Emp.dirty = true; refreshCartViews(); });
 on("planCount", v => { APP.plan.count = n(v); Emp.dirty = true; refreshCartViews(); });
 on("planDown", v => { APP.plan.down = v; Emp.dirty = true; const html = planPreview(Emp.planCalc(Emp.totals().net)); $$(".plan-preview").forEach(el => el.innerHTML = html); });
-on("openCart", () => {
-  const m = UI.open(`<div class="cart-body"></div>`, { title: "استمارة الحجز", sub: APP.emp.activePhase.Phase_Name, onClose: () => refreshCartViews() });
+Router.add("/e/cart", view => {
+  if (!APP.emp.activePhase) { view.innerHTML = UI.empty("shopping-cart", "السلة فاضية"); return; }
+  const t = Emp.totals();
+  view.innerHTML = `<div class="max-w-xl mx-auto">${UI.pageHead(`${ic("shopping-cart", "text-brand-600")} سلة الكتب`, t.count ? booksWord(t.count) + " · " + esc(APP.emp.activePhase.Phase_Name) : esc(APP.emp.activePhase.Phase_Name), `<a href="#/e/books" class="btn btn-outline btn-sm">${ic("plus")} أضف كتب</a>`)}
+    <section class="card card-pad"><div class="cart-body"></div></section></div>`;
+  refreshCartViews();
+});
+on("openCart", () => { if (window.innerWidth < 1024 && !window.__forceSheet) return Router.go("/e/cart");
+  const m = UI.open(`<div class="cart-body"></div>`, { title: "سلة الكتب", sub: APP.emp.activePhase.Phase_Name, onClose: () => refreshCartViews() });
   m.body.querySelector(".cart-body").innerHTML = cartHTML();
   Emp._cartSheet = m;
 });
@@ -325,11 +369,12 @@ on("submitRes", async () => {
   if (!r.success) return toast(r.message, "danger");
   Emp.dirty = false;
   if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
+  if (Router.current === "/e/cart") Router.go("/e/home");
   (r.warnings || []).forEach(w => toast(w, "warning"));
   await Emp.load();
   UI.open(`<div class="text-center py-2"><div class="w-20 h-20 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-4xl animate-pop-in">${ic("circle-check")}</div>
-    <h3 class="text-xl font-bold text-slate-900 mt-4">${items.length ? "تم حفظ حجزك" : "تم إلغاء الحجز"}</h3><p class="text-sm text-slate-500 mt-2 leading-relaxed">${esc(r.message || "")}</p>
-    ${items.length ? `<div class="grid grid-cols-2 gap-2 mt-5 text-right">${UI.stat("عدد النسخ", fmt(t.count))}${UI.stat("الإجمالي", money(t.net))}</div>` : ""}</div>`,
+    <h3 class="text-xl font-bold text-slate-900 mt-4">${items.length ? "تمام! حجزك اتسجل 🎉" : "تم إلغاء الحجز"}</h3><p class="text-sm text-slate-500 mt-2 leading-relaxed">${esc(r.message || "")}</p>
+    ${items.length ? `<div class="grid grid-cols-2 gap-2 mt-5 text-right">${UI.stat("عدد الكتب", fmt(t.count))}${UI.stat("الإجمالي", money(t.net))}</div>` : ""}</div>`,
     { footer: `<div class="flex gap-2"><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
 });
 
@@ -340,6 +385,7 @@ Router.add("/e/orders", view => {
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   view.innerHTML = `
   ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} طباعة الفاتورة</button>` : "")}
+  ${items.length ? `<section class="card card-pad mb-4">${tracker(Math.min(...Emp.activeItems().map(i => itemStage(i).step).filter(x => x >= 0).concat([4])))}</section>` : ""}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-[1fr_360px] items-start">
     <div class="space-y-3">
       ${items.length ? items.map(i => {
@@ -347,15 +393,15 @@ Router.add("/e/orders", view => {
         return `<article class="card p-4">
           <div class="flex items-start gap-3">
             <div class="w-11 h-14 rounded-lg shrink-0 flex items-center justify-center text-white text-lg" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>
-            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}${i.Beneficiary ? `<span class="block text-[12px] font-semibold text-sky-700 mt-0.5">لـ ${esc(i.Beneficiary)}</span>` : ""}</h3>${pill(i.Allocation_Status)}</div>
-              <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للنسخة · شريحة ${esc(i.Tranche_No || 1)}</div>
+            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}${i.Beneficiary ? `<span class="block text-[12px] font-semibold text-sky-700 mt-0.5">لـ ${esc(i.Beneficiary)}</span>` : ""}</h3>${stagePill(itemStage(i))}</div>
+              <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للكتاب</div>
               <div class="text-[11.5px] text-slate-400 mt-0.5 flex items-center gap-1">${ic("clock")} أسبقية <span dir="ltr" class="num">${esc(i.Priority_Timestamp)}</span></div></div>
           </div>
-          <div class="grid grid-cols-4 gap-2 mt-3.5 text-center">${[["محجوز", req, "text-slate-800"], ["مخصص", al, "text-brand-700"], ["مُستلم", dl, "text-emerald-600"], ["مرتجع", n(i.Returned_Qty), "text-slate-500"]].map(x => `<div class="rounded-xl bg-slate-50 py-2"><div class="text-[11px] text-slate-500">${x[0]}</div><div class="font-bold num ${x[2]}">${x[1]}</div></div>`).join("")}</div>
-          ${req ? `<div class="mt-3">${UI.progress(Math.max(al, dl) / req * 100, dl >= req ? "bg-emerald-500" : "bg-brand-600")}</div>` : ""}
+          <div class="grid grid-cols-3 gap-2 mt-3.5 text-center">${[["حجزت", req, "text-slate-800"], ["جاهز للتسليم", Math.max(0, al - dl), "text-brand-700"], ["استلمت", dl, "text-emerald-600"]].map(x => `<div class="rounded-xl bg-slate-50 py-2"><div class="text-[11px] text-slate-500">${x[0]}</div><div class="font-bold num ${x[2]}">${x[1]}</div></div>`).join("")}</div>
+          ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
         </article>`;
-      }).join("") : `<div class="card">${UI.empty("shopping-bag", "لم تحجز كتباً في هذه المرحلة", Emp.open() ? "تصفح الكتالوج وأضف كتب أبنائك." : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} تصفح الكتب</a>` : "")}</div>`}
+      }).join("") : `<div class="card">${UI.empty("shopping-bag", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>
     <aside class="space-y-4 lg:sticky lg:top-24">
       ${inv ? `<section class="card overflow-hidden">
@@ -364,7 +410,7 @@ Router.add("/e/orders", view => {
         <div class="p-4 grid grid-cols-2 gap-2">${UI.stat("بسعر الغلاف", `<span class="line-through text-slate-400">${fmt(inv.Total_Cover_Amount)}</span>`)}${UI.stat("وفّرت", `<span class="text-emerald-600">${moneyTxt(inv.Total_Savings)}</span>`)}${UI.stat("المقدم المطلوب", moneyTxt(inv.Down_Payment_Required))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600"}">${moneyTxt(inv.Remaining_Balance)}</span>`)}
           ${n(inv.Credit_Balance) ? `<div class="col-span-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm p-3 font-semibold">لك رصيد مستحق الرد ${moneyTxt(inv.Credit_Balance)}</div>` : ""}</div>
         <div class="px-4 pb-4 flex items-center justify-between text-[12px] text-slate-500"><span>${esc(inv.Emp_Inv_ID)}</span>${pill(inv.Invoice_Status)}</div></section>`
-        : `<section class="card card-pad"><div class="flex gap-3"><span class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl shrink-0">${ic("receipt")}</span><div><div class="font-bold text-slate-900">الفاتورة لم تصدر بعد</div><p class="text-[13px] text-slate-500 mt-1 leading-relaxed">تصدر بعد وصول الكتب من المكتبة وتوزيعها حسب أسبقية الحجز، ويُحسب جدول الأقساط من تاريخ التسليم.</p></div></div></section>`}
+        : `<section class="card card-pad"><div class="flex gap-3"><span class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl shrink-0">${ic("receipt")}</span><div><div class="font-bold text-slate-900">الفاتورة لسه ما صدرتش</div><p class="text-[13px] text-slate-500 mt-1 leading-relaxed">بتصدر أول ما كتبك تبقى جاهزة للتسليم، والأقساط بتبدأ من يوم الاستلام.</p></div></div></section>`}
     </aside>
   </div>`;
 });
@@ -372,7 +418,7 @@ on("printInv", () => {
   const inv = Emp.invoice(), bm = Emp.bookMap(), u = APP.user;
   const rows = Emp.phaseItems().filter(i => n(i.Allocated_Qty) || n(i.Delivered_Qty));
   openPrint("فاتورة كتب", `<h1>فاتورة كتب — ${esc(u.fullName)} (${esc(u.empId)})</h1><p>${esc(APP.emp.activePhase.Phase_Name)} · ${esc(inv.Emp_Inv_ID)}</p>
-    <table><tr><th>الكتاب</th><th>مخصص</th><th>مستلم</th><th>سعر النسخة</th><th>القيمة</th></tr>${rows.map(i => `<tr><td>${esc((bm[i.Book_ID] || {}).Book_Name || i.Book_ID)}${i.Beneficiary ? " — لـ " + esc(i.Beneficiary) : ""}</td><td>${i.Allocated_Qty}</td><td>${i.Delivered_Qty}</td><td>${fmt(i.Unit_Emp_Price)}</td><td>${fmt(n(i.Allocated_Qty) * n(i.Unit_Emp_Price))}</td></tr>`).join("")}</table>
+    <table><tr><th>الكتاب</th><th>مخصص</th><th>مستلم</th><th>سعر الكتاب</th><th>القيمة</th></tr>${rows.map(i => `<tr><td>${esc((bm[i.Book_ID] || {}).Book_Name || i.Book_ID)}${i.Beneficiary ? " — لـ " + esc(i.Beneficiary) : ""}</td><td>${i.Allocated_Qty}</td><td>${i.Delivered_Qty}</td><td>${fmt(i.Unit_Emp_Price)}</td><td>${fmt(n(i.Allocated_Qty) * n(i.Unit_Emp_Price))}</td></tr>`).join("")}</table>
     <table><tr><th>بسعر الغلاف</th><td>${moneyTxt(inv.Total_Cover_Amount)}</td><th>التوفير</th><td>${moneyTxt(inv.Total_Savings)}</td></tr><tr><th>الصافي</th><td><b>${moneyTxt(inv.Net_Final_Invoice_Amount)}</b></td><th>المسدد</th><td>${moneyTxt(inv.Total_Paid_Amount)}</td></tr><tr><th>المتبقي</th><td colspan="3"><b>${moneyTxt(inv.Remaining_Balance)}</b></td></tr></table>`);
 });
 

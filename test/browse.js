@@ -35,7 +35,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
   const shot = (p, n) => p.screenshot({ path: path.join(OUT, n + '.png') });
   const adminLogin = async p => {
     await p.click('[data-act="loginTab"][data-id="adm"]');
-    await p.fill('#lgUser', 'admin'); await p.fill('#lgPass', global.pw || 'Admin@2026'); await p.click('#fAdm button.btn-dark'); await p.waitForTimeout(900); global.pw = 'Admin@2026x';
+    await p.fill('#lgUser', 'admin'); await p.fill('#lgPass', global.pw || 'Admin@2026'); await p.click('#fAdm button.btn-gold'); await p.waitForTimeout(900); global.pw = 'Admin@2026x';
     if (await p.$('input[name="old"]')) { await p.fill('input[name="old"]', 'Admin@2026'); await p.fill('input[name="nw"]', 'Admin@2026x'); await p.fill('input[name="nw2"]', 'Admin@2026x'); await p.click('[data-ok]'); await p.waitForTimeout(700); }
   };
   await run('login-desktop', { width: 1366, height: 768 }, async p => { await shot(p, 'login-desktop'); });

@@ -33,7 +33,7 @@ document.addEventListener("input", e => {
 });
 
 const EMP_NAV = [
-  ["home", "house", "الرئيسية"], ["books", "library", "الكتب"], ["orders", "package-check", "حجوزاتي"], ["pay", "wallet", "مدفوعاتي"], ["me", "user", "حسابي"]
+  ["home", "house", "الرئيسية"], ["books", "shopping-cart", "احجز"], ["orders", "package-check", "حجوزاتي"], ["pay", "wallet", "مدفوعاتي"], ["me", "user", "حسابي"]
 ];
 const ADMIN_NAV = [
   { g: "", items: [["dash", "layout-dashboard", "لوحة القيادة"]] },
@@ -64,37 +64,37 @@ const Shell = {
           <h2 class="text-4xl font-bold leading-[1.35]">كتب أبنائك الخارجية<br><span class="text-gold-300">بخصم حقيقي وتقسيط مريح</span></h2>
           <p class="text-brand-100/80 mt-4 leading-relaxed">احجز من الكتالوج، وتابع التوزيع بأسبقية الحجز، واستلم وسدد على أقساط شهرية بشفافية كاملة.</p>
           <ul class="mt-8 space-y-3 text-[15px]">
-            ${[["badge-percent", "خصم موحد للعاملين على سعر الغلاف"], ["list-ordered", "توزيع عادل بأسبقية كل نسخة"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
+            ${[["badge-percent", "خصم موحد للعاملين على سعر الغلاف"], ["list-ordered", "توزيع عادل بأسبقية كل كتاب"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
           </ul>
         </div>
         <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · نقابة العاملين</div>
       </aside>
 
-      <main class="flex flex-col min-h-[100dvh] lg:bg-white lg:text-slate-800 lg:justify-center lg:px-16">
-        <div class="lg:hidden px-6 pt-[max(2.5rem,env(safe-area-inset-top))] pb-8">
-          <div class="w-14 h-14 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[28px] shadow-lg">${ic("book-marked")}</div>
-          <h1 class="mt-5 text-[26px] font-bold leading-snug">${esc(APP.title)}</h1>
-          <p class="text-brand-100/80 text-sm mt-1.5">احجز · استلم · قسّط — بخصم العاملين</p>
+      <main class="glass flex flex-col min-h-[100dvh] lg:justify-center lg:px-16">
+        <div class="lg:hidden px-6 pt-[max(2.75rem,env(safe-area-inset-top))] pb-6 text-center">
+          <div class="w-16 h-16 mx-auto rounded-3xl bg-gold-400 text-brand-950 flex items-center justify-center text-[30px] shadow-lg">${ic("book-marked")}</div>
+          <h1 class="mt-4 text-[23px] font-bold leading-snug">${esc(APP.title)}</h1>
+          <p class="text-brand-200 text-[13.5px] mt-1.5">كتب أولادك بخصم حقيقي وتقسيط مريح 📚</p>
         </div>
-        <div class="flex-1 lg:flex-none bg-white text-slate-800 rounded-t-4xl lg:rounded-none px-6 pt-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-0 lg:max-w-md lg:w-full lg:mx-auto">
+        <div class="flex-1 lg:flex-none px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-0 lg:max-w-md lg:w-full lg:mx-auto">
           <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-4" autocomplete="on">
-            <div><h2 class="text-xl font-bold text-slate-900">أهلاً بك</h2><p class="text-sm text-slate-500 mt-1">ادخل ببياناتك المسجلة في النقابة</p></div>
+            <div class="hidden lg:block"><h2 class="text-2xl font-bold text-white">أهلاً بك 👋</h2><p class="text-sm text-brand-200 mt-1">ادخل ببياناتك المسجلة في النقابة</p></div>
             <div><label class="label" for="lgEmp">الرقم الوظيفي</label><div class="input-icon">${ic("badge-check")}<input id="lgEmp" class="input" inputmode="numeric" autocomplete="username" required></div></div>
             <div><label class="label" for="lgNat">آخر 4 أرقام من الرقم القومي</label><div class="input-icon">${ic("lock")}<input id="lgNat" class="input tracking-[.4em]" type="password" maxlength="4" inputmode="numeric" required></div></div>
             <div><label class="label" for="lgMob">رقم الموبايل المسجل</label><div class="input-icon">${ic("smartphone")}<input id="lgMob" class="input" type="tel" inputmode="tel" dir="ltr" style="text-align:right" placeholder="01xxxxxxxxx" required></div></div>
-            <button class="btn btn-primary btn-lg w-full">دخول ${ic("arrow-right", "rotate-180")}</button>
+            <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول ${ic("arrow-right", "rotate-180")}</button>
           </form>
           <form id="fAdm" class="${tab === "adm" ? "" : "hidden"} space-y-4" autocomplete="on">
-            <div><h2 class="text-xl font-bold text-slate-900">لوحة الإدارة</h2><p class="text-sm text-slate-500 mt-1">المدير · مسؤول المبادرة · أمين الصندوق · أمين المخزن</p></div>
+            <div><h2 class="text-xl font-bold text-white">لوحة الإدارة</h2><p class="text-sm text-brand-200 mt-1">المدير · مسؤول المبادرة · أمين الصندوق · أمين المخزن</p></div>
             <div><label class="label" for="lgUser">اسم المستخدم</label><div class="input-icon">${ic("user-cog")}<input id="lgUser" class="input" autocomplete="username" dir="ltr" style="text-align:right" required></div></div>
             <div><label class="label" for="lgPass">كلمة المرور</label><div class="input-icon">${ic("key-round")}<input id="lgPass" class="input" type="password" autocomplete="current-password" required>
               <button type="button" data-act="togglePass" class="absolute left-2 top-1/2 -translate-y-1/2 icon-btn w-8 h-8 text-slate-400" aria-label="إظهار كلمة المرور">${ic("eye")}</button></div></div>
-            <button class="btn btn-dark btn-lg w-full">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
+            <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
           </form>
-          <p class="text-center text-xs text-slate-400 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
+          <p class="text-center text-xs text-brand-200/70 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
           <div class="text-center mt-4">${tab === "adm"
-            ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-brand-700 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
-            : `<button type="button" data-act="loginTab" data-id="adm" class="text-[11px] text-slate-400 hover:text-slate-600 hover:underline">دخول الإدارة</button>`}</div>
+            ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-gold-300 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
+            : `<button type="button" data-act="loginTab" data-id="adm" class="text-[11px] text-brand-300/60 hover:text-brand-100 hover:underline">دخول الإدارة</button>`}</div>
         </div>
       </main>
     </div>`;
@@ -155,7 +155,8 @@ const Shell = {
             <div class="md:hidden w-10 h-10 rounded-xl hero text-gold-300 flex items-center justify-center text-xl shrink-0">${ic("book-marked")}</div>
             <div class="min-w-0 flex-1"><div id="hdTitle" class="font-bold text-slate-900 text-[16px] sm:text-lg truncate"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
             <div id="phaseBox" class="shrink-0"></div>
-            <button data-act="refresh" class="icon-btn" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
+${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="السلة" title="السلة">${ic("shopping-cart")}<span id="cartBadge" class="hidden absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-brand-950 text-[10.5px] font-bold flex items-center justify-center num">0</span></a>`}
+                        <button data-act="refresh" class="icon-btn ${admin ? "" : "hidden sm:inline-flex"}" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
             <button data-act="userMenu" class="md:hidden" aria-label="الحساب">${UI.avatar(u.fullName, "w-10 h-10 text-sm")}</button>
           </div>
         </header>
