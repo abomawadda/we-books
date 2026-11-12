@@ -1,7 +1,9 @@
 -- مزامنة موظفي المبادرة من أعضاء النقابة (public.members في MyNekaba) — قراءة فقط من بيانات النقابة.
 -- طُبِّقت على مشروع mynekaba. التشغيل يدوياً: select * from books.sync_employees_from_members();
-insert into books.config (key, value) values ('active_member_states', 'ساري,عامل,نشط,active,Active')
-on conflict (key) do nothing;
+-- member_state في MyNekaba: نشط / موقوف / إجازة بدون أجر / معاش / استقالة / وفاة (الفارغ = نشط)
+-- قرار المستخدم: الجميع مسموح لهم بالحجز أياً كانت حالتهم في النقابة
+insert into books.config (key, value) values ('active_member_states', 'نشط,موقوف,إجازة بدون أجر,معاش,استقالة,وفاة')
+on conflict (key) do update set value = excluded.value;
 
 create or replace function books.sync_employees_from_members()
 returns table(added int, updated int, skipped int)
@@ -21,7 +23,7 @@ begin
     if coalesce(trim(m.job_id), '') = '' or length(coalesce(m.national_id, '')) < 4 or mob = '' then
       s := s + 1; continue;
     end if;
-    st := case when trim(coalesce(m.member_state, m.membership_status, '')) = any(active) then 'ساري' else 'موقوف' end;
+    st := case when coalesce(nullif(trim(m.member_state), ''), 'نشط') = any(active) then 'ساري' else 'موقوف' end;
     d := jsonb_build_object(
       'Emp_ID', trim(m.job_id), 'Full_Name', coalesce(m.name, ''), 'National_ID_Last4', right(m.national_id, 4),
       'Mobile', mob, 'Department', coalesce(m.workplace, ''), 'Job_Title', coalesce(m.job_title, ''),
@@ -46,4 +48,22 @@ end $$;
 revoke all on function books.sync_employees_from_members() from public, anon, authenticated;
 
 -- مزامنة ليلية قبل المهمة اليومية (22:30 UTC = 12:30 صباحاً بالقاهرة شتاءً)
-select cron.schedule('books-sync-employees', '30 22 * * *', 'select books.sync_employees_from_members()');
+-- إزالة الموظفين التجريبيين تلقائياً بعد إدخال الأعضاء الحقيقيين (إن لم تكن لهم حركة)
+create or replace function books.remove_demo_employees_after_import() returns int
+language plpgsql security definer set search_path = '' as $$
+declare n int := 0;
+begin
+  if not exists (select 1 from public.members) then return 0; end if;
+  with gone as (
+    delete from books.records e
+     where e.tbl = '03_Employees' and e.emp_id in ('1001','1002','1003')
+       and e.data->>'Notes' = 'بيانات تجريبية'
+       and not exists (select 1 from books.records o where o.emp_id = e.emp_id and o.tbl <> '03_Employees')
+    returning 1)
+  select count(*) into n from gone;
+  return n;
+end $$;
+revoke all on function books.remove_demo_employees_after_import() from public, anon, authenticated;
+
+select cron.schedule('books-sync-employees', '30 22 * * *',
+  'select books.sync_employees_from_members(); select books.remove_demo_employees_after_import();');
