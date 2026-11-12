@@ -570,7 +570,8 @@ const ACTION_ACL = {
   RECORD_SUPPLIER_PAYMENT: ["Finance"],
   RECORD_INITIATIVE_EXPENSE: ["Finance"],
   CLOSE_CASH_DAY: ["Finance"],
-  SAVE_ROLE_PERMISSIONS: []           // المدير فقط
+  SAVE_ROLE_PERMISSIONS: [],          // المدير فقط
+  GET_AUDIT_LOG: ["Coordinator"]
 };
 
 // صلاحيات قابلة للتخصيص من المدير (إعداد ROLE_PERMISSIONS = JSON {action: [roles]})
@@ -618,6 +619,7 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_SETTLEMENT_REPORT": return E.getSettlementReport();
       case "SAVE_SETTING": return E.saveSetting(session, payload);
       case "SAVE_ROLE_PERMISSIONS": return E.saveRolePermissions(session, payload);
+      case "GET_AUDIT_LOG": return E.getAuditLog(payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
@@ -1052,6 +1054,27 @@ const OperationsEngine = {
       DB_Engine.logAudit(session.userId, session.role, "Phases", "SET_STATUS", phase.Phase_ID, { Phase_Status: phase.Phase_Status }, upd);
       return { success: true, message: "تم تغيير حالة المرحلة إلى " + st + "." };
     });
+  },
+
+  /**
+   * سجل التعديلات: آخر الحركات من سجل النظام وسجل بنود الحجز معاً.
+   * payload: { module, q, days, empId, limit } — الأحدث أولاً.
+   */
+  getAuditLog: function(payload) {
+    const S = this.S(), p = payload || {};
+    const limit = Math.min(1000, Math.max(20, parseInt(p.limit, 10) || 300));
+    const since = p.days ? Util.dateStr(new Date(new Date().getTime() - Util.num(p.days) * 86400000)) : "";
+    const users = {}; DB_Engine.getAllRecords(S.USERS).forEach(u => { users[Util.str(u.User_ID)] = u.Full_Name; });
+    const emps = {}; DB_Engine.getAllRecords(S.EMPLOYEES).forEach(e => { emps[Util.str(e.Emp_ID)] = e.Full_Name; });
+    const nameOf = id => users[id] || emps[id] || id;
+    const q = Util.str(p.q).toLowerCase(), mod = Util.str(p.module), emp = Util.str(p.empId);
+    let out = DB_Engine.getAllRecords(S.AUDIT_TRAIL).map(a => ({ t: Util.str(a.Timestamp), user: nameOf(Util.str(a.User_ID)), uid: Util.str(a.User_ID), role: a.User_Role, module: a.Module_Name, action: a.Action_Performed, key: Util.str(a.Record_Primary_Key), before: a.Before_State_JSON, after: a.After_State_JSON }));
+    DB_Engine.getAllRecords(S.RES_AUDIT).forEach(r => out.push({ t: Util.str(r.Action_Timestamp).slice(0, 19), user: nameOf(Util.str(r.Emp_ID)), uid: Util.str(r.Emp_ID), role: "", module: "ReservationItems", action: r.Action_Type, key: Util.str(r.Res_ID), book: r.Book_ID, oldQty: r.Old_Qty, newQty: r.New_Qty, rule: r.Rule_Applied, emp: Util.str(r.Emp_ID) }));
+    out = out.filter(a => (!since || a.t >= since) && (!mod || a.module === mod)
+      && (!emp || a.uid === emp || a.emp === emp || a.key.indexOf("-" + emp) !== -1)
+      && (!q || (a.user + " " + a.action + " " + a.key + " " + (a.book || "") + " " + (a.rule || "")).toLowerCase().indexOf(q) !== -1));
+    out.sort((x, y) => y.t < x.t ? -1 : y.t > x.t ? 1 : 0);
+    return { success: true, total: out.length, entries: out.slice(0, limit) };
   },
 
   /** حفظ مصفوفة الصلاحيات: payload.acl = {action: [roles]} */

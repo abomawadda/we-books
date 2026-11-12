@@ -52,6 +52,9 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
         await p.click('[data-act="edSave"]'); await p.waitForTimeout(800); await shot(p, 'a-d-res-after');
         await p.click('#resList [data-act="empProfile"]'); await p.waitForTimeout(400); await shot(p, 'a-d-profile');
         await p.click('[data-act="epTab"][data-id="info"]'); await p.waitForTimeout(200); await shot(p, 'a-d-profile-info');
+        await p.keyboard.press('Escape'); await p.evaluate(() => document.querySelectorAll('[role=dialog]').forEach(d => d.closest('.fixed') && d.closest('.fixed').remove()));
+        await p.evaluate(() => location.hash = '#/a/audit'); await p.waitForTimeout(700); await p.click('[data-act="audDays"][data-id="0"]'); await p.waitForTimeout(700);
+        const it = await p.$('[data-act="audOpen"]'); if (it) { await it.click(); await p.waitForTimeout(200); } await shot(p, 'a-d-audit');
         const btn = null; if (btn) { await btn.click(); await p.waitForTimeout(400); await p.fill('[data-input="edQ"]', 'المعاصر'); await p.waitForTimeout(400); await shot(p, 'a-d-editor'); }
         const sn = await p.evaluate(() => { const n = document.querySelector('.side-nav'); return n ? [n.scrollHeight, n.clientHeight] : null; }); console.log('sidenav scroll/client', JSON.stringify(sn));
       }

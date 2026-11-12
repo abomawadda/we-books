@@ -240,4 +240,12 @@ fail(api('RECORD_EMPLOYEE_PAYMENT', { empInvId: 'x', amount: 1, paymentMethod: '
 fail(api('SAVE_SETTING', { key: 'MAX_RELATIVES', value: 3 }, fin), 'fixed actions cannot be granted', /صلاحية/);
 assert.deepStrictEqual(api('GET_ADMIN_DASHBOARD_DATA', {}, A).acl.ADJUST_EMP_INVOICE, ['Finance', 'Warehouse']); passed++;
 ok(api('SAVE_ROLE_PERMISSIONS', { acl: {} }, A), 'reset permissions');
+
+// 21) سجل التعديلات
+const lg = ok(api('GET_AUDIT_LOG', { limit: 50 }, A), 'audit log');
+assert.ok(lg.entries.length > 0 && lg.entries[0].t >= lg.entries[lg.entries.length - 1].t); passed++;
+const lgE = ok(api('GET_AUDIT_LOG', { empId: '1001' }, coord), 'audit log by employee');
+assert.ok(lgE.entries.some(a => a.module === 'ReservationItems') && lgE.entries.every(a => a.uid === '1001' || a.emp === '1001' || a.key.includes('-1001'))); passed++;
+assert.ok(ok(api('GET_AUDIT_LOG', { module: 'Invoices' }, A), 'audit by module').entries.every(a => a.module === 'Invoices')); passed++;
+fail(api('GET_AUDIT_LOG', {}, fin), 'finance cannot read audit by default', /صلاحية/);
 console.log('\nALL PASSED:', passed, 'checks');
