@@ -410,11 +410,43 @@ on("reserveFor", () => ACTIONS.resNew());
 Router.add("/a/settings", view => {
   const d = A();
   view.innerHTML = UI.pageHead("الإعدادات", APP.user.role === "Admin" ? "قواعد المبادرة العامة" : "للاطلاع فقط — التعديل للمدير")
-    + `<section class="card divide-y divide-slate-100">${d.settings.map(s => `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
+    + permsSection()
+    + `<section class="card divide-y divide-slate-100">${d.settings.filter(s => s.Setting_Key !== "ROLE_PERMISSIONS").map(s => `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
       <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(s.Description || s.Setting_Key)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
-      <div class="font-bold text-brand-800 num text-[15px]">${esc(s.Setting_Value)}</div>
+      <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
       ${can("SAVE_SETTING") ? `<button class="btn btn-outline btn-xs" data-act="editSetting" data-id="${esc(s.Setting_Key)}">${ic("pencil")} تعديل</button>` : ""}</div>`).join("")}</section>`;
 });
+// ---------------- مصفوفة الصلاحيات (المدير يحدد ما يفعله كل دور)
+// [الدور، الاسم، اختصار للموبايل، باقي الاسم للشاشات الأكبر]
+const PERM_ROLES = [["Coordinator", "مسؤول المبادرة", "مسؤول", " المبادرة"], ["Finance", "أمين الصندوق", "الصندوق", ""], ["Warehouse", "أمين المخزن", "المخزن", ""]];
+const PERM_GROUPS = [
+  ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"]]],
+  ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"]]],
+  ["التوزيع والتسليم", [["RUN_ALLOCATION_ENGINE", "تشغيل التوزيع بالأسبقية"], ["MANUAL_ALLOCATION_OVERRIDE", "تعديل التوزيع يدوياً"], ["CARRY_WAITLIST_TO_PHASE", "ترحيل المنتظرين"], ["EXECUTE_BOOK_DELIVERY", "تسليم الكتب"], ["CANCEL_UNDELIVERED_QTY", "إلغاء كمية لم تُسلَّم"], ["RECORD_BOOK_RETURN", "مرتجعات الموظفين"], ["RECORD_STOCK_ADJUSTMENT", "تسويات المخزن"]]],
+  ["الخزينة والفواتير", [["RECORD_EMPLOYEE_PAYMENT", "تحصيل وإصدار إيصال"], ["VOID_EMPLOYEE_PAYMENT", "إلغاء إيصال"], ["REFUND_EMPLOYEE_CREDIT", "رد رصيد لموظف"], ["CUSTOMIZE_EMP_INSTALLMENTS", "تعديل خطة الأقساط"], ["ADJUST_EMP_INVOICE", "تعديل الفاتورة (خصم/إضافة)"], ["DELETE_EMP_INVOICE", "حذف فاتورة"], ["RECORD_SUPPLIER_PAYMENT", "السداد للمكتبة"], ["RECORD_INITIATIVE_EXPENSE", "المصروفات"], ["CLOSE_CASH_DAY", "إقفال الخزينة اليومي"]]]
+];
+const RISKY = ["VOID_EMPLOYEE_PAYMENT", "DELETE_EMP_INVOICE", "RECORD_STOCK_ADJUSTMENT", "MANUAL_ALLOCATION_OVERRIDE"];
+function permsSection() {
+  const acl = A().acl || ACL, admin = APP.user.role === "Admin";
+  if (!Q.perm) Q.perm = JSON.parse(JSON.stringify(acl));
+  const P = Q.perm;
+  return `<section class="card mb-4"><div class="px-4 sm:px-5 pt-4 pb-3 flex flex-wrap items-start justify-between gap-3">
+      <div><h2 class="card-title">${ic("shield-check", "text-brand-600")} الصلاحيات</h2><p class="card-sub">حدّد ما يستطيع كل دور فعله. المدير له كل الصلاحيات دائماً، والتعديل يسري فوراً على الجميع.</p></div>
+      ${admin ? `<div class="flex gap-2"><button class="btn btn-ghost btn-sm" data-act="permReset">تراجع</button><button class="btn btn-primary btn-sm" data-act="permSave">${ic("check")} حفظ الصلاحيات</button></div>` : ""}</div>
+    <div class="px-3 sm:px-5 pb-4">
+      <div class="grid grid-cols-[1fr_repeat(3,3.6rem)] sm:grid-cols-[1fr_repeat(3,7rem)] items-center gap-y-0.5 sticky top-16 bg-white z-[1] py-2 border-b border-slate-100 text-[11.5px] sm:text-[12.5px] font-bold text-slate-500 text-center"><span class="text-right">العملية</span>${PERM_ROLES.map(r => `<span class="leading-tight">${r[2]}<span class="hidden sm:inline">${r[3]}</span></span>`).join("")}</div>
+      ${PERM_GROUPS.map(g => `<div class="mt-3 mb-1 text-[12.5px] font-bold text-brand-800">${g[0]}</div>${g[1].map(([a, label]) => `<label class="grid grid-cols-[1fr_repeat(3,3.6rem)] sm:grid-cols-[1fr_repeat(3,7rem)] items-center py-2 border-b border-slate-50 text-[13px]"><span class="leading-snug pl-2">${label}${RISKY.includes(a) ? ` <span class="pill pill-red !text-[10px] !px-1.5">حساسة</span>` : ""}</span>${PERM_ROLES.map(([r]) => `<span class="text-center"><input type="checkbox" class="w-5 h-5 accent-brand-700 align-middle" data-change="permToggle" data-a="${a}" data-r="${r}" ${(P[a] || []).includes(r) ? "checked" : ""} ${admin ? "" : "disabled"}></span>`).join("")}</label>`).join("")}`).join("")}
+    </div></section>`;
+}
+on("permToggle", (v, el) => { const a = el.dataset.a, r = el.dataset.r, P = Q.perm; P[a] = (P[a] || []).filter(x => x !== r); if (el.checked) P[a].push(r); });
+on("permReset", () => { Q.perm = null; Shell.rerender(); });
+on("permSave", async () => {
+  const P = Q.perm, acl = {}; PERM_GROUPS.forEach(g => g[1].forEach(([a]) => { acl[a] = (P[a] || []).filter(r => r !== "EMPLOYEE"); }));
+  const risky = RISKY.filter(a => acl[a].length).map(a => PERM_GROUPS.flatMap(g => g[1]).find(x => x[0] === a)[1]);
+  const r = await act("SAVE_ROLE_PERMISSIONS", { acl }, risky.length ? { title: "حفظ الصلاحيات", message: "منحت صلاحيات حساسة: " + risky.join("، ") + ". متابعة؟", ok: "حفظ" } : null);
+  if (r && r.success) { Q.perm = null; Shell.rerender(); }
+});
+
 on("editSetting", async key => {
   const s = A().settings.find(x => x.Setting_Key === key);
   const v = await UI.form({ title: s.Description || key, sub: key, fields: [{ name: "value", label: "القيمة", value: s.Setting_Value, required: true }] });

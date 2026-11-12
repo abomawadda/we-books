@@ -569,8 +569,25 @@ const ACTION_ACL = {
   DELETE_EMP_INVOICE: [],             // المدير فقط
   RECORD_SUPPLIER_PAYMENT: ["Finance"],
   RECORD_INITIATIVE_EXPENSE: ["Finance"],
-  CLOSE_CASH_DAY: ["Finance"]
+  CLOSE_CASH_DAY: ["Finance"],
+  SAVE_ROLE_PERMISSIONS: []           // المدير فقط
 };
+
+// صلاحيات قابلة للتخصيص من المدير (إعداد ROLE_PERMISSIONS = JSON {action: [roles]})
+// هذه العمليات ثابتة لا تُخصَّص: القراءة، كلمة المرور، الإعدادات، الصلاحيات نفسها.
+const FIXED_ACL = ["GET_EMPLOYEE_PORTAL_DATA", "CHANGE_PASSWORD", "GET_ADMIN_DASHBOARD_DATA", "GET_SETTLEMENT_REPORT", "SAVE_SETTING", "SAVE_ROLE_PERMISSIONS"];
+const CUSTOM_ROLES = ["Coordinator", "Finance", "Warehouse"];
+function effectiveAcl_() {
+  let ov = {};
+  try { const row = DB_Engine.getAllRecords(SYSTEM_CONFIG.SHEETS.SETTINGS).find(r => r.Setting_Key === "ROLE_PERMISSIONS"); if (row && row.Setting_Value) ov = JSON.parse(String(row.Setting_Value)); } catch (e) { ov = {}; }
+  const out = {};
+  Object.keys(ACTION_ACL).forEach(a => {
+    let roles = ACTION_ACL[a].slice();
+    if (FIXED_ACL.indexOf(a) === -1 && Array.isArray(ov[a])) roles = roles.filter(r => r === "EMPLOYEE").concat(ov[a].filter(r => CUSTOM_ROLES.indexOf(r) !== -1));
+    out[a] = roles;
+  });
+  return out;
+}
 
 /** نقطة تنفيذ العمليات: تستدعيها books-api لكل طلب {action, payload, token} */
 function callServerApi(action, payload, sessionToken) {
@@ -583,7 +600,7 @@ function callServerApi(action, payload, sessionToken) {
     if (action === "LOGOUT") { AuthEngine.destroySession(sessionToken); return { success: true }; }
     if (action === "GET_PUBLIC_INIT_DATA") return OperationsEngine.getPublicInitData();
 
-    const acl = ACTION_ACL[action];
+    const acl = ACTION_ACL[action] && effectiveAcl_()[action];
     if (!acl) throw new Error("العملية المطلوبة غير معروفة: " + action);
     const session = AuthEngine.verifySession(sessionToken);
     const isEmp = session.userType === "EMPLOYEE";
@@ -600,6 +617,7 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_ADMIN_DASHBOARD_DATA": return E.getAdminDashboardFullData();
       case "GET_SETTLEMENT_REPORT": return E.getSettlementReport();
       case "SAVE_SETTING": return E.saveSetting(session, payload);
+      case "SAVE_ROLE_PERMISSIONS": return E.saveRolePermissions(session, payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
@@ -776,6 +794,7 @@ const OperationsEngine = {
     const phases = DB_Engine.getAllRecords(S.PHASES).map(p => Object.assign(p, { Effective_Status: this.effectiveStatus_(p), Booking_Open: this.isBookingOpen_(p) }));
     return {
       catalog: this.catalogLists_(),
+      acl: effectiveAcl_(),
       success: true,
       settings: DB_Engine.getAllRecords(S.SETTINGS),
       settingsMap: getSettings_(),
@@ -1032,6 +1051,23 @@ const OperationsEngine = {
       DB_Engine.updateRecordByPK(S.PHASES, "Phase_ID", phase.Phase_ID, upd);
       DB_Engine.logAudit(session.userId, session.role, "Phases", "SET_STATUS", phase.Phase_ID, { Phase_Status: phase.Phase_Status }, upd);
       return { success: true, message: "تم تغيير حالة المرحلة إلى " + st + "." };
+    });
+  },
+
+  /** حفظ مصفوفة الصلاحيات: payload.acl = {action: [roles]} */
+  saveRolePermissions: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), src = payload.acl || {}, clean = {};
+      Object.keys(src).forEach(a => {
+        if (!ACTION_ACL[a] || FIXED_ACL.indexOf(a) !== -1) return;
+        clean[a] = (Array.isArray(src[a]) ? src[a] : []).filter((r, i, arr) => CUSTOM_ROLES.indexOf(r) !== -1 && arr.indexOf(r) === i);
+      });
+      const val = JSON.stringify(clean);
+      const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "ROLE_PERMISSIONS");
+      const rec = { Setting_Key: "ROLE_PERMISSIONS", Setting_Value: val, Data_Type: "JSON", Description: "صلاحيات الأدوار (تُعدَّل من صفحة الإعدادات ← الصلاحيات)", Updated_At: Util.now(), Updated_By: Util.actor(session) };
+      if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "ROLE_PERMISSIONS", rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
+      DB_Engine.logAudit(session.userId, session.role, "Settings", "SAVE_ROLE_PERMISSIONS", "ROLE_PERMISSIONS", row ? { v: row.Setting_Value } : null, { v: val });
+      return { success: true, message: "تم حفظ الصلاحيات، وتسري فوراً على كل المستخدمين." };
     });
   },
 
