@@ -1,0 +1,20 @@
+# الاختبارات التلقائية مع كل تعديل: 61 سيناريو لمنطق العمل + اختبار الواجهة
+name: الاختبارات
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: تثبيت
+        run: cd test && npm install --no-audit --no-fund
+      - name: سيناريوهات منطق العمل (61 فحصاً)
+        run: cd test && node scenarios.test.js
+      - name: اختبار الواجهة
+        run: cd test && node web.smoke.js

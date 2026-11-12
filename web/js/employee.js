@@ -145,14 +145,15 @@ function bookCard(b) {
     </div>
     <div class="flex-1 min-w-0 flex flex-col sm:p-3.5 sm:pt-3">
       <h3 class="font-bold text-slate-900 leading-snug text-[14.5px] line-clamp-2">${esc(b.Book_Name)}</h3>
-      <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} <span class="text-slate-300">·</span> <span class="num text-slate-400">${esc(b.Book_ID)}</span></div>
+      <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} <span class="text-slate-300">·</span> ${esc(String(b.School_Types || "").split("،").join(" / "))} <span class="text-slate-300">·</span> <span class="num text-slate-400">${esc(b.Book_ID)}</span></div>
       <div class="flex flex-wrap gap-1 mt-1.5">${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}${n(b.In_Stock_From_Previous) > 0 ? pill("", "متوفر بالمخزن", "blue") : ""}</div>
+      ${b.Book_Status === "Pricing" ? `<div class="mt-auto pt-2 flex items-center justify-between gap-2"><span class="pill pill-amber">${ic("hourglass")} جاري التسعير</span><span class="text-[11px] text-slate-400">يُتاح للحجز فور إعلان سعره</span></div>` : `
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
         <div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>
           <div class="flex items-center gap-1.5"><span class="text-lg font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)}</span><span class="text-[11px] text-slate-500">ج.م</span>${save > 0 ? `<span class="pill pill-green !px-1.5">-${save}%</span>` : ""}</div></div>
         ${q ? `<div class="stepper"><button data-act="cartInc" data-id="${esc(b.Book_ID)}" ${!open || q >= mx ? "disabled" : ""} aria-label="زيادة">${ic("plus")}</button><span>${q}</span><button data-act="cartDec" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"} aria-label="تقليل">${ic(q === 1 ? "trash-2" : "minus")}</button></div>`
           : `<button class="btn btn-soft btn-sm" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("plus")} أضف</button>`}
-      </div>
+      </div>`}
     </div></article>`;
 }
 function cartHTML() {
@@ -215,15 +216,22 @@ function refreshCartViews() {
 }
 function renderBookGrid() {
   const r = APP.emp, f = Emp.filter;
-  const list = r.books.filter(b => (!f.stage || b.Stage === f.stage) && (!f.grade || b.Grade === f.grade) && (!f.q || (b.Book_Name + " " + b.Subject + " " + b.Book_ID + " " + b.Grade).toLowerCase().includes(f.q.toLowerCase())));
+  const order = gradeOrder();
+  const list = r.books.filter(b => (!f.stage || b.Stage === f.stage) && (!f.grade || b.Grade === f.grade)
+    && (!f.type || String(b.School_Types || "").split("،").includes(f.type))
+    && (!f.q || (b.Book_Name + " " + b.Subject + " " + b.Publisher + " " + b.Book_ID + " " + b.Grade).toLowerCase().includes(f.q.toLowerCase())))
+    .sort((a, b) => (order[a.Grade] - order[b.Grade]) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
   $("#bookGrid").innerHTML = list.length ? list.map(bookCard).join("") : `<div class="col-span-full">${UI.empty("search", "لا توجد كتب مطابقة", "جرّب تغيير المرحلة الدراسية أو كلمة البحث.")}</div>`;
   $("#bookCount").textContent = list.length + " كتاب";
 }
 Router.add("/e/books", view => {
   const r = APP.emp, f = Emp.filter;
   if (!r.activePhase) { view.innerHTML = UI.empty("calendar-clock", "لا توجد مرحلة حجز", "سيظهر الكتالوج عند فتح مرحلة حجز جديدة."); return; }
-  const stages = uniq(r.books.map(b => b.Stage)).filter(Boolean);
-  const grades = uniq(r.books.filter(b => !f.stage || b.Stage === f.stage).map(b => b.Grade)).filter(Boolean);
+  const order = gradeOrder(), byOrder = (a, b) => (order[a] ?? 99) - (order[b] ?? 99);
+  const cat = r.catalog || {}, stageOf = {}; (cat.grades || []).forEach(g => { stageOf[g.label] = g.stage; });
+  const stages = uniq((cat.grades || []).map(g => g.stage)).filter(st => r.books.some(b => b.Stage === st));
+  const grades = uniq(r.books.filter(b => !f.stage || b.Stage === f.stage).map(b => b.Grade)).filter(Boolean).sort(byOrder);
+  const types = (cat.schoolTypes || []);
   view.innerHTML = `
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
     <div>
@@ -231,6 +239,7 @@ Router.add("/e/books", view => {
       <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-3 bg-slate-50/90 backdrop-blur-xl">
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="ابحث باسم الكتاب أو المادة أو الصف" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
         <div class="scroll-x mt-3"><button class="chip" data-act="fStage" data-id="" aria-pressed="${!f.stage}">${ic("layout-grid")} الكل</button>${stages.map(s => `<button class="chip" data-act="fStage" data-id="${esc(s)}" aria-pressed="${f.stage === s}">${ic("graduation-cap")} ${esc(s)}</button>`).join("")}</div>
+        <div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fType" data-id="" aria-pressed="${!f.type}">كل المدارس</button>${types.map(t => `<button class="chip !h-8 !text-xs" data-act="fType" data-id="${esc(t)}" aria-pressed="${f.type === t}">${ic("building-2")} ${esc(t)}</button>`).join("")}</div>
         ${f.stage && grades.length > 1 ? `<div class="scroll-x mt-2"><button class="chip !h-8 !text-xs" data-act="fGrade" data-id="" aria-pressed="${!f.grade}">كل الصفوف</button>${grades.map(g => `<button class="chip !h-8 !text-xs" data-act="fGrade" data-id="${esc(g)}" aria-pressed="${f.grade === g}">${esc(g)}</button>`).join("")}</div>` : ""}
       </div>
       <div class="flex items-center justify-between mb-3 mt-1"><span id="bookCount" class="text-sm text-slate-500"></span><span class="text-xs text-slate-400">الحد الأقصى ${fmt(r.settings.MAX_QTY_PER_BOOK || 3)} نسخ لكل كتاب</span></div>
@@ -250,6 +259,9 @@ Router.add("/e/books", view => {
 on("bookSearch", v => { Emp.filter.q = v.trim(); renderBookGrid(); });
 on("fStage", v => { Emp.filter.stage = v; Emp.filter.grade = ""; Shell.rerender(); });
 on("fGrade", v => { Emp.filter.grade = v; Shell.rerender(); });
+on("fType", v => { Emp.filter.type = v; Shell.rerender(); });
+/** ترتيب الصفوف كما في الكتالوج (تأسيس ← كي جي ← ابتدائي ← إعدادي ← ثانوي) */
+function gradeOrder() { const o = {}; ((APP.emp && APP.emp.catalog && APP.emp.catalog.grades) || []).forEach((g, i) => { o[g.label] = i; }); return o; }
 function cartChanged(id) {
   Emp.dirty = true;
   const b = APP.emp.books.find(x => x.Book_ID === id);

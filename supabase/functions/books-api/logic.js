@@ -40,6 +40,28 @@ const SYSTEM_CONFIG = {
   ROLES: ["Admin", "Coordinator", "Finance", "Warehouse"],
   PHASE_STATUSES: ["Draft", "Open", "Closed", "Ordered", "Receiving", "Delivering", "Completed"],
   BOOKABLE_BOOK_STATUSES: ["Available", "Not_Yet_Printed"],
+  // كتالوج الكتب: الصفوف بأكوادها (المرحلة تُشتق من الصف)، وأنواع المدارس. الناشرون والمواد وأجزاء الكتاب
+  // قوائم قابلة للتعديل من الإعدادات (BOOK_PUBLISHERS / BOOK_SUBJECTS / BOOK_PARTS) مفصولة بفاصلة.
+  CATALOG: {
+    GRADES: [
+      { code: "TAS", label: "تأسيس", stage: "رياض الأطفال" },
+      { code: "KG1", label: "كي جي 1", stage: "رياض الأطفال" },
+      { code: "KG2", label: "كي جي 2", stage: "رياض الأطفال" },
+      { code: "P1", label: "1 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "P2", label: "2 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "P3", label: "3 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "P4", label: "4 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "P5", label: "5 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "P6", label: "6 ابتدائي", stage: "المرحلة الابتدائية" },
+      { code: "M1", label: "1 إعدادي", stage: "المرحلة الإعدادية" },
+      { code: "M2", label: "2 إعدادي", stage: "المرحلة الإعدادية" },
+      { code: "M3", label: "3 إعدادي", stage: "المرحلة الإعدادية" },
+      { code: "S1", label: "1 ثانوي", stage: "المرحلة الثانوية" },
+      { code: "S2", label: "2 ثانوي", stage: "المرحلة الثانوية" },
+      { code: "S3", label: "3 ثانوي", stage: "المرحلة الثانوية" }
+    ],
+    SCHOOL_TYPES: ["حكومي", "لغات", "أزهر"]
+  },
   EXPENSE_CATEGORIES: ["مصاريف شحن ونقل", "مصاريف تحميل وتنزيل ومشال", "مصاريف تعبئة وتغليف", "أجور عمال ومكافآت تنظيم", "أخرى"]
 };
 
@@ -96,7 +118,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
     { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
-    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status"] },
+    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status"] },
     { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID"] },
@@ -436,7 +458,10 @@ function seedInitialData_() {
       st("EMP_RETURN_WINDOW_DAYS", 7, "NUMBER", "مدة قبول مرتجع الموظف بعد الاستلام (يوم)"),
       st("CASH_ACCOUNT_HOLDER", "محمود العراقي", "STRING", "اسم صاحب المحفظة وحساب إنستاباي"),
       st("DEFICIT_BEARER", "أمين الصندوق", "STRING", "الجهة التي تتحمل العجز ويؤول إليها الفائض"),
-      st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى")
+      st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى"),
+      st("BOOK_PUBLISHERS", "الأبرار،الأستاذ،الأضواء،الإبداع،الامتحان،الباهر،البيان،التأسيس السليم،التفوق،الشاطر،الفايز،المرشد،المعاصر،المعلم،الموسوعة،الميسر،النفيس،الوافي،الوسام،برافو،بوني،بيت باي بيت،ترافيللر،جيم،جينيال،ستار،ستيب أهيد،سلاح التلميذ،سندباد،قطر الندى،كيان،لافي أليكس،لو اكسلانس،ماي دريم،مندليف،ميرسي،نور البيان،نيوتن", "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)"),
+      st("BOOK_SUBJECTS", "عربي،نحو،نحو وصرف،بلاغة،إنجليزي،فرنساوي،ألماني،رياضيات،ماث،رياضيات بحتة،رياضيات تطبيقية،رياضيات أدبي،إحصاء،علوم،ساينس،علوم متكاملة،فيزياء،كيمياء،أحياء،دراسات،تاريخ،جغرافيا،فلسفة ومنطق،علم نفس،دين،فقه شافعي،تفسير،حديث،توحيد،أصول دين،حاسب آلي،أي سي تي،تكنولوجيا،ديسكفري،مهارات", "STRING", "قائمة المواد في نموذج الكتاب (مفصولة بفاصلة)"),
+      st("BOOK_PARTS", "شرح،أسئلة،تدريبات،بلاس،جرامر،مستوى رفيع،أوليف", "STRING", "أجزاء الكتاب: شرح، أسئلة، تدريبات... (مفصولة بفاصلة)")
     ]);
   }
 
@@ -714,7 +739,7 @@ const OperationsEngine = {
     const resItems = DB_Engine.getAllRecords(S.RES_ITEMS);
     const snap = this.getStockSnapshot_(resItems);
     const books = DB_Engine.getAllRecords(S.BOOKS)
-      .filter(b => SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(b.Book_Status) !== -1)
+      .filter(b => SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(b.Book_Status) !== -1 || b.Book_Status === "Pricing")
       .map(b => Object.assign(b, { In_Stock_From_Previous: snap[b.Book_ID] ? Math.max(0, snap[b.Book_ID].free) : 0 }));
     const settings = getSettings_();
     const mine = r => Util.str(r.Emp_ID) === Util.str(empId);
@@ -722,6 +747,7 @@ const OperationsEngine = {
     return {
       success: true,
       activePhase: active, phases: phases,
+      catalog: { grades: SYSTEM_CONFIG.CATALOG.GRADES, schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES },
       settings: {
         UNIFIED_EMP_DISCOUNT_PCT: settings.UNIFIED_EMP_DISCOUNT_PCT, MAX_INSTALLMENT_COUNT: settings.MAX_INSTALLMENT_COUNT,
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
@@ -742,6 +768,7 @@ const OperationsEngine = {
     const resItems = DB_Engine.getAllRecords(S.RES_ITEMS);
     const phases = DB_Engine.getAllRecords(S.PHASES).map(p => Object.assign(p, { Effective_Status: this.effectiveStatus_(p), Booking_Open: this.isBookingOpen_(p) }));
     return {
+      catalog: this.catalogLists_(),
       success: true,
       settings: DB_Engine.getAllRecords(S.SETTINGS),
       settingsMap: getSettings_(),
@@ -807,6 +834,7 @@ const OperationsEngine = {
       Object.keys(wanted).forEach(bId => {
         const book = booksMap[bId];
         Util.require(book, "الكتاب كود " + bId + " غير موجود.");
+        Util.require(book.Book_Status !== "Pricing", "الكتاب (" + book.Book_Name + ") جاري تسعيره، ويُتاح للحجز فور إعلان سعره.");
         Util.require(SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(book.Book_Status) !== -1, "الكتاب (" + book.Book_Name + ") غير متاح للحجز حالياً.");
         if (gradeList) Util.require(gradeList.indexOf(Util.str(book.Grade)) !== -1, "الكتاب (" + book.Book_Name + ") ليس ضمن صفوف هذه المرحلة.");
         Util.require(wanted[bId] <= maxPerBook, "الحد الأقصى من الكتاب الواحد " + maxPerBook + " نسخ (" + book.Book_Name + ").");
@@ -997,31 +1025,77 @@ const OperationsEngine = {
     });
   },
 
+  /** قوائم الكتالوج (الثابتة + القابلة للتعديل من الإعدادات) */
+  catalogLists_: function() {
+    const st = getSettings_();
+    const list = k => Util.str(st[k]).split(/[,،]/).map(x => x.trim()).filter(Boolean);
+    return { grades: SYSTEM_CONFIG.CATALOG.GRADES, schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
+      publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS") };
+  },
+
+  /** كود جديد للكتاب: كود الصف + رقم تسلسلي داخل الصف (P4-007) */
+  nextBookCode_: function(gradeCode, books) {
+    const pre = gradeCode + "-";
+    const max = books.reduce((m, b) => { const id = Util.str(b.Book_ID); return id.indexOf(pre) === 0 ? Math.max(m, parseInt(id.slice(pre.length), 10) || 0) : m; }, 0);
+    return pre + ("00" + (max + 1)).slice(-3);
+  },
+
+  /** اسم العرض: الناشر — المادة (الجزء)، مع «لغات» لطبعة مدارس اللغات من مادة لها طبعة عربية */
+  bookDisplayName_: function(publisher, subject, part, types) {
+    const englishNamed = ["إنجليزي", "فرنساوي", "ألماني", "ماث", "ساينس", "أي سي تي", "ديسكفري"];
+    const langOnly = types && types.length === 1 && types[0] === "لغات" && englishNamed.indexOf(subject) === -1;
+    return publisher + " — " + subject + (langOnly ? " لغات" : "") + (part ? " (" + part + ")" : "");
+  },
+
   saveBook: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
-      const id = Util.str(payload.bookId);
-      Util.require(id && Util.str(payload.bookName), "أدخل كود واسم الكتاب.");
-      Util.require(Util.num(payload.coverPrice) > 0, "سعر الغلاف يجب أن يكون أكبر من صفر.");
-      const sup = DB_Engine.getAllRecords(S.SUPPLIERS).find(s => Util.str(s.Supplier_ID) === Util.str(payload.supplierId));
-      Util.require(sup, "اختر المكتبة الموردة.");
-      const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
-      const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : sup.Volume_Discount_Pct;
-      const p = FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct);
-      const existing = DB_Engine.getAllRecords(S.BOOKS).find(b => Util.str(b.Book_ID) === id);
-      const obj = {
-        Book_ID: id, Book_Name: Util.str(payload.bookName), Stage: payload.stage, Grade: payload.grade, Subject: payload.subject,
-        Publisher: payload.publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
-        Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
-        Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
-        Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
-        Book_Status: payload.bookStatus || (existing ? existing.Book_Status : "Available")
+      const lists = this.catalogLists_();
+      const books = DB_Engine.getAllRecords(S.BOOKS);
+      const existing = payload.bookId ? books.find(b => Util.str(b.Book_ID) === Util.str(payload.bookId)) : null;
+      const grade = lists.grades.find(g => g.label === Util.str(payload.grade));
+      Util.require(grade, "اختر الصف الدراسي من القائمة.");
+      const types = String(payload.schoolTypes || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
+      Util.require(types.length && types.every(t => lists.schoolTypes.indexOf(t) !== -1), "اختر نوع المدرسة من القائمة.");
+      const publisher = Util.str(payload.publisher), subject = Util.str(payload.subject), part = Util.str(payload.bookPart);
+      Util.require(lists.publishers.indexOf(publisher) !== -1, "اختر الناشر من القائمة (يمكن إضافة ناشر جديد من الإعدادات).");
+      Util.require(lists.subjects.indexOf(subject) !== -1, "اختر المادة من القائمة (يمكن إضافة مادة جديدة من الإعدادات).");
+      Util.require(!part || lists.parts.indexOf(part) !== -1, "اختر جزء الكتاب من القائمة.");
+      const id = existing ? existing.Book_ID : this.nextBookCode_(grade.code, books);
+      const priced = Util.num(payload.coverPrice) > 0;
+      const base = {
+        Book_ID: id, Book_Name: this.bookDisplayName_(publisher, subject, part, types), Stage: grade.stage, Grade: grade.label,
+        Subject: subject, Publisher: publisher, School_Types: types.join("،"), Book_Part: part
       };
+      let obj, msg;
+      if (priced) {
+        const sup = DB_Engine.getAllRecords(S.SUPPLIERS).find(s => Util.str(s.Supplier_ID) === Util.str(payload.supplierId));
+        Util.require(sup, "اختر المكتبة الموردة.");
+        const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
+        const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : sup.Volume_Discount_Pct;
+        const p = FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct);
+        let status = payload.bookStatus || (existing ? existing.Book_Status : "Available");
+        if (status === "Pricing") status = "Available"; // دخل السعر: يُتاح للحجز
+        obj = Object.assign(base, {
+          Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
+          Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
+          Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
+          Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice, Book_Status: status
+        });
+        const warn = p.unitSurplusMargin < 0 ? " تنبيه: هذا الكتاب يُباع بخسارة " + Math.abs(p.unitSurplusMargin) + " ج.م للنسخة." : "";
+        msg = "تم حفظ الكتاب " + id + " بسعر موظف " + p.empSellingPrice + " ج.م." + warn;
+      } else {
+        obj = Object.assign(base, {
+          Supplier_ID: Util.str(payload.supplierId) || (existing ? existing.Supplier_ID : ""), Cover_Price: "", Supplier_Discount_Pct: "",
+          Initial_Purchase_Price: "", Volume_Discount_Share_Pct: "", Standard_Net_Cost: "", Emp_Discount_Pct: "", Emp_Selling_Price: "",
+          Book_Status: "Pricing"
+        });
+        msg = "تم حفظ الكتاب " + id + " بحالة «جاري التسعير» — لن يُتاح للحجز حتى يُدخل سعره.";
+      }
       if (existing) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, obj);
       else DB_Engine.insertRecordsBatch(S.BOOKS, [obj]);
       DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", id, existing, obj);
-      const warn = p.unitSurplusMargin < 0 ? " تنبيه: هذا الكتاب يُباع بخسارة " + Math.abs(p.unitSurplusMargin) + " ج.م للنسخة." : "";
-      return { success: true, message: "تم حفظ الكتاب بسعر موظف " + p.empSellingPrice + " ج.م." + warn, book: obj };
+      return { success: true, message: msg, book: obj };
     });
   },
 
@@ -1039,7 +1113,18 @@ const OperationsEngine = {
         const id = Util.str(inp.Book_ID);
         if (!id) return;
         const sup = sups[Util.str(inp.Supplier_ID)] || sups[Object.keys(sups)[0]];
-        if (!sup || !(Util.num(inp.Cover_Price) > 0)) { errors.push("سطر " + (idx + 1) + ": مكتبة أو سعر غير صحيح"); return; }
+        if (!(Util.num(inp.Cover_Price) > 0)) { // بلا سعر: يُضاف بحالة «جاري التسعير»
+          const base = map[id] || {};
+          if (!map[id]) added++; else updated++;
+          map[id] = Object.assign({}, base, {
+            Book_ID: id, Book_Name: Util.str(inp.Book_Name) || base.Book_Name, Stage: inp.Stage || base.Stage || "", Grade: inp.Grade || base.Grade || "",
+            Subject: inp.Subject || base.Subject || "", Publisher: inp.Publisher || base.Publisher || "-", Supplier_ID: sup ? sup.Supplier_ID : (base.Supplier_ID || ""),
+            School_Types: inp.School_Types || base.School_Types || "", Book_Part: inp.Book_Part || base.Book_Part || "",
+            Cover_Price: "", Supplier_Discount_Pct: "", Initial_Purchase_Price: "", Volume_Discount_Share_Pct: "", Standard_Net_Cost: "",
+            Emp_Discount_Pct: "", Emp_Selling_Price: "", Book_Status: "Pricing" });
+          return;
+        }
+        if (!sup) { errors.push("سطر " + (idx + 1) + ": مكتبة غير صحيحة"); return; }
         const p = FinancialEngine.calculateBookPricing(inp.Cover_Price, inp.Supplier_Discount_Pct,
           inp.Volume_Discount_Share_Pct !== undefined && inp.Volume_Discount_Share_Pct !== "" ? inp.Volume_Discount_Share_Pct : sup.Volume_Discount_Pct,
           inp.Emp_Discount_Pct !== undefined && inp.Emp_Discount_Pct !== "" ? inp.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
@@ -1050,7 +1135,8 @@ const OperationsEngine = {
           Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
           Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
           Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
-          Book_Status: inp.Book_Status || (map[id] ? map[id].Book_Status : "Available")
+          School_Types: inp.School_Types || (map[id] ? map[id].School_Types : ""), Book_Part: inp.Book_Part || (map[id] ? map[id].Book_Part : ""),
+          Book_Status: inp.Book_Status || (map[id] && map[id].Book_Status !== "Pricing" ? map[id].Book_Status : "Available")
         };
       });
       DB_Engine.overwriteTableData(S.BOOKS, Object.keys(map).map(k => map[k]));

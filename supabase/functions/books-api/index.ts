@@ -21,20 +21,32 @@ try {
 const ready = Promise.resolve();
 const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').digest()).map(b => b > 127 ? b - 256 : b);
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
-// لتحديث المنطق: غيّر CODE_COMMIT إلى commit أحدث ثم أعد نشر الدالة.
-const CODE_COMMIT = 'a0ddaa00904903797ea38c60e1f6f22af21275da';
-const CODE_URL = `https://raw.githubusercontent.com/abomawadda/we-books/${CODE_COMMIT}/supabase/functions/books-api/logic.js`;
-let rtP: Promise<any> | null = null;
+// لتحديث المنطق بلا إعادة نشر: update books.config set value = '<commit>' where key = 'logic_commit';
+// (تلتقطه نسخ الخادم خلال 5 دقائق). CODE_COMMIT احتياطي إن لم يوجد الإعداد.
+const CODE_COMMIT = 'dad29b74d0aa523c0ffc5c126f75583b316cb412';
+const codeUrl = (c: string) => `https://raw.githubusercontent.com/abomawadda/we-books/${c}/supabase/functions/books-api/logic.js`;
+let rtP: Promise<any> | null = null, rtCommit = '', rtChecked = 0;
 // يُقرأ أولاً من books.logic؛ وإن لم يوجد يُجلب من GitHub مرة واحدة ويُحفظ هناك (لا اعتماد على GitHub بعدها)
-async function loadLogic() {
-  const [row] = await sql`select code from books.logic where commit_sha = ${CODE_COMMIT}`;
+async function loadLogic(commit: string) {
+  const [row] = await sql`select code from books.logic where commit_sha = ${commit}`;
   if (row) return row.code;
-  const r = await fetch(CODE_URL); if (!r.ok) throw new Error('logic.js ' + r.status);
+  const r = await fetch(codeUrl(commit)); if (!r.ok) throw new Error('logic.js ' + r.status);
   const code = await r.text();
-  await sql`insert into books.logic (commit_sha, code) values (${CODE_COMMIT}, ${code}) on conflict do nothing`;
+  await sql`insert into books.logic (commit_sha, code) values (${commit}, ${code}) on conflict do nothing`;
   return code;
 }
-const runtime = () => (rtP ||= loadLogic().then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; throw e; }));
+async function runtime() {
+  if (!rtP || Date.now() - rtChecked > 5 * 60 * 1000) {
+    rtChecked = Date.now();
+    const [c] = await sql`select value from books.config where key = 'logic_commit'`;
+    const commit = (c && c.value) || CODE_COMMIT;
+    if (commit !== rtCommit || !rtP) {
+      rtCommit = commit;
+      rtP = loadLogic(commit).then(code => createRuntime({ code, sha256 })).catch(e => { rtP = null; rtCommit = ''; throw e; });
+    }
+  }
+  return rtP;
+}
 
 // ---------------- المخزن: Postgres مع أقفال استشارية بدل إعادة المحاولة ----------------
 // عمليات الموظف المحدودة (الحجز): قفل مشترك عام + قفل حصري للموظف ← حجوزات الموظفين تتوازى.
@@ -168,6 +180,21 @@ async function syncMembers() {
     total: members.length, added: r.added, updated: r.updated, skipped: r.skipped, demoRemoved: d.removed };
 }
 
+// ---------------- متابعة المهام الليلية ----------------
+const logJob = (job: string, ok: boolean, message: string) =>
+  sql`insert into books.job_runs (job, ok, message) values (${job}, ${ok}, ${message.slice(0, 500)})`.catch(() => {});
+// فحص الصحة (GET ?health): هل نجحت كل مهمة ليلية خلال آخر 26 ساعة؟ لا يكشف أي بيانات
+async function health() {
+  const rows = await sql`select job, bool_or(ok) filter (where at > now() - interval '26 hours') as ok_recent,
+      (array_agg(ok order by at desc))[1] as last_ok, max(at) as last_at from books.job_runs group by job`;
+  const jobs: Record<string, any> = {};
+  for (const j of ['SYNC_MEMBERS', 'DAILY_JOB', 'SNAPSHOT']) {
+    const r = rows.find((x: any) => x.job === j);
+    jobs[j] = { ok: !!(r && r.ok_recent && r.last_ok), last: r ? r.last_at : null };
+  }
+  return { success: Object.values(jobs).every((j: any) => j.ok), jobs };
+}
+
 const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
@@ -180,7 +207,9 @@ async function handle(action: string, payload: any, token: string) {
   if (action === 'DAILY_JOB') {
     const k = await sql`select value from books.config where key = 'cron_key'`;
     if (!k.length || !payload || typeof payload.key !== 'string' || payload.key !== k[0].value) return { success: false, message: 'غير مصرح.' };
-    await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; });
+    try { await rt.run(store, 'DAILY_JOB', (g: any) => { g.dailyMaintenanceJob(); return { success: true }; }); }
+    catch (e) { await logJob('DAILY_JOB', false, String(e?.message || e)); throw e; }
+    await logJob('DAILY_JOB', true, 'تم');
     return { success: true, message: 'تم تنفيذ المهمة اليومية.' };
   }
   // مزامنة الأعضاء: من الجدولة الليلية (مفتاح cron) أو يدوياً من حساب Admin
@@ -189,7 +218,8 @@ async function handle(action: string, payload: any, token: string) {
     const byCron = k.length && payload && typeof payload.key === 'string' && payload.key === k[0].value;
     const s: any = byCron ? null : await verify(token);
     if (!byCron && !(s && s.userType === 'ADMIN' && s.role === 'Admin')) return { success: false, message: 'هذه العملية لمدير المنظومة فقط.' };
-    return await syncMembers();
+    try { const r = await syncMembers(); await logJob('SYNC_MEMBERS', true, r.message); return r; }
+    catch (e) { await logJob('SYNC_MEMBERS', false, String(e?.message || e)); throw e; }
   }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);
@@ -207,6 +237,7 @@ async function handle(action: string, payload: any, token: string) {
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   await ready;
+  if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) { const h = await health(); return reply(h, h.success ? 200 : 503); }
   if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION, db: dbMode });
   let body: any;
   try { body = JSON.parse(await req.text()); } catch { return reply({ success: false, message: 'طلب غير صالح.' }, 400); }

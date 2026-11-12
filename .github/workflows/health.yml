@@ -1,0 +1,25 @@
+# فحص يومي لصحة المنظومة: يفشل إذا لم تنجح أي مهمة ليلية (مزامنة الموظفين، المهمة اليومية، النسخة الاحتياطية)
+# خلال آخر 26 ساعة — وعند الفشل يرسل GitHub بريداً تلقائياً لصاحب المستودع.
+name: فحص صحة المنظومة
+on:
+  schedule:
+    - cron: '17 5 * * *'   # 7:17 صباحاً بتوقيت القاهرة شتاءً
+  workflow_dispatch:
+jobs:
+  health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: فحص المهام الليلية والخادم
+        run: |
+          set -e
+          URL=https://bulfwclnhbwpzqwnxjie.supabase.co/functions/v1/books-api
+          for i in 1 2 3; do
+            CODE=$(curl -s -o health.json -w '%{http_code}' -m 60 "$URL?health" || true)
+            [ "$CODE" = "200" ] && break; sleep 20
+          done
+          cat health.json; echo
+          [ "$CODE" = "200" ] || { echo "::error::فشلت مهمة ليلية أو الخادم لا يستجيب (HTTP $CODE)"; exit 1; }
+          curl -sf -m 60 -X POST -d '{"action":"GET_PUBLIC_INIT_DATA"}' "$URL" | grep -q '"success":true' || { echo "::error::الخادم لا يرد على الطلبات"; exit 1; }
+          curl -sf -m 30 -o /dev/null https://we-books-rose.vercel.app/ || { echo "::error::الموقع لا يفتح"; exit 1; }
+          echo "✓ كل شيء يعمل"
