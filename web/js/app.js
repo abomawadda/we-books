@@ -52,7 +52,7 @@ const Shell = {
   renderLogin() {
     Shell.type = null;
     document.title = APP.title;
-    const tab = store.get("loginTab") || "emp";
+    const tab = Shell.loginTab || "emp"; // تبدأ دائماً بدخول الموظفين
     $("#app").innerHTML = `
     <div class="min-h-[100dvh] mesh text-white lg:grid lg:grid-cols-[1.1fr_1fr]">
       <aside class="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden">
@@ -77,10 +77,6 @@ const Shell = {
           <p class="text-brand-100/80 text-sm mt-1.5">احجز · استلم · قسّط — بخصم العاملين</p>
         </div>
         <div class="flex-1 lg:flex-none bg-white text-slate-800 rounded-t-4xl lg:rounded-4xl px-6 pt-7 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-9 shadow-lift lg:max-w-md lg:w-full lg:mx-auto animate-sheet-up">
-          <div class="seg grid-cols-2 mb-6" role="tablist">
-            <button data-act="loginTab" data-id="emp" aria-pressed="${tab === "emp"}">${ic("user", "ml-1")} موظف</button>
-            <button data-act="loginTab" data-id="adm" aria-pressed="${tab === "adm"}">${ic("shield-check", "ml-1")} الإدارة</button>
-          </div>
           <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-4" autocomplete="on">
             <div><h2 class="text-xl font-bold text-slate-900">أهلاً بك</h2><p class="text-sm text-slate-500 mt-1">ادخل ببياناتك المسجلة في النقابة</p></div>
             <div><label class="label" for="lgEmp">الرقم الوظيفي</label><div class="input-icon">${ic("badge-check")}<input id="lgEmp" class="input" inputmode="numeric" autocomplete="username" required></div></div>
@@ -96,6 +92,9 @@ const Shell = {
             <button class="btn btn-dark btn-lg w-full">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
           </form>
           <p class="text-center text-xs text-slate-400 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
+          <div class="text-center mt-4">${tab === "adm"
+            ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-brand-700 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
+            : `<button type="button" data-act="loginTab" data-id="adm" class="text-[11px] text-slate-400 hover:text-slate-600 hover:underline">دخول الإدارة</button>`}</div>
         </div>
       </main>
     </div>`;
@@ -231,7 +230,7 @@ async function logout(silent) {
 }
 
 // ---------------------------------------------------------------- أحداث عامة
-on("loginTab", t => { store.set("loginTab", t); Shell.renderLogin(); });
+on("loginTab", t => { Shell.loginTab = t; Shell.renderLogin(); });
 on("togglePass", (_, el) => { const i = $("#lgPass"); i.type = i.type === "password" ? "text" : "password"; el.innerHTML = ic(i.type === "password" ? "eye" : "eye-off"); });
 on("refresh", async (_, el) => { el.classList.add("animate-spin"); APP.settlement = null; await reloadData(); el.classList.remove("animate-spin"); });
 on("pickPhase", () => {
