@@ -303,11 +303,11 @@ function openPrint(title, html) {
   const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
   const css = d.createElement("link"); css.rel = "stylesheet"; css.href = base + "app.css"; d.head.appendChild(css);
   const st = d.createElement("style");
-  st.textContent = "body{background:#fff;padding:24px;font-size:12.5px}table{width:100%;border-collapse:collapse;margin:10px 0;border:1.2px solid #3a2059}th,td{border:1px solid #d9cfe9;padding:6px 8px;text-align:right}th{background:#3a2059;color:#fff;font-family:Alexandria,'IBM Plex Sans Arabic'}tr:nth-child(even) td{background:#faf8fd}h1,h2{font-family:Alexandria,'IBM Plex Sans Arabic'}h1{font-size:20px;font-weight:700}@page{margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}";
+  st.textContent = "body{background:#fff;padding:24px;font-size:12.5px}table{width:100%;border-collapse:collapse;margin:10px 0;border:1.2px solid #3a2059}th,td{border:1px solid #d9cfe9;padding:6px 8px;text-align:right}th{background:#3a2059;color:#fff;font-family:Cairo}tr:nth-child(even) td{background:#faf8fd}h1,h2{font-family:Cairo}h1{font-size:20px;font-weight:700}@page{margin:12mm}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}";
   d.head.appendChild(st);
   const b = Brand.get(), lg = k => `<img src="${Brand.logoUrl(k)}" style="height:52px;width:auto" onerror="this.style.display='none'">`;
   d.body.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;border-bottom:3px solid #552c83;padding-bottom:10px;margin-bottom:16px">
-    ${lg("we")}<div style="flex:1;text-align:center"><div style="color:#64748b;font-size:12px">${esc(b.org)}</div><div style="font-weight:700;font-size:17px;color:#3a2059;font-family:Alexandria">${esc(b.platform)}</div><div style="color:#64748b;font-size:12px">${esc(title)} · ${new Date().toLocaleString("ar-EG")}</div></div>${lg("union")}</div>` + html
+    ${lg("we")}<div style="flex:1;text-align:center"><div style="color:#64748b;font-size:12px">${esc(b.org)}</div><div style="font-weight:700;font-size:17px;color:#3a2059;font-family:Cairo">${esc(b.platform)}</div><div style="color:#64748b;font-size:12px">${esc(title)} · ${new Date().toLocaleString("ar-EG")}</div></div>${lg("union")}</div>` + html
     + `<div style="margin-top:18px;border-top:1px solid #e4def0;padding-top:6px;color:#94a3b8;font-size:10.5px;display:flex;justify-content:space-between"><span>${esc(b.credit || "")}</span><span>${esc(b.phone || "")}</span></div>`;
   setTimeout(() => { w.focus(); w.print(); }, 700);
 }

@@ -1,36 +1,25 @@
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 500; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-arabic-500-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-arabic-600-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 400; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 500; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 600; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "IBM Plex Sans Arabic"; font-weight: 700; font-display: swap; src: url(fonts/ibm-plex-sans-arabic-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
 
-@font-face { font-family: "Alexandria"; font-weight: 600; font-display: swap; src: url(fonts/alexandria-arabic-600-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Alexandria"; font-weight: 600; font-display: swap; src: url(fonts/alexandria-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "Alexandria"; font-weight: 700; font-display: swap; src: url(fonts/alexandria-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Alexandria"; font-weight: 700; font-display: swap; src: url(fonts/alexandria-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "Alexandria"; font-weight: 800; font-display: swap; src: url(fonts/alexandria-arabic-800-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Alexandria"; font-weight: 800; font-display: swap; src: url(fonts/alexandria-latin-800-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
 
-@font-face { font-family: "Readex Pro"; font-weight: 400; font-display: swap; src: url(fonts/readex-pro-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Readex Pro"; font-weight: 400; font-display: swap; src: url(fonts/readex-pro-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "Readex Pro"; font-weight: 500; font-display: swap; src: url(fonts/readex-pro-arabic-500-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Readex Pro"; font-weight: 500; font-display: swap; src: url(fonts/readex-pro-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "Readex Pro"; font-weight: 600; font-display: swap; src: url(fonts/readex-pro-arabic-600-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Readex Pro"; font-weight: 600; font-display: swap; src: url(fonts/readex-pro-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
-@font-face { font-family: "Readex Pro"; font-weight: 700; font-display: swap; src: url(fonts/readex-pro-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
-@font-face { font-family: "Readex Pro"; font-weight: 700; font-display: swap; src: url(fonts/readex-pro-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+
+@font-face { font-family: "Cairo"; font-weight: 400; font-display: swap; src: url(fonts/cairo-arabic-400-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Cairo"; font-weight: 400; font-display: swap; src: url(fonts/cairo-latin-400-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Cairo"; font-weight: 500; font-display: swap; src: url(fonts/cairo-arabic-500-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Cairo"; font-weight: 500; font-display: swap; src: url(fonts/cairo-latin-500-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Cairo"; font-weight: 600; font-display: swap; src: url(fonts/cairo-arabic-600-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Cairo"; font-weight: 600; font-display: swap; src: url(fonts/cairo-latin-600-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Cairo"; font-weight: 700; font-display: swap; src: url(fonts/cairo-arabic-700-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Cairo"; font-weight: 700; font-display: swap; src: url(fonts/cairo-latin-700-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
+@font-face { font-family: "Cairo"; font-weight: 800; font-display: swap; src: url(fonts/cairo-arabic-800-normal.woff2) format("woff2"); unicode-range: U+0600-06FF, U+0750-077F, U+FB50-FDFF, U+FE70-FEFF; }
+@font-face { font-family: "Cairo"; font-weight: 800; font-display: swap; src: url(fonts/cairo-latin-800-normal.woff2) format("woff2"); unicode-range: U+0000-00FF; }
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* الخطوط: العناوين بخط Alexandria، والنص بـ IBM Plex Sans Arabic، وأحجام تتكيف مع عرض الشاشة */
+/* الخط: Cairo موحّد للعناوين والنص، وأحجام تتكيف مع عرض الشاشة */
 @layer base {
   html { font-size: clamp(15px, 0.35vw + 13.8px, 16.5px); -webkit-text-size-adjust: 100%; }
-  h1, h2, h3, .card-title, .font-display, .kpi .text-\[22px\] { font-family: "Alexandria", "IBM Plex Sans Arabic", system-ui, sans-serif; letter-spacing: 0; }
+  h1, h2, h3, .card-title, .font-display, .kpi .text-\[22px\] { font-family: "Cairo", system-ui, sans-serif; letter-spacing: 0; }
   h1 { line-height: 1.35; }
 }
 
