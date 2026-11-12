@@ -548,6 +548,7 @@ const ACTION_ACL = {
   SAVE_SUPPLIER: ["Coordinator"],
   SAVE_BOOK: ["Coordinator"],
   BULK_IMPORT_BOOKS: ["Coordinator"],
+  BULK_PRICE_BOOKS: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
@@ -622,6 +623,7 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_AUDIT_LOG": return E.getAuditLog(payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
+      case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
@@ -1177,6 +1179,50 @@ const OperationsEngine = {
       else DB_Engine.insertRecordsBatch(S.BOOKS, [obj]);
       DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", id, existing, obj);
       return { success: true, message: msg, book: obj };
+    });
+  },
+
+  /**
+   * تسعير جماعي لكتب موجودة: rows = [{bookId, coverPrice, supplierDiscountPct?, supplierId?}]
+   * defaults = {supplierDiscountPct, supplierId}. يحدّث حقول السعر فقط ويُتيح الكتاب للحجز.
+   * dryRun: يحسب النتيجة بلا حفظ (للمعاينة).
+   */
+  bulkPriceBooks: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), st = getSettings_(), def = payload.defaults || {};
+      const sups = {}; DB_Engine.getAllRecords(S.SUPPLIERS).forEach(x => { sups[Util.str(x.Supplier_ID)] = x; });
+      const firstSup = Object.keys(sups)[0];
+      const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
+      const results = [], seen = {};
+      let ok = 0;
+      (payload.rows || []).forEach((r, i) => {
+        const id = Util.str(r.bookId).toUpperCase(), line = i + 1, b = books[id];
+        const res = { line: line, bookId: id, ok: false };
+        results.push(res);
+        if (!b) { res.error = "كود غير موجود"; return; }
+        if (seen[id]) { res.error = "مكرر في القائمة"; return; }
+        seen[id] = 1; res.name = b.Book_Name;
+        const cover = Util.num(r.coverPrice);
+        if (!(cover > 0)) { res.error = "سعر الغلاف غير صحيح"; return; }
+        const supId = Util.str(r.supplierId) || Util.str(def.supplierId) || Util.str(b.Supplier_ID) || firstSup;
+        const sup = sups[supId];
+        if (!sup) { res.error = "مكتبة غير معروفة: " + supId; return; }
+        const discRaw = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? r.supplierDiscountPct : (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== "" ? def.supplierDiscountPct : b.Supplier_Discount_Pct);
+        const disc = Util.num(discRaw);
+        if (disc < 0 || disc >= 100) { res.error = "خصم المكتبة غير صحيح"; return; }
+        const pr = FinancialEngine.calculateBookPricing(cover, disc, sup.Volume_Discount_Pct, b.Emp_Discount_Pct !== "" && b.Emp_Discount_Pct !== undefined ? b.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
+        Object.assign(res, { ok: true, oldCover: b.Cover_Price, cover: pr.coverPrice, disc: pr.supplierDiscountPct, cost: pr.standardNetCost, emp: pr.empSellingPrice, margin: pr.unitSurplusMargin, supplierId: supId, wasPricing: b.Book_Status === "Pricing" });
+        if (pr.unitSurplusMargin < 0) res.warning = "يُباع بأقل من التكلفة";
+        ok++;
+        if (!payload.dryRun) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, {
+          Supplier_ID: supId, Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct, Initial_Purchase_Price: pr.initialPurchasePrice,
+          Volume_Discount_Share_Pct: pr.volumeDiscountSharePct, Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+          Book_Status: b.Book_Status === "Pricing" ? "Available" : b.Book_Status });
+      });
+      const bad = results.filter(x => !x.ok).length;
+      if (!payload.dryRun && ok) DB_Engine.logAudit(session.userId, session.role, "Catalog", "BULK_PRICE_BOOKS", "-", null, { priced: ok, rejected: bad });
+      return { success: true, dryRun: !!payload.dryRun, results: results, priced: ok, rejected: bad,
+        message: payload.dryRun ? "معاينة: " + ok + " صالح و" + bad + " مرفوض." : "تم تسعير " + ok + " كتاباً وإتاحتها للحجز" + (bad ? "، ورُفض " + bad + " سطراً (راجع الأخطاء)." : ".") };
     });
   },
 

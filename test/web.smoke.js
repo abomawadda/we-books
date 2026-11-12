@@ -97,6 +97,15 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   for (const t of ['inv', 'inst', 'pay', 'info', 'log']) { await click(`[data-act="epTab"][data-id="${t}"]`, dialog()); check(dialog().querySelector('#epBody').textContent.length > 20, 'profile tab ' + t); }
   await closeAll();
   await go('/a/audit'); await settle(); check(d.querySelectorAll('#audList li').length > 1, 'audit page lists changes');
+  // التسعير الجماعي
+  await go('/a/books'); await click('[data-act="bulkPrice"]');
+  const pb = w.eval('APP').adm.books.find(b => b.Book_Status === 'Pricing') || w.eval('APP').adm.books[0];
+  const ta = dialog().querySelector('[data-input="bpTxt"]'); ta.value = pb.Book_ID + '\t١٥٠\t20\nXX-1\t10'; ta.dispatchEvent(new w.Event('input', { bubbles: true }));
+  await click('[data-act="bpPreview"]'); await settle();
+  check(/سيُتاح للحجز|تحديث سعر/.test(dialog().textContent) && /كود غير موجود/.test(dialog().textContent), 'bulk price preview shows ok and errors');
+  await click('[data-act="bpApply"]'); await settle(); await ok(); await settle();
+  check(w.eval('APP').adm.books.find(b => b.Book_ID === pb.Book_ID).Cover_Price === 150, 'bulk price applied');
+  await closeAll();
   // الحاجزون لكتاب
   await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
   check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');
