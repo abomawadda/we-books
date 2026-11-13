@@ -305,6 +305,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   else Shell.renderLogin();
   const r = await call("GET_PUBLIC_INIT_DATA");
   if (r.success && r.brand) { Brand.set(r.brand); if (!APP.user) Shell.renderLogin(); }
+  if (r.success && window.splashCountdown) window.splashCountdown(r.phase);
 });
 
 // ============================================================ الإشعارات

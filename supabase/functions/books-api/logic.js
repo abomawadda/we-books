@@ -769,7 +769,15 @@ const OperationsEngine = {
 
   getPublicInitData: function() {
     const st = getSettings_();
-    return { success: true, settings: { INITIATIVE_TITLE: st.INITIATIVE_TITLE, UNIFIED_EMP_DISCOUNT_PCT: st.UNIFIED_EMP_DISCOUNT_PCT }, brand: this.brand_(st), version: SYSTEM_CONFIG.VERSION };
+    // مواعيد الحملة العامة (بلا أي بيانات شخصية) لعداد شاشة الافتتاح
+    let phase = null;
+    try {
+      const now = Util.now(), ps = DB_Engine.getAllRecords(this.S().PHASES).filter(p => p.Phase_Status !== "Draft");
+      const open = ps.find(p => this.isBookingOpen_(p)), next = ps.filter(p => String(p.Start_DateTime) > now).sort((a, b) => String(a.Start_DateTime).localeCompare(String(b.Start_DateTime)))[0];
+      const ph = open || next || ps.filter(p => p.Delivery_Start_Date && String(p.Delivery_Start_Date) >= now.slice(0, 10)).pop();
+      if (ph) phase = { name: ph.Phase_Name, start: ph.Start_DateTime, end: ph.End_DateTime, delivery: ph.Delivery_Start_Date, open: !!open && ph === open };
+    } catch (e) { phase = null; }
+    return { success: true, settings: { INITIATIVE_TITLE: st.INITIATIVE_TITLE, UNIFIED_EMP_DISCOUNT_PCT: st.UNIFIED_EMP_DISCOUNT_PCT }, brand: this.brand_(st), phase: phase, version: SYSTEM_CONFIG.VERSION };
   },
   /** هوية المنصة وبيانات التواصل (تُعدَّل من الإعدادات) */
   brand_: function(st) {
