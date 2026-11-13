@@ -436,6 +436,55 @@ function gradePicker() {
       <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 hover:ring-brand-300 p-3 text-center active:scale-95 transition shadow-soft" data-act="fGrade" data-id="${esc(g)}">
         <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>`).join("")}</div></section>`).join("")}`;
 }
+// ============================================================ جهّز الشنطة: كتاب لكل مادة بضغطة
+const BAG = { rows: [], m: null };
+/** يبني الشنطة المقترحة: لكل مادة كتاب واحد؛ يفضّل سلسلة واحدة تغطي أكثر المواد، ثم الأشهر */
+function bagBuild() {
+  const pr = pubRank(), list = gradeList().list.filter(b => b.Book_Status !== "Pricing");
+  const bySub = {}; list.forEach(b => (bySub[b.Subject] = bySub[b.Subject] || []).push(b));
+  const cover = {}; list.forEach(b => { cover[b.Publisher] = cover[b.Publisher] || new Set(); cover[b.Publisher].add(b.Subject); });
+  const series = Object.keys(cover).sort((a, b) => cover[b].size - cover[a].size || (pr[b] || 0) - (pr[a] || 0))[0];
+  return Object.keys(bySub).sort((a, b) => subjRank(a) - subjRank(b) || a.localeCompare(b, "ar")).map(s => {
+    const opts = bySub[s].slice().sort((a, b) => (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
+    const inCart = opts.find(b => APP.cart[ck(b.Book_ID, Emp.ben)]);
+    return { s, opts, pick: (inCart || opts[0]).Book_ID, on: !inCart && !["حاسب آلي", "أي سي تي", "تكنولوجيا", "ديسكفري", "مهارات"].includes(s), had: !!inCart };
+  });
+}
+function bagHTML() {
+  const m = Emp.bookMap(), sel = BAG.rows.filter(r => r.on), tot = sel.reduce((a, r) => a + n(m[r.pick].Emp_Selling_Price), 0), cov = sel.reduce((a, r) => a + n(m[r.pick].Cover_Price), 0);
+  return `<div class="rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 mb-3 flex items-center gap-3"><span class="text-[30px]">🎒</span><div class="text-[13px] text-brand-900 leading-relaxed">اخترنا لك كتاباً لكل مادة: <b>المواد الأساسية</b> و<b>السلسلة الأشهر</b> لـ ${esc(gradeTitle(Emp.filter.grade))}. غيّر الناشر أو شيل أي مادة.</div></div>
+  <ul class="space-y-2">${BAG.rows.map((r, i) => { const b = m[r.pick], [c1] = toneOf(r.s); return `<li class="rounded-2xl ring-1 ${r.on ? "ring-brand-200 bg-white" : "ring-slate-200 bg-slate-50 opacity-70"} p-3">
+    <div class="flex items-center gap-3"><button class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${r.on ? "bg-brand-600 text-white" : "bg-white ring-1 ring-slate-300 text-transparent"}" data-act="bagTog" data-id="${i}" aria-label="تضمين">${ic("check")}</button>
+      <span class="w-1.5 h-8 rounded-full shrink-0" style="background:${c1}"></span>
+      <div class="flex-1 min-w-0"><div class="font-bold text-[14.5px] text-slate-900">${esc(r.s)}${r.had ? ` <span class="text-[11px] font-semibold text-emerald-600">في السلة ✓</span>` : ""}</div><div class="text-[12px] text-slate-500 truncate">${esc(b.Publisher)}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
+      <div class="text-left shrink-0"><div class="font-bold num text-brand-800">${fmt(b.Emp_Selling_Price)}</div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div></div>
+    ${r.opts.length > 1 && r.on ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pr-10 pb-0.5" style="scrollbar-width:none">${r.opts.map(o => `<button class="chip !h-7 !px-2.5 !text-[11.5px] shrink-0" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${o.Book_ID === r.pick}">${esc(o.Publisher)}${o.Book_Part ? " (" + esc(o.Book_Part) + ")" : ""} · <span class="num">${fmt(o.Emp_Selling_Price)}</span></button>`).join("")}</div>` : ""}</li>`; }).join("")}</ul>
+  <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
+    <div class="flex justify-between text-slate-500"><span>${sel.length} كتب بسعر الغلاف</span><span class="line-through num">${moneyTxt(cov)}</span></div>
+    <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
+    <div class="flex justify-between items-baseline pt-1 border-t border-slate-200"><b>إجمالي الشنطة</b><span class="text-xl font-bold text-brand-800 num">${money(tot)}</span></div></div>`;
+}
+const bagRender = () => { if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.filter(r => r.on).length, b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
+on("bagOpen", () => {
+  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
+  if (!Emp.filter.grade) return toast("اختر الصف أولاً", "info");
+  BAG.rows = bagBuild();
+  if (!BAG.rows.length) return toast("لا توجد كتب مسعّرة لهذا الصف بعد", "info");
+  const ki = myKids().findIndex(k => k.grade === Emp.filter.grade && (k.type || "") === (Emp.filter.type || ""));
+  BAG.m = UI.open(bagHTML(), { title: "🎒 شنطة " + (ki >= 0 ? kidName(myKids()[ki], ki) : gradeShort(Emp.filter.grade)), sub: gradeTitle(Emp.filter.grade) + " · " + kidTypeTxt(Emp.filter.type),
+    footer: `<button class="btn btn-primary btn-lg w-full" data-act="bagAdd">${ic("shopping-cart")} أضف للسلة</button>` });
+  bagRender();
+});
+on("bagTog", v => { const r = BAG.rows[+v]; r.on = !r.on; bagRender(); });
+on("bagPick", v => { const [i, id] = String(v).split("|"); BAG.rows[+i].pick = id; BAG.rows[+i].on = true; bagRender(); });
+on("bagAdd", () => {
+  const sel = BAG.rows.filter(r => r.on); let added = 0;
+  sel.forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k] && r.had) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) { APP.cart[k] = 1; added++; } });
+  Emp.dirty = true; if (BAG.m) BAG.m.close(); BAG.m = null;
+  renderBookGrid(); refreshCartViews();
+  toast(added ? `🎒 الشنطة جاهزة! اتضاف ${booksWord(added)} للسلة` : "الشنطة في السلة بالفعل ✅", "success");
+});
+
 /** باقات سريعة: كل كتب ناشر واحد للصف بضغطة */
 function bundles(list) {
   const by = {}; list.filter(b => b.Book_Status !== "Pricing").forEach(b => (by[b.Publisher] = by[b.Publisher] || []).push(b));
@@ -487,7 +536,7 @@ Router.add("/e/books", view => {
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
           <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${(() => { const i = myKids().findIndex(k => k.grade === f.grade && (k.type || "") === (f.type || "")); return i >= 0 ? "كتب " + esc(kidName(myKids()[i], i)) + " " + kidEmoji(myKids()[i]) : "كتب"; })()}</div><div class="font-display font-bold text-[20px] leading-tight">${esc(gradeTitle(f.grade))}</div></div>
           <button class="btn btn-sm !bg-white/15 !text-white !ring-white/20" data-act="fGrade" data-id="">${ic("arrow-left-right")} تغيير</button></div>
-        <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div></div>` : ""}
+        <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div>${Emp.open() ? `<button class="mt-3 w-full flex items-center gap-3 rounded-2xl bg-gold-400 text-brand-950 px-4 py-3 font-bold active:scale-[.98] transition shadow-soft" data-act="bagOpen"><span class="text-[26px] leading-none">🎒</span><span class="flex-1 text-right"><span class="block text-[15.5px]">جهّز الشنطة كاملة</span><span class="block text-[11.5px] font-semibold opacity-75">كتاب لكل مادة بضغطة — وعدّل براحتك</span></span>${ic("chevron-left")}</button>` : ""}</div>` : ""}
       <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-2 bg-slate-50/90 backdrop-blur-xl">
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="${f.grade ? "ابحث في كتب " + esc(gradeShort(f.grade)) : "ابحث باسم الكتاب أو الناشر أو المادة"}" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
         ${relOn() && Emp.open() ? `<div class="scroll-x mt-2 items-center"><span class="text-[12px] font-semibold text-slate-500 shrink-0">أحجز لـ:</span><button class="chip !h-8 !text-xs" data-act="pickBen" data-id="" aria-pressed="${!Emp.ben}">${ic("user")} لي ولأبنائي</button>${Emp.bens.map(x => `<button class="chip !h-8 !text-xs" data-act="pickBen" data-id="${esc(x)}" aria-pressed="${Emp.ben === x}">${ic("users")} ${esc(x)}</button>`).join("")}<button class="chip !h-8 !text-xs" data-act="addBen">${ic("plus")} قريب</button></div>` : ""}

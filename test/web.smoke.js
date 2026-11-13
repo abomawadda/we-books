@@ -58,6 +58,8 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(d.querySelectorAll('#bookGrid [data-act="fGrade"]').length >= 2, 'grade picker shown first');
   { const g = w.eval('APP').emp.books.find(b => b.Book_ID === 'BK-101').Grade; await click(`#bookGrid [data-act="fGrade"][data-id="${g}"]`); }
   check(d.querySelectorAll('#bookGrid article').length >= 1 && /الصف|رياض|تأسيس/.test(view()), 'grade books with clear title');
+  await click('[data-act="bagOpen"]'); check(dialog() && /الشنطة/.test(dialog().textContent), 'bag sheet opened');
+  { const before = Object.keys(w.eval('APP').cart).length; await click('[data-act="bagAdd"]', dialog()); await settle(); check(Object.keys(w.eval('APP').cart).length > before, 'bag added to cart'); w.eval('APP').cart = {}; w.eval('refreshCartViews')(); }
   w.eval('Emp').filter.q = 'BK'; w.eval('Emp').filter.grade = ''; w.eval('renderBookGrid')();
   check(d.querySelectorAll('#bookGrid article').length >= 5, 'search shows books across grades');
   await click('[data-act="cartInc"][data-id="BK-101"]');
