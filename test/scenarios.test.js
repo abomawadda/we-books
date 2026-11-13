@@ -43,6 +43,12 @@ assert.deepStrictEqual(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal kids'
   const ks = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal next year').employee.kids;
   assert.deepStrictEqual(ks.map(k => [k.grade, k.promoted, !!k.graduated]), [['5 ابتدائي', 1, false], ['', 1, true]]); clock.now = sv; }
 fail(api('SAVE_MY_KIDS', { kids: [] }, adm.sessionToken), 'admin cannot save kids');
+// شعار الناشر: روابط المخزن فقط، ويظهر للموظف
+fail(api('SET_PUBLISHER_LOGO', { publisher: 'ناشر وهمي', url: '' }, adm.sessionToken), 'logo unknown pub', /الناشر/);
+{ const pub = rows(S.BOOKS)[0].Publisher;
+  fail(api('SET_PUBLISHER_LOGO', { publisher: pub, url: 'https://evil.com/x.webp' }, adm.sessionToken), 'logo bad url', /رابط/);
+  ok(api('SET_PUBLISHER_LOGO', { publisher: pub, url: 'https://abc.supabase.co/storage/v1/object/public/book-covers/pub-0123abcd.webp?v=1' }, adm.sessionToken), 'logo set');
+  assert.ok(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal logos').pubLogos[pub]); passed++; }
 
 // 2) الحجز بالشرائح
 at(2026, 11, 5, 9, 0, 0, 100);
