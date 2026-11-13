@@ -116,7 +116,7 @@ function getDatabaseSchemaDefinition_() {
   return [
     { name: S.SETTINGS, color: "#1e293b", headers: ["Setting_Key", "Setting_Value", "Data_Type", "Description", "Updated_At", "Updated_By"] },
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
-    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At"] },
+    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
@@ -546,6 +546,7 @@ const ADMIN_ROLES = ["Admin", "Coordinator", "Finance", "Warehouse"];
 // الصلاحيات لكل عملية. "EMPLOYEE" = بوابة الموظف فقط.
 const ACTION_ACL = {
   GET_EMPLOYEE_PORTAL_DATA: ["EMPLOYEE"],
+  SAVE_MY_KIDS: ["EMPLOYEE"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
   CHANGE_PASSWORD: ADMIN_ROLES,
   GET_ADMIN_DASHBOARD_DATA: ADMIN_ROLES,
@@ -621,6 +622,7 @@ function callServerApi(action, payload, sessionToken) {
     const E = OperationsEngine;
     switch (action) {
       case "GET_EMPLOYEE_PORTAL_DATA": return E.getEmployeePortalData(session.empId, payload.phaseId);
+      case "SAVE_MY_KIDS": return E.saveMyKids(session.empId, payload.kids);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
       case "CHANGE_PASSWORD": return AuthEngine.changePassword(session, payload.oldPassword, payload.newPassword);
       case "GET_ADMIN_DASHBOARD_DATA": return E.getAdminDashboardFullData();
@@ -795,6 +797,27 @@ const OperationsEngine = {
     });
   },
 
+  /** السنة الدراسية الحالية (تبدأ في يوليو) */
+  schoolYear_: function() { const d = new Date(); return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1; },
+  /** أبناء الموظف المحفوظون، مع ترقية الصف تلقائياً إذا بدأت سنة دراسية جديدة (promoted = عدد السنوات) */
+  kidsOf_: function(emp) {
+    let o = null; try { o = JSON.parse(emp.Kids_JSON || "null"); } catch (e) { o = null; }
+    if (!o || !Array.isArray(o.kids)) return [];
+    const labels = SYSTEM_CONFIG.CATALOG.GRADES.map(g => g.label), yrs = Math.max(0, this.schoolYear_() - Util.num(o.y || this.schoolYear_()));
+    return o.kids.map(k => { const i = labels.indexOf(k.grade); if (!yrs || i < 0) return Object.assign({}, k, { promoted: 0 });
+      const j = i + yrs; return Object.assign({}, k, { grade: j < labels.length ? labels[j] : "", graduated: j >= labels.length, promoted: yrs }); });
+  },
+  saveMyKids: function(empId, kids) {
+    const S = this.S(), lists = SYSTEM_CONFIG.CATALOG;
+    Util.require(Array.isArray(kids) && kids.length <= 8, "الحد الأقصى 8 أبناء.");
+    const clean = kids.map(k => ({ name: Util.str(k.name).replace(/[|<>]/g, " ").slice(0, 30), gender: k.gender === "g" ? "g" : "b",
+      grade: Util.str(k.grade), type: Util.str(k.type) }));
+    clean.forEach((k, i) => { Util.require(lists.GRADES.some(g => g.label === k.grade), "اختر صف الابن رقم " + (i + 1) + "."); Util.require(!k.type || lists.SCHOOL_TYPES.indexOf(k.type) !== -1, "نوع مدرسة غير صحيح."); });
+    const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === Util.str(empId));
+    Util.require(emp, "الحساب غير موجود.");
+    DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Kids_JSON: JSON.stringify({ y: this.schoolYear_(), kids: clean }) });
+    return { success: true, message: "تم حفظ بيانات أبنائك 🎉", kids: clean };
+  },
   getEmployeePortalData: function(empId, phaseId) {
     const S = this.S();
     const phases = DB_Engine.getAllRecords(S.PHASES).filter(p => p.Phase_Status !== "Draft")
@@ -820,7 +843,7 @@ const OperationsEngine = {
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
       },
       brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
-      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT },
+      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp) },
       books: books,
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
@@ -1348,7 +1371,7 @@ const OperationsEngine = {
           Employment_Status: inp.Employment_Status || (old ? old.Employment_Status : "ساري"),
           Installment_Allowed: inp.Installment_Allowed !== undefined ? inp.Installment_Allowed !== false : (old ? old.Installment_Allowed : true),
           Max_Credit_Limit: Util.num(inp.Max_Credit_Limit) || (old ? old.Max_Credit_Limit : ""),
-          Notes: inp.Notes || (old ? old.Notes : ""), Updated_At: Util.now()
+          Notes: inp.Notes || (old ? old.Notes : ""), Updated_At: Util.now(), Kids_JSON: old ? old.Kids_JSON || "" : ""
         };
       });
       DB_Engine.overwriteTableData(S.EMPLOYEES, Object.keys(map).map(k => map[k]));
