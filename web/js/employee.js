@@ -295,7 +295,15 @@ function sortBooks(list) {
   const pr = pubRank(), go = gradeOrder();
   return list.slice().sort((a, b) => ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || ((go[a.Grade] ?? 99) - (go[b.Grade] ?? 99))
     || (subjRank(a.Subject) - subjRank(b.Subject)) || String(a.Subject).localeCompare(String(b.Subject), "ar")
-    || ((pr[b.Publisher] || 0) - (pr[a.Publisher] || 0)) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
+    || (n(b.Pop) - n(a.Pop)) || ((pr[b.Publisher] || 0) - (pr[a.Publisher] || 0)) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
+}
+/** «الأكثر حجزاً»: نسبة الزملاء الذين اختاروا الكتاب من بين كتب نفس المادة والصف */
+const POP_MIN = 3;
+function popInfo(b) {
+  if (!n(b.Pop)) return null;
+  const same = APP.emp.books.filter(x => x.Grade === b.Grade && x.Subject === b.Subject), tot = same.reduce((a, x) => a + n(x.Pop), 0);
+  if (tot < POP_MIN) return null;
+  return { top: n(b.Pop) === Math.max(...same.map(x => n(x.Pop))), pct: Math.round(n(b.Pop) / tot * 100), n: n(b.Pop) };
 }
 const typeOk = (b, t) => !t || String(b.School_Types || "").split(/[،,]/).map(x => x.trim()).includes(t);
 // ============================================================ أبنائي (محفوظون في حساب الموظف على الخادم)
@@ -408,6 +416,7 @@ function bookCard(b) {
     </div>
     <div class="flex-1 min-w-0 flex flex-col">
       <div class="flex items-start gap-2"><h3 class="flex-1 font-bold text-slate-900 leading-snug text-[15px] line-clamp-2">${esc(title)}</h3>${q ? `<span class="shrink-0 w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-[13px]">${ic("check")}</span>` : ""}</div>
+      ${(() => { const p = popInfo(b); return p ? `<div class="flex items-center gap-1.5 mt-1 text-[11.5px] font-bold ${p.top ? "text-orange-600" : "text-slate-500"}">${p.top ? `<span class="inline-flex items-center gap-1 rounded-full bg-orange-50 ring-1 ring-orange-200 px-2 h-5">🔥 الأكثر حجزاً</span>` : ""}<span class="font-semibold">اختيار ${p.pct}% من الزملاء</span></div>` : ""; })()}
       <div class="flex flex-wrap items-center gap-1 mt-1">${b.Book_Part ? `<span class="inline-flex items-center rounded-md px-1.5 h-5 text-[10.5px] font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-100">${esc(b.Book_Part)}</span>` : ""}${schoolBadges(b.School_Types)}${elsewhere ? pill("", `${elsewhere} لمستفيد آخر`, "blue") : ""}${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}</div>
       ${pricing ? `<div class="mt-auto pt-2 text-[12px] text-amber-700 flex items-center gap-1">${ic("hourglass")} جاري التسعير — يُتاح فور إعلان السعر</div>` : `
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
@@ -443,22 +452,24 @@ function bagBuild() {
   const pr = pubRank(), list = gradeList().list.filter(b => b.Book_Status !== "Pricing");
   const bySub = {}; list.forEach(b => (bySub[b.Subject] = bySub[b.Subject] || []).push(b));
   const cover = {}; list.forEach(b => { cover[b.Publisher] = cover[b.Publisher] || new Set(); cover[b.Publisher].add(b.Subject); });
+  const popSub = {}; list.forEach(b => popSub[b.Subject] = (popSub[b.Subject] || 0) + n(b.Pop));
   const series = Object.keys(cover).sort((a, b) => cover[b].size - cover[a].size || (pr[b] || 0) - (pr[a] || 0))[0];
+  const favored = b => popSub[b.Subject] >= POP_MIN ? n(b.Pop) * 1000 : 0; // إن وُجدت حجوزات كافية: الأكثر حجزاً أولاً
   return Object.keys(bySub).sort((a, b) => subjRank(a) - subjRank(b) || a.localeCompare(b, "ar")).map(s => {
-    const opts = bySub[s].slice().sort((a, b) => (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
+    const opts = bySub[s].slice().sort((a, b) => (favored(b) - favored(a)) || (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
     const inCart = opts.find(b => APP.cart[ck(b.Book_ID, Emp.ben)]);
     return { s, opts, pick: (inCart || opts[0]).Book_ID, on: !inCart && !["حاسب آلي", "أي سي تي", "تكنولوجيا", "ديسكفري", "مهارات"].includes(s), had: !!inCart };
   });
 }
 function bagHTML() {
   const m = Emp.bookMap(), sel = BAG.rows.filter(r => r.on), tot = sel.reduce((a, r) => a + n(m[r.pick].Emp_Selling_Price), 0), cov = sel.reduce((a, r) => a + n(m[r.pick].Cover_Price), 0);
-  return `<div class="rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 mb-3 flex items-center gap-3"><span class="text-[30px]">🎒</span><div class="text-[13px] text-brand-900 leading-relaxed">اخترنا لك كتاباً لكل مادة: <b>المواد الأساسية</b> و<b>السلسلة الأشهر</b> لـ ${esc(gradeTitle(Emp.filter.grade))}. غيّر الناشر أو شيل أي مادة.</div></div>
+  return `<div class="rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 mb-3 flex items-center gap-3"><span class="text-[30px]">🎒</span><div class="text-[13px] text-brand-900 leading-relaxed">اخترنا لك كتاباً لكل مادة: <b>الأكثر حجزاً من الزملاء</b> و<b>السلسلة الأشهر</b> لـ ${esc(gradeTitle(Emp.filter.grade))}. غيّر الناشر أو شيل أي مادة.</div></div>
   <ul class="space-y-2">${BAG.rows.map((r, i) => { const b = m[r.pick], [c1] = toneOf(r.s); return `<li class="rounded-2xl ring-1 ${r.on ? "ring-brand-200 bg-white" : "ring-slate-200 bg-slate-50 opacity-70"} p-3">
     <div class="flex items-center gap-3"><button class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${r.on ? "bg-brand-600 text-white" : "bg-white ring-1 ring-slate-300 text-transparent"}" data-act="bagTog" data-id="${i}" aria-label="تضمين">${ic("check")}</button>
       <span class="w-1.5 h-8 rounded-full shrink-0" style="background:${c1}"></span>
       <div class="flex-1 min-w-0"><div class="font-bold text-[14.5px] text-slate-900">${esc(r.s)}${r.had ? ` <span class="text-[11px] font-semibold text-emerald-600">في السلة ✓</span>` : ""}</div><div class="text-[12px] text-slate-500 truncate">${esc(b.Publisher)}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
       <div class="text-left shrink-0"><div class="font-bold num text-brand-800">${fmt(b.Emp_Selling_Price)}</div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div></div>
-    ${r.opts.length > 1 && r.on ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pr-10 pb-0.5" style="scrollbar-width:none">${r.opts.map(o => `<button class="chip !h-7 !px-2.5 !text-[11.5px] shrink-0" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${o.Book_ID === r.pick}">${esc(o.Publisher)}${o.Book_Part ? " (" + esc(o.Book_Part) + ")" : ""} · <span class="num">${fmt(o.Emp_Selling_Price)}</span></button>`).join("")}</div>` : ""}</li>`; }).join("")}</ul>
+    ${r.opts.length > 1 && r.on ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pr-10 pb-0.5" style="scrollbar-width:none">${r.opts.map(o => `<button class="chip !h-7 !px-2.5 !text-[11.5px] shrink-0" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${o.Book_ID === r.pick}">${(popInfo(o) || {}).top ? "🔥 " : ""}${esc(o.Publisher)}${o.Book_Part ? " (" + esc(o.Book_Part) + ")" : ""} · <span class="num">${fmt(o.Emp_Selling_Price)}</span></button>`).join("")}</div>` : ""}</li>`; }).join("")}</ul>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
     <div class="flex justify-between text-slate-500"><span>${sel.length} كتب بسعر الغلاف</span><span class="line-through num">${moneyTxt(cov)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>

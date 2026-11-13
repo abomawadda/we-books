@@ -826,9 +826,11 @@ const OperationsEngine = {
       || phases.find(p => p.Booking_Open) || phases[phases.length - 1] || null;
     const resItems = DB_Engine.getAllRecords(S.RES_ITEMS);
     const snap = this.getStockSnapshot_(resItems);
+    // «الأكثر حجزاً»: عدد الموظفين الذين حجزوا كل كتاب (إحصاء مجمّع بلا أي بيانات شخصية)
+    const pop = {}; resItems.forEach(i => { if (String(i.Allocation_Status || "").indexOf("Cancelled") === 0) return; (pop[i.Book_ID] = pop[i.Book_ID] || new Set()).add(Util.str(i.Emp_ID)); });
     const books = DB_Engine.getAllRecords(S.BOOKS)
       .filter(b => SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(b.Book_Status) !== -1 || b.Book_Status === "Pricing")
-      .map(b => Object.assign(b, { In_Stock_From_Previous: snap[b.Book_ID] ? Math.max(0, snap[b.Book_ID].free) : 0 }));
+      .map(b => Object.assign(b, { In_Stock_From_Previous: snap[b.Book_ID] ? Math.max(0, snap[b.Book_ID].free) : 0, Pop: pop[b.Book_ID] ? pop[b.Book_ID].size : 0 }));
     const settings = getSettings_();
     const mine = r => Util.str(r.Emp_ID) === Util.str(empId);
     const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(mine) || {};

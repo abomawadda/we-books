@@ -58,6 +58,7 @@ assert.ok(e1Items.find(i => i.Tranche_No == 1).Priority_Timestamp.startsWith('20
 assert.ok(e1Items.find(i => i.Tranche_No == 2).Priority_Timestamp.startsWith('2026-11-06'));
 at(2026, 11, 6, 9);
 ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 1 }], paymentMethod: 'CASH' }, e3), 'e3 book');
+assert.strictEqual(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e3), 'portal pop').books.find(b => b.Book_ID === 'BK-101').Pop, 3); passed++;
 // القواعد
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 4 }], paymentMethod: 'CASH' }, e3), 'max per book', /أقصى عدد/);
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-301', qty: 1 }], paymentMethod: 'INSTALLMENT', downPaymentType: 'PERCENTAGE', downPaymentInput: 5, installmentCount: 2 }, e3), 'min down', /مقدم/);
