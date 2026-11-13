@@ -1215,14 +1215,16 @@ const OperationsEngine = {
   },
   setPublisherLogo: function(session, publisher, url) {
     const S = this.S(), pub = Util.str(publisher), u = Util.str(url);
-    Util.require(pub && DB_Engine.getAllRecords(S.BOOKS).some(b => Util.str(b.Publisher) === pub), "الناشر غير موجود في الكتالوج.");
+    // «الناشر|lang» = شعار مختلف لكتب اللغات (إنجليزي، ماث، ساينس…) لنفس الناشر
+    const pubName = pub.replace(/\|lang$/, "");
+    Util.require(pubName && DB_Engine.getAllRecords(S.BOOKS).some(b => Util.str(b.Publisher) === pubName), "الناشر غير موجود في الكتالوج.");
     Util.require(!u || /^https:\/\/[a-z0-9.-]+\/storage\/v1\/object\/public\/book-covers\/pub-[a-f0-9]+\.(webp|jpg)(\?v=\d+)?$/.test(u), "رابط صورة غير مسموح.");
     const map = this.publisherLogos_(); if (u) map[pub] = u; else delete map[pub];
     const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PUBLISHER_LOGOS");
     const rec = { Setting_Key: "PUBLISHER_LOGOS", Setting_Value: JSON.stringify(map), Data_Type: "JSON", Description: "شعارات الناشرين (تُدار من صفحة الكتب)", Updated_At: Util.now(), Updated_By: Util.actor(session) };
     if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PUBLISHER_LOGOS", rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
     DB_Engine.logAudit(session.userId, session.role, "Catalog", u ? "SET_PUB_LOGO" : "REMOVE_PUB_LOGO", pub, null, { url: u });
-    return { success: true, message: u ? "تم حفظ شعار " + pub + "." : "تم حذف شعار " + pub + ".", url: u };
+    return { success: true, message: (u ? "تم حفظ شعار " : "تم حذف شعار ") + pubName + (pubName !== pub ? " (كتب اللغات)" : "") + ".", url: u };
   },
   saveBook: function(session, payload) {
     return DB_Engine.executeWithLock(() => {

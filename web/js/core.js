@@ -26,6 +26,10 @@ const store = {
   set(k, v) { try { v === null ? sessionStorage.removeItem("wb_" + k) : sessionStorage.setItem("wb_" + k, JSON.stringify(v)); } catch (e) { /* التخزين غير متاح */ } }
 };
 
+// مواد تُدرَّس بلغة أجنبية: يظهر عليها شعار «كتب اللغات» للناشر إن وُجد
+const LANG_SUBJECTS = ["إنجليزي", "ماث", "ساينس", "أي سي تي", "ديسكفري", "فرنساوي", "ألماني"];
+/** شعار الناشر المناسب للمادة من خريطة الشعارات */
+const logoFor = (logos, pub, subject) => { logos = logos || {}; return (LANG_SUBJECTS.includes(subject) && logos[pub + "|lang"]) || logos[pub] || ""; };
 /** تصغير صورة وضغطها إلى WebP (أو JPEG) (عرض أقصى 600px، أقل من ~300 ك.ب) لرفع أغلفة الكتب */
 function imgToWebp(file, max = 600) {
   return new Promise((res, rej) => {

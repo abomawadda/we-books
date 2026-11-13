@@ -213,7 +213,7 @@ Router.add("/e/home", view => {
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
 // ============================================================ الكتالوج والسلة
-const pubLogo = p => ((APP.emp && APP.emp.pubLogos) || {})[p] || "";
+const pubLogo = (p, sub) => logoFor(APP.emp && APP.emp.pubLogos, p, sub);
 on("coverZoom", id => {
   const b = APP.emp.books.find(x => x.Book_ID === id); if (!b || !b.Cover_URL) return;
   const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open() && b.Book_Status !== "Pricing";
@@ -419,8 +419,8 @@ function bookCard(b) {
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3, pricing = b.Book_Status === "Pricing";
   const title = String(b.Book_Name || "").replace(new RegExp("\\s*[—-]\\s*" + String(b.Subject || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$"), "") || b.Book_Name;
   return `<article class="card p-3 flex gap-3 transition ${q ? "ring-2 ring-brand-500 bg-brand-50/40" : ""} ${pricing ? "opacity-80" : ""}" id="bk_${esc(b.Book_ID)}">
-    ${!b.Cover_URL && pubLogo(b.Publisher) ? `<div class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-white flex flex-col">
-      <span class="flex-1 flex items-center justify-center p-1.5"><img src="${esc(pubLogo(b.Publisher))}" alt="${esc(b.Publisher)}" loading="lazy" decoding="async" class="max-w-full max-h-full object-contain"></span>
+    ${!b.Cover_URL && pubLogo(b.Publisher, b.Subject) ? `<div class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-white flex flex-col">
+      <span class="flex-1 flex items-center justify-center p-1.5"><img src="${esc(pubLogo(b.Publisher, b.Subject))}" alt="${esc(b.Publisher)}" loading="lazy" decoding="async" class="max-w-full max-h-full object-contain"></span>
       <span class="text-[9.5px] font-bold text-white text-center py-0.5" style="background:${c2}">${esc(b.Subject || "")}</span></div>`
     : b.Cover_URL ? `<button class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-slate-100" data-act="coverZoom" data-id="${esc(b.Book_ID)}" aria-label="تكبير الغلاف">
       <img src="${esc(b.Cover_URL)}" alt="غلاف ${esc(b.Book_Name)}" loading="lazy" decoding="async" class="w-full h-full object-cover">

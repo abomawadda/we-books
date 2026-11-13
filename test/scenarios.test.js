@@ -48,6 +48,7 @@ fail(api('SET_PUBLISHER_LOGO', { publisher: 'ناشر وهمي', url: '' }, adm.
 { const pub = rows(S.BOOKS)[0].Publisher;
   fail(api('SET_PUBLISHER_LOGO', { publisher: pub, url: 'https://evil.com/x.webp' }, adm.sessionToken), 'logo bad url', /رابط/);
   ok(api('SET_PUBLISHER_LOGO', { publisher: pub, url: 'https://abc.supabase.co/storage/v1/object/public/book-covers/pub-0123abcd.webp?v=1' }, adm.sessionToken), 'logo set');
+  ok(api('SET_PUBLISHER_LOGO', { publisher: pub + '|lang', url: 'https://abc.supabase.co/storage/v1/object/public/book-covers/pub-4567abcd.webp?v=1' }, adm.sessionToken), 'lang logo set');
   assert.ok(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal logos').pubLogos[pub]); passed++; }
 
 // 2) الحجز بالشرائح
