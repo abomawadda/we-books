@@ -106,11 +106,15 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
   // ---------------------------------------------------------------- القوالب
   /** طلب حجز: d = {no,date,phase,status,emp:{name,id,dept,mobile},lines:[{code,name,grade,ben,qty,cover,price}],plan:{method,down,count,per,last}} */
   reservation(d) {
-    const groups = {}; d.lines.forEach(l => (groups[l.ben || ""] = groups[l.ben || ""] || []).push(l));
-    const keys = ["", ...Object.keys(groups).filter(Boolean)].filter(k => groups[k]);
+    // التجميع: حسب الابن وصفه (l.grp) إن وُجد، وإلا حسب المستفيد
+    const gk = l => l.grp !== undefined ? l.grp : (l.ben || "");
+    const groups = {}; d.lines.forEach(l => (groups[gk(l)] = groups[gk(l)] || []).push(l));
+    const byGrp = d.lines.some(l => l.grp !== undefined);
+    const keys = byGrp ? Object.keys(groups) : ["", ...Object.keys(groups).filter(Boolean)].filter(k => groups[k]);
     const cover = d.lines.reduce((s, l) => s + l.qty * n(l.cover), 0), net = d.lines.reduce((s, l) => s + l.qty * n(l.price), 0), cnt = d.lines.reduce((s, l) => s + l.qty, 0);
     let i = 0;
-    const rows = keys.map(k => `${keys.length > 1 || k ? `<tr class="grp"><td colspan="6">${k ? "لـ " + esc(k) : "للعضو وأبنائه"}</td></tr>` : ""}${groups[k].map(l => `<tr><td class="c num">${++i}</td><td><b>${esc(l.name)}</b><div class="sub"><span class="num">${esc(l.code)}</span> · ${esc(l.grade || "")}</div></td><td class="c num">${l.qty}</td><td class="l num"><span class="sub">${Doc.money(l.cover)}</span></td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(l.qty * n(l.price))}</b></td></tr>`).join("")}`).join("");
+    const sub = k => { const g = groups[k], c = g.reduce((a, l) => a + l.qty, 0), v = g.reduce((a, l) => a + l.qty * n(l.price), 0); return `<span style="float:left">${booksWord(c).replace(/^(\d+)/, '<span class="num">$1</span>')} · <span class="num">${Doc.money(v)}</span> ج.م</span>`; };
+    const rows = keys.map(k => `${byGrp ? `<tr class="grp"><td colspan="6">${esc(k)}${sub(k)}</td></tr>` : keys.length > 1 || k ? `<tr class="grp"><td colspan="6">${k ? "لـ " + esc(k) : "للعضو وأبنائه"}</td></tr>` : ""}${groups[k].map(l => `<tr><td class="c num">${++i}</td><td><b>${esc(l.name)}</b><div class="sub"><span class="num">${esc(l.code)}</span> · ${esc(l.grade || "")}</div></td><td class="c num">${l.qty}</td><td class="l num"><span class="sub">${Doc.money(l.cover)}</span></td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(l.qty * n(l.price))}</b></td></tr>`).join("")}`).join("");
     const p = d.plan || {};
     return Doc.page(`${Doc.head("طلب حجز كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${d.status === "مؤكد" ? "g" : "a"}">${esc(d.status || "")}</span></div>`)}
       <div class="meta"><div class="box"><h4>بيانات العضو</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}${d.emp.mobile ? Doc.kv("الموبايل", `<span class="num">${esc(d.emp.mobile)}</span>`) : ""}</div>

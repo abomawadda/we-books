@@ -647,6 +647,42 @@ on("openCart", () => { if (window.innerWidth < 1024 && !window.__forceSheet) ret
   m.body.querySelector(".cart-body").innerHTML = cartHTML();
   Emp._cartSheet = m;
 });
+/** تجميع بنود الحجز حسب الابن (بالصف المسجَّل في «أبنائي») أو القريب، مع إجمالي كل مجموعة */
+function resGroups(lines) {
+  const ks = myKids(), go = gradeOrder(), map = {};
+  lines.forEach(l => {
+    const key = l.ben ? "ben:" + l.ben : "g:" + (l.grade || "");
+    const g = map[key] || (map[key] = { key, lines: [], count: 0, net: 0, cover: 0 });
+    g.lines.push(l); g.count += l.qty; g.net += l.qty * n(l.price); g.cover += l.qty * n(l.cover);
+  });
+  Object.values(map).forEach(g => {
+    if (g.key.startsWith("ben:")) { g.title = g.key.slice(4); g.emoji = "🧒"; g.sub = "قريب"; g.ord = 900; return; }
+    const grade = g.key.slice(2), kids = ks.map((k, i) => ({ k, i })).filter(x => x.k.grade === grade);
+    g.title = kids.length ? kids.map(x => kidName(x.k, x.i)).join(" و") : gradeTitle(grade) || "كتب أخرى";
+    g.emoji = kids.length ? kidEmoji(kids[0].k) : "📚"; g.sub = kids.length ? gradeTitle(grade) : ""; g.ord = kids.length ? kids[0].i : 100 + (go[grade] ?? 99);
+  });
+  return Object.values(map).sort((a, b) => a.ord - b.ord);
+}
+const cartLines = () => { const bm = Emp.bookMap(); return Object.keys(APP.cart).map(k => { const b = bm[bk(k)] || {}; return { code: bk(k), name: b.Book_Name || bk(k), subject: b.Subject || "", grade: b.Grade, ben: bn(k), qty: APP.cart[k], cover: b.Cover_Price, price: b.Emp_Selling_Price }; }); };
+/** محتوى صفحة تأكيد الحجز: كتب كل ابن وصفه ثم الإجمالي وخطة السداد */
+function resSummaryHTML(lines, opts) {
+  const gs = resGroups(lines), cnt = lines.reduce((a, l) => a + l.qty, 0), net = gs.reduce((a, g) => a + g.net, 0), cover = gs.reduce((a, g) => a + g.cover, 0), pc = Emp.planCalc(net), p = APP.plan;
+  return `<div class="text-center"><div class="w-16 h-16 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-3xl animate-pop-in">${ic("circle-check")}</div>
+    <h3 class="text-xl font-bold text-slate-900 mt-3">${esc(opts.title)}</h3>${opts.msg ? `<p class="text-[13px] text-slate-500 mt-1">${esc(opts.msg)}</p>` : ""}</div>
+  <div class="space-y-3 mt-4">${gs.map(g => `<section class="rounded-2xl ring-1 ring-slate-200 overflow-hidden">
+      <div class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[26px] leading-none">${g.emoji}</span>
+        <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
+        <div class="text-left shrink-0"><div class="font-bold text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
+      <ul class="divide-y divide-slate-100">${g.lines.map(l => `<li class="flex items-center gap-2 px-3.5 py-2 text-[13px]"><span class="flex-1 min-w-0 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="text-slate-400 num">×${l.qty}</span>` : ""}<span class="num font-semibold text-slate-800 w-16 text-left">${fmt(l.qty * n(l.price))}</span></li>`).join("")}</ul></section>`).join("")}</div>
+  <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
+    <div class="flex justify-between text-slate-500"><span>${booksWord(cnt)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(cover)}</span></div>
+    <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(cover - net)}</span></div>
+    <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b class="text-slate-900">الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(net)}</span></div>
+    ${p.method === "INSTALLMENT" ? `<div class="flex justify-between text-[12.5px] text-slate-600 pt-1"><span>مقدم عند الاستلام</span><b class="num">${moneyTxt(pc.down)}</b></div><div class="flex justify-between text-[12.5px] text-slate-600"><span>ثم ${pc.cnt} أقساط شهرية</span><b class="num">${moneyTxt(pc.per)}${pc.last !== pc.per ? " (الأخير " + fmt(pc.last) + ")" : ""}</b></div>`
+      : `<div class="flex justify-between text-[12.5px] text-slate-600 pt-1"><span>السداد</span><b>${esc(Doc.methodAr(p.method))} عند الاستلام</b></div>`}
+  </div>
+  <div class="mt-3 rounded-2xl bg-brand-50 text-brand-900 text-[12.5px] p-3 flex gap-2">${ic("info", "mt-0.5 shrink-0")}<span>تقدر تعدّل حجزك لحد قفل الحجز. هنبلغك بإشعار لما الكتب تبقى جاهزة للاستلام 📦</span></div>`;
+}
 on("submitRes", async () => {
   const items = Object.keys(APP.cart).map(id => ({ bookId: bk(id), beneficiary: bn(id), qty: APP.cart[id] }));
   const t = Emp.totals(), pc = Emp.planCalc(t.net);
@@ -659,10 +695,9 @@ on("submitRes", async () => {
   if (Router.current === "/e/cart") Router.go("/e/home");
   (r.warnings || []).forEach(w => toast(w, "warning"));
   await Emp.load();
-  UI.open(`<div class="text-center py-2"><div class="w-20 h-20 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center text-4xl animate-pop-in">${ic("circle-check")}</div>
-    <h3 class="text-xl font-bold text-slate-900 mt-4">${items.length ? "تمام! حجزك اتسجل 🎉" : "تم إلغاء الحجز"}</h3><p class="text-sm text-slate-500 mt-2 leading-relaxed">${esc(r.message || "")}</p>
-    ${items.length ? `<div class="grid grid-cols-2 gap-2 mt-5 text-right">${UI.stat("عدد الكتب", fmt(t.count))}${UI.stat("الإجمالي", money(t.net))}</div>` : ""}</div>`,
-    { footer: `<div class="flex gap-2">${items.length ? `<button data-act="printRes" class="btn btn-outline">${ic("download")} احفظ الطلب</button>` : ""}<a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
+  if (!items.length) { UI.open(`<div class="text-center py-4"><div class="text-4xl">🗑️</div><h3 class="text-xl font-bold mt-3">تم إلغاء الحجز</h3><p class="text-sm text-slate-500 mt-2">${esc(r.message || "")}</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تم</button>` }); return; }
+  UI.open(resSummaryHTML(cartLines(), { title: "تمام! حجزك اتسجل 🎉", msg: r.message }), { title: "تأكيد الحجز",
+    footer: `<div class="flex gap-2"><button data-act="printRes" class="btn btn-outline">${ic("download")} احفظ</button><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
 });
 
 // ============================================================ حجوزاتي
@@ -714,8 +749,11 @@ on("printInv", () => {
 /** طلب الحجز كمستند (صورة أو PDF) — من السلة الحالية */
 on("printRes", () => {
   const r = APP.emp, bm = Emp.bookMap(), h = r.myReservations.find(x => x.Phase_ID === APP.phaseId) || {};
-  const lines = Object.keys(APP.cart).map(k => { const b = bm[bk(k)] || {}; return { code: bk(k), name: b.Book_Name || bk(k), grade: b.Grade, ben: bn(k), qty: APP.cart[k], cover: b.Cover_Price, price: b.Emp_Selling_Price }; });
+  const lines = cartLines();
   if (!lines.length) return toast("السلة فاضية", "info");
+  // تقسيم الطلب حسب الابن وصفه
+  resGroups(lines).forEach((g, gi) => g.lines.forEach(l => { l.grp = g.emoji + " " + g.title + (g.sub ? " — " + g.sub : ""); l._g = gi; }));
+  lines.sort((a, b) => a._g - b._g);
   const pc = Emp.planCalc(Emp.totals().net);
   Doc.show("طلب حجز", Doc.reservation({ no: h.Res_ID || "مسودة", date: h.Created_At || new Date().toISOString(), phase: r.activePhase.Phase_Name, status: Emp.dirty || !h.Res_ID ? "غير محفوظ" : "مؤكد", emp: docEmp(), lines,
     plan: { method: APP.plan.method, down: pc.down, count: pc.cnt, per: pc.per, last: pc.last } }), { file: "طلب-حجز-" + (h.Res_ID || APP.user.empId) });
