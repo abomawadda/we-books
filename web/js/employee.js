@@ -213,6 +213,15 @@ Router.add("/e/home", view => {
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
 // ============================================================ الكتالوج والسلة
+on("coverZoom", id => {
+  const b = APP.emp.books.find(x => x.Book_ID === id); if (!b || !b.Cover_URL) return;
+  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open() && b.Book_Status !== "Pricing";
+  const m = UI.open(`<img src="${esc(b.Cover_URL)}" alt="" class="w-full max-h-[60vh] object-contain rounded-2xl bg-slate-50">
+    <div class="mt-3 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500">${esc(gradeTitle(b.Grade))}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
+    ${b.Book_Status !== "Pricing" ? `<div class="text-left shrink-0"><div class="text-xl font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)} <span class="text-[11px] text-slate-500">ج.م</span></div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div>` : ""}</div>`,
+    { title: esc(b.Subject) + " — " + esc(b.Publisher), footer: can && !q ? `<button class="btn btn-primary btn-lg w-full" data-zadd>${ic("plus")} أضف للسلة</button>` : q ? `<div class="text-center text-emerald-700 font-semibold">${ic("check")} في السلة (${q})</div>` : "" });
+  const a = m.root.querySelector("[data-zadd]"); if (a) a.onclick = () => { m.close(); setTimeout(() => ACTIONS.cartInc(b.Book_ID), 300); };
+});
 function cartHTML() {
   const t = Emp.totals(), open = Emp.open(), p = APP.plan, s = APP.emp.settings, pc = Emp.planCalc(t.net);
   const hadRes = Emp.activeItems().length > 0;
@@ -409,11 +418,14 @@ function bookCard(b) {
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3, pricing = b.Book_Status === "Pricing";
   const title = String(b.Book_Name || "").replace(new RegExp("\\s*[—-]\\s*" + String(b.Subject || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$"), "") || b.Book_Name;
   return `<article class="card p-3 flex gap-3 transition ${q ? "ring-2 ring-brand-500 bg-brand-50/40" : ""} ${pricing ? "opacity-80" : ""}" id="bk_${esc(b.Book_ID)}">
-    <div class="shrink-0 w-[68px] h-[88px] rounded-xl flex flex-col justify-between p-2 text-white relative overflow-hidden shadow-soft" style="background:linear-gradient(150deg,${c1},${c2})">
+    ${b.Cover_URL ? `<button class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-slate-100" data-act="coverZoom" data-id="${esc(b.Book_ID)}" aria-label="تكبير الغلاف">
+      <img src="${esc(b.Cover_URL)}" alt="غلاف ${esc(b.Book_Name)}" loading="lazy" decoding="async" class="w-full h-full object-cover">
+      <span class="absolute bottom-0 inset-x-0 text-[9.5px] font-bold text-white text-center py-0.5" style="background:${c2}cc">${esc(b.Subject || "")}</span></button>`
+    : `<div class="shrink-0 w-[68px] h-[88px] rounded-xl flex flex-col justify-between p-2 text-white relative overflow-hidden shadow-soft" style="background:linear-gradient(150deg,${c1},${c2})">
       <span class="absolute -left-3 -bottom-5 text-[70px] opacity-15">${ic("book-open")}</span>
       <span class="text-[10px] font-bold bg-white/25 rounded px-1 py-0.5 self-start leading-tight">${esc(b.Subject || "")}</span>
       <span class="text-[10px] font-semibold opacity-90 leading-tight">${esc(gradeShort(b.Grade))}</span>
-    </div>
+    </div>`}
     <div class="flex-1 min-w-0 flex flex-col">
       <div class="flex items-start gap-2"><h3 class="flex-1 font-bold text-slate-900 leading-snug text-[15px] line-clamp-2">${esc(title)}</h3>${q ? `<span class="shrink-0 w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-[13px]">${ic("check")}</span>` : ""}</div>
       ${(() => { const p = popInfo(b); return p ? `<div class="flex items-center gap-1.5 mt-1 text-[11.5px] font-bold ${p.top ? "text-orange-600" : "text-slate-500"}">${p.top ? `<span class="inline-flex items-center gap-1 rounded-full bg-orange-50 ring-1 ring-orange-200 px-2 h-5">🔥 الأكثر حجزاً</span>` : ""}<span class="font-semibold">اختيار ${p.pct}% من الزملاء</span></div>` : ""; })()}

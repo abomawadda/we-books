@@ -26,6 +26,20 @@ const store = {
   set(k, v) { try { v === null ? sessionStorage.removeItem("wb_" + k) : sessionStorage.setItem("wb_" + k, JSON.stringify(v)); } catch (e) { /* التخزين غير متاح */ } }
 };
 
+/** تصغير صورة وضغطها إلى WebP (أو JPEG) (عرض أقصى 600px، أقل من ~300 ك.ب) لرفع أغلفة الكتب */
+function imgToWebp(file, max = 600) {
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), im = new Image();
+    im.onload = () => { const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
+      // سفاري على الآيفون لا يصدّر WebP: نرجع إلى JPEG
+      const t = c.toDataURL("image/webp", 0.8).startsWith("data:image/webp") ? "image/webp" : "image/jpeg";
+      let q = 0.82, d = c.toDataURL(t, q); while (d.length > 400000 && q > 0.4) { q -= 0.12; d = c.toDataURL(t, q); }
+      res(d); };
+    im.onerror = () => { URL.revokeObjectURL(url); rej(new Error("img")); };
+    im.src = url;
+  });
+}
 function ic(name, cls) {
   const p = (window.ICONS || {})[name] || "";
   return `<svg class="ico ${cls || ""}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;

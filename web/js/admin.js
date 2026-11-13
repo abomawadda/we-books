@@ -269,7 +269,7 @@ function booksTable() {
     && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type))
     && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st));
   return UI.table([
-    { t: "الكتاب", v: x => `<button class="text-right font-semibold text-slate-900 hover:text-brand-700 hover:underline" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div>` },
+    { t: "الكتاب", v: x => `<div class="flex items-center gap-2.5">${coverThumb(x)}<div class="min-w-0"><button class="text-right font-semibold text-slate-900 hover:text-brand-700 hover:underline" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div></div></div>` },
     { t: "الحالة", v: x => pill(x.Book_Status) },
     { t: "الحاجزون", cls: "num", v: x => { const c = resCount()[x.Book_ID]; return c ? `<button class="btn btn-ghost btn-xs" data-act="bookRes" data-id="${esc(x.Book_ID)}">${ic("users")} ${fmt(c.p)} · ${fmt(c.q)} نسخة</button>` : `<span class="text-slate-300">0</span>`; } },
     { t: "الغلاف", cls: "num", v: x => x.Book_Status === "Pricing" ? `<span class="text-amber-600 font-semibold">جاري التسعير</span>` : fmt(x.Cover_Price) },
@@ -284,13 +284,49 @@ function booksTable() {
 Router.add("/a/books", view => {
   const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
+    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
     + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
       ${bookFilters()}
       <button class="btn btn-ghost btn-sm" data-act="exportBooks">${ic("download")} تصدير</button></div><div id="booksList">${booksTable()}</div></section>`;
 });
 on("qBooks", v => { Q.books = v.trim(); rerenderList("booksList", booksTable); });
+// ---------------- صور أغلفة الكتب ----------------
+const coverThumb = x => `<button class="w-9 h-12 rounded-md shrink-0 overflow-hidden ring-1 ring-slate-200 bg-slate-50 flex items-center justify-center text-slate-300 hover:ring-brand-400" data-act="${can("SAVE_BOOK") ? "coverPick" : "coverView"}" data-id="${esc(x.Book_ID)}" title="صورة الغلاف">${x.Cover_URL ? `<img src="${esc(x.Cover_URL)}" alt="" loading="lazy" class="w-full h-full object-cover">` : ic("plus")}</button>`;
+/** يختار ملف(ات) صور من الجهاز */
+const pickFiles = multiple => new Promise(res => { const i = document.createElement("input"); i.type = "file"; i.accept = "image/*"; if (multiple) i.multiple = true; i.onchange = () => res([...(i.files || [])]); i.click(); });
+async function uploadCover(bookId, file) {
+  const dataUrl = await imgToWebp(file);
+  return call("UPLOAD_BOOK_COVER", { bookId, dataUrl });
+}
+on("coverView", id => { const b = A().books.find(x => x.Book_ID === id); if (b && b.Cover_URL) UI.open(`<img src="${esc(b.Cover_URL)}" class="w-full rounded-2xl" alt="">`, { title: esc(b.Book_Name) }); });
+on("coverPick", async id => {
+  const b = A().books.find(x => x.Book_ID === id); if (!b) return;
+  if (b.Cover_URL) {
+    const m = UI.open(`<img src="${esc(b.Cover_URL)}" class="w-full max-h-[55vh] object-contain rounded-2xl bg-slate-50" alt="">`, { title: "غلاف " + esc(b.Book_Name),
+      footer: `<div class="flex gap-2"><button class="btn btn-primary flex-1" data-cv="new">${ic("upload")} تغيير الصورة</button><button class="btn btn-outline text-rose-600" data-cv="del">${ic("trash-2")} حذف</button></div>` });
+    const what = await new Promise(r => { m.root.querySelectorAll("[data-cv]").forEach(x => x.onclick = () => r(x.dataset.cv)); });
+    m.close();
+    if (what === "del") { const r = await call("UPLOAD_BOOK_COVER", { bookId: id, dataUrl: "" }, { block: true }); toast(r.message, r.success ? "success" : "danger"); if (r.success) await Admin.load(); return; }
+  }
+  const [f] = await pickFiles(false); if (!f) return;
+  busy(true, true);
+  try { const r = await uploadCover(id, f); toast(r.message, r.success ? "success" : "danger"); if (r.success) await Admin.load(); }
+  catch (e) { toast("تعذر قراءة الصورة", "danger"); } finally { busy(false, false); }
+});
+/** رفع أغلفة كثيرة: يُطابَق كل ملف بكود الكتاب الموجود في اسمه (مثل P4-003.jpg) */
+on("coversBulk", async () => {
+  const ok = await UI.confirm({ title: "رفع أغلفة دفعة واحدة", icon: "upload", message: "سمِّ كل صورة بكود الكتاب، مثل:\nP4-003.jpg  أو  M1-011.png\n\nثم اختر الصور كلها مرة واحدة، ونطابق كل صورة بكتابها تلقائياً.", ok: "اختيار الصور" });
+  if (!ok) return;
+  const files = await pickFiles(true); if (!files.length) return;
+  const ids = new Set(A().books.map(b => String(b.Book_ID).toUpperCase())), plan = [], miss = [];
+  files.forEach(f => { const m = String(f.name).toUpperCase().match(/[A-Z]{1,3}\d?-\d{2,4}/); const id = m && ids.has(m[0]) ? A().books.find(b => String(b.Book_ID).toUpperCase() === m[0]).Book_ID : null; id ? plan.push([id, f]) : miss.push(f.name); });
+  if (!plan.length) return toast("لم نجد كود كتاب في أسماء الصور" + (miss.length ? ": " + miss.slice(0, 3).join("، ") : ""), "warning");
+  let done = 0, fail = 0; const t = toast(`جاري رفع ${plan.length} صورة…`, "info");
+  for (const [id, f] of plan) { try { const r = await uploadCover(id, f); r.success ? done++ : fail++; } catch (_) { fail++; } }
+  await Admin.load();
+  toast(`تم رفع ${done} غلاف${fail ? ` · تعذر ${fail}` : ""}${miss.length ? ` · ${miss.length} ملف بلا كود معروف` : ""}`, fail ? "warning" : "success");
+});
 /** فلاتر الكتالوج: الصف، نوع المدرسة، الناشر، المادة، الحالة */
 function bookFilters() {
   const c = A().catalog || {}, f = Q.bookF || {};
