@@ -29,7 +29,10 @@ const store = {
 // مواد تُدرَّس بلغة أجنبية: يظهر عليها شعار «كتب اللغات» للناشر إن وُجد
 const LANG_SUBJECTS = ["إنجليزي", "ماث", "ساينس", "أي سي تي", "ديسكفري", "فرنساوي", "ألماني"];
 /** شعار الناشر المناسب للمادة من خريطة الشعارات */
-const logoFor = (logos, pub, subject) => { logos = logos || {}; return (LANG_SUBJECTS.includes(subject) && logos[pub + "|lang"]) || logos[pub] || ""; };
+// شعارات مرفقة مع الموقع (تُكمِّلها الشعارات المرفوعة من الإدارة، والمرفوعة لها الأولوية)
+const PUB_LOGOS_BUILTIN = { "المعاصر": "img/pub/maasar-ar.webp", "المعاصر|lang": "img/pub/maasar-en.webp", "سلاح التلميذ": "img/pub/silah.webp",
+  "الأضواء": "img/pub/adwaa.webp", "جيم": "img/pub/gem.webp", "الامتحان": "img/pub/imtihan.webp" };
+const logoFor = (logos, pub, subject) => { logos = Object.assign({}, PUB_LOGOS_BUILTIN, logos || {}); return (LANG_SUBJECTS.includes(subject) && logos[pub + "|lang"]) || logos[pub] || ""; };
 /** تصغير صورة وضغطها إلى WebP (أو JPEG) (عرض أقصى 600px، أقل من ~300 ك.ب) لرفع أغلفة الكتب */
 function imgToWebp(file, max = 600) {
   return new Promise((res, rej) => {

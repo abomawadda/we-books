@@ -301,7 +301,7 @@ async function uploadCover(bookId, file, publisher) {
 }
 /** شعارات الناشرين: شعار واحد يظهر على كل كتب الناشر التي ليس لها غلاف خاص */
 function pubLogosHTML() {
-  const d = A(), logos = d.pubLogos || {}, cnt = {}, lang = {}; d.books.forEach(b => { if (!b.Publisher) return; cnt[b.Publisher] = (cnt[b.Publisher] || 0) + 1; if (LANG_SUBJECTS.includes(b.Subject)) lang[b.Publisher] = (lang[b.Publisher] || 0) + 1; });
+  const d = A(), logos = Object.assign({}, PUB_LOGOS_BUILTIN, d.pubLogos || {}), cnt = {}, lang = {}; d.books.forEach(b => { if (!b.Publisher) return; cnt[b.Publisher] = (cnt[b.Publisher] || 0) + 1; if (LANG_SUBJECTS.includes(b.Subject)) lang[b.Publisher] = (lang[b.Publisher] || 0) + 1; });
   const pubs = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
   const row = (key, title, sub) => `<li class="flex items-center gap-3 py-2.5 ${key.endsWith("|lang") ? "pr-6" : ""}">
     <span class="w-14 h-11 rounded-xl ring-1 ring-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">${logos[key] ? `<img src="${esc(logos[key])}" alt="" class="max-w-full max-h-full object-contain">` : `<span class="text-slate-300">${ic("store")}</span>`}</span>
