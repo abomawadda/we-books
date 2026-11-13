@@ -31,7 +31,10 @@ const LANG_SUBJECTS = ["إنجليزي", "ماث", "ساينس", "أي سي تي
 /** شعار الناشر المناسب للمادة من خريطة الشعارات */
 // شعارات مرفقة مع الموقع (تُكمِّلها الشعارات المرفوعة من الإدارة، والمرفوعة لها الأولوية)
 const PUB_LOGOS_BUILTIN = { "المعاصر": "img/pub/maasar-ar.webp", "المعاصر|lang": "img/pub/maasar-en.webp", "سلاح التلميذ": "img/pub/silah.webp",
-  "الأضواء": "img/pub/adwaa.webp", "جيم": "img/pub/gem.webp", "الامتحان": "img/pub/imtihan.webp" };
+  "الأضواء": "img/pub/adwaa.webp", "جيم": "img/pub/gem.webp", "الامتحان": "img/pub/imtihan.webp",
+  "بيت باي بيت": "img/pub/bitbybit.webp", "قطر الندى": "img/pub/qatr.webp", "الشاطر": "img/pub/shater.webp", "التأسيس السليم": "img/pub/taasis.webp",
+  "سندباد": "img/pub/sindbad.webp", "بوني": "img/pub/pony.webp", "الباهر": "img/pub/baher.webp", "الباهر|lang": "img/pub/baher-en.webp",
+  "المرشد": "img/pub/morshed.webp", "الأبرار": "img/pub/abrar.webp" };
 const logoFor = (logos, pub, subject) => { logos = Object.assign({}, PUB_LOGOS_BUILTIN, logos || {}); return (LANG_SUBJECTS.includes(subject) && logos[pub + "|lang"]) || logos[pub] || ""; };
 /** تصغير صورة وضغطها إلى WebP (أو JPEG) (عرض أقصى 600px، أقل من ~300 ك.ب) لرفع أغلفة الكتب */
 function imgToWebp(file, max = 600) {
@@ -366,7 +369,7 @@ window.addEventListener("hashchange", () => Router.render());
 
 // ---------------------------------------------------------------- الهوية: الاسم والشعارات وبيانات التواصل
 // الشعاران: web/img/logo-we.png (يمين) و web/img/logo-union.png (يسار). إن لم يوجد الملف يظهر بديل نصي أنيق.
-const BRAND_DEFAULT = { org: "النقابة العامة بالدقهلية", platform: "منصة حجز الكتب المخفضة", credit: "إعداد وتنفيذ الأستاذ محمود العراقي", phone: "015501000025", whatsapp: "015501000025", email: "mahmoud.eleraky@te.eg" };
+const BRAND_DEFAULT = { org: "النقابة العامة بالدقهلية", platform: "منصة حجز الكتب المخفضة", credit: "إعداد وتنفيذ الأستاذ محمود العراقي", phone: "01550100025", whatsapp: "01550100025", email: "mahmoud.eleraky@te.eg" };
 const Brand = {
   get() { return Object.assign({}, BRAND_DEFAULT, store.get("brand") || {}, APP._brand || {}); },
   set(b) { if (!b) return; const clean = {}; Object.keys(b).forEach(k => { if (b[k]) clean[k] = b[k]; }); APP._brand = clean; store.set("brand", clean); APP.title = Brand.get().platform; },
