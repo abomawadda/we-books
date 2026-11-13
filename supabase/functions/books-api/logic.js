@@ -952,8 +952,8 @@ const OperationsEngine = {
         const bId = bookOf(key);
         const book = booksMap[bId];
         Util.require(book, "الكتاب كود " + bId + " غير موجود.");
-        Util.require(book.Book_Status !== "Pricing", "الكتاب (" + book.Book_Name + ") جاري تسعيره، ويُتاح للحجز فور إعلان سعره.");
-        Util.require(SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(book.Book_Status) !== -1, "الكتاب (" + book.Book_Name + ") غير متاح للحجز حالياً.");
+        // «جاري التسعير» قابل للحجز: يُثبَّت سعره في البند عند التوزيع (بعد وصول فاتورة المكتبة)
+        Util.require(book.Book_Status === "Pricing" || SYSTEM_CONFIG.BOOKABLE_BOOK_STATUSES.indexOf(book.Book_Status) !== -1, "الكتاب (" + book.Book_Name + ") غير متاح للحجز حالياً.");
         if (gradeList) Util.require(gradeList.indexOf(Util.str(book.Grade)) !== -1, "الكتاب (" + book.Book_Name + ") ليس ضمن صفوف هذه المرحلة.");
         Util.require(wanted[key] <= maxPerBook, "أقصى عدد من نفس الكتاب " + maxPerBook + " (" + book.Book_Name + ")" + (benOf(key) ? " لـ " + benOf(key) : "") + ".");
       });
@@ -1729,6 +1729,8 @@ const OperationsEngine = {
             }
           });
         reqs.forEach(r => {
+          // بند حُجز والكتاب بلا سعر: يأخذ سعر الكتاب الحالي قبل الفوترة
+          if (!Util.num(r.Unit_Emp_Price)) { const bk = books[bId] || {}; r.Unit_Emp_Price = Util.num(bk.Emp_Selling_Price); r.Unit_Cover_Price = Util.num(bk.Cover_Price); }
           r.Net_Billable_Qty = Math.max(Util.num(r.Allocated_Qty), Util.num(r.Delivered_Qty)) - Util.num(r.Returned_Qty);
           r.Total_Emp_Line_Amount = r.Net_Billable_Qty * Util.num(r.Unit_Emp_Price);
         });
