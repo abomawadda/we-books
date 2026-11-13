@@ -82,6 +82,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   expectNoErrorToasts('reservation');
   await closeAll();
   for (const r of ['/e/orders', '/e/pay', '/e/me', '/e/home']) { await go(r); check(view().length > 50, 'employee page ' + r); }
+  w.eval('wzClear')(); await go('/e/wiz'); check(/لمين هتحجز/.test(view()) || /الحجز مغلق/.test(view()), 'booking wizard renders');
   await click('[data-act="userMenu"]'); await click('[data-act="logout"]', dialog()); await settle();
   check(d.getElementById('fEmp'), 'logged out');
 
