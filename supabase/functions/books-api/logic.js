@@ -118,7 +118,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
     { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
-    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part"] },
+    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By"] },
     { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary"] },
@@ -556,6 +556,7 @@ const ACTION_ACL = {
   SAVE_BOOK: ["Coordinator"],
   BULK_IMPORT_BOOKS: ["Coordinator"],
   BULK_PRICE_BOOKS: ["Coordinator"],
+  SET_BOOK_COVER: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
@@ -634,6 +635,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
+      case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
@@ -1194,6 +1196,16 @@ const OperationsEngine = {
     return publisher + " — " + subject + (langOnly ? " لغات" : "") + (part ? " (" + part + ")" : "");
   },
 
+  /** ربط صورة غلاف بالكتاب (الصورة نفسها تُرفع عبر الخادم إلى مخزن الصور العام book-covers) */
+  setBookCover: function(session, bookId, url) {
+    const S = this.S(), id = Util.str(bookId), u = Util.str(url);
+    Util.require(!u || /^https:\/\/[a-z0-9.-]+\/storage\/v1\/object\/public\/book-covers\/[A-Za-z0-9_-]+\.(webp|jpg|png)(\?v=\d+)?$/.test(u), "رابط صورة غير مسموح.");
+    const b = DB_Engine.getAllRecords(S.BOOKS).find(x => Util.str(x.Book_ID) === id);
+    Util.require(b, "الكتاب غير موجود.");
+    DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, { Cover_URL: u });
+    DB_Engine.logAudit(session.userId, session.role, "Catalog", u ? "SET_COVER" : "REMOVE_COVER", id, { Cover_URL: b.Cover_URL || "" }, { Cover_URL: u });
+    return { success: true, message: u ? "تم حفظ صورة الغلاف." : "تم حذف صورة الغلاف.", url: u };
+  },
   saveBook: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
@@ -1342,7 +1354,7 @@ const OperationsEngine = {
           Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
           Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
           Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
-          School_Types: inp.School_Types || (map[id] ? map[id].School_Types : ""), Book_Part: inp.Book_Part || (map[id] ? map[id].Book_Part : ""),
+          School_Types: inp.School_Types || (map[id] ? map[id].School_Types : ""), Book_Part: inp.Book_Part || (map[id] ? map[id].Book_Part : ""), Cover_URL: old.Cover_URL || "",
           Book_Status: inp.Book_Status || (map[id] && map[id].Book_Status !== "Pricing" ? map[id].Book_Status : "Available")
         };
       });

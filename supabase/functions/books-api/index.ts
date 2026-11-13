@@ -221,6 +221,30 @@ async function handle(action: string, payload: any, token: string) {
     try { const r = await syncMembers(); await logJob('SYNC_MEMBERS', true, r.message); return r; }
     catch (e) { await logJob('SYNC_MEMBERS', false, String(e?.message || e)); throw e; }
   }
+  // صورة غلاف كتاب: تُرفع إلى مخزن الصور العام book-covers ثم يُحفظ رابطها في الكتاب (المنسق ومدير المنظومة)
+  if (action === 'UPLOAD_BOOK_COVER') {
+    const s: any = await verify(token);
+    if (!s) return EXPIRED;
+    if (!(s.userType === 'ADMIN' && ['Admin', 'Coordinator'].includes(s.role))) return { success: false, message: 'ليست لديك صلاحية تعديل الكتب.' };
+    const id = String(payload.bookId || '').trim();
+    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return { success: false, message: 'كود كتاب غير صالح.' };
+    const base = Deno.env.get('SUPABASE_URL')!, key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const objOf = (ext: string) => `${base}/storage/v1/object/book-covers/${id}.${ext}`;
+    const del = (ext: string) => fetch(objOf(ext), { method: 'DELETE', headers: { Authorization: `Bearer ${key}`, apikey: key } }).then(r => r.text()).catch(() => {});
+    if (!payload.dataUrl) { // حذف الصورة
+      await del('webp'); await del('jpg');
+      return await rt.run(store, 'SET_BOOK_COVER', rt.apiFn('SET_BOOK_COVER', { bookId: id, url: '' }, s));
+    }
+    const m = String(payload.dataUrl).match(/^data:image\/(webp|jpeg);base64,([A-Za-z0-9+/=]+)$/);
+    if (!m) return { success: false, message: 'صيغة الصورة غير مدعومة.' };
+    const ext = m[1] === 'jpeg' ? 'jpg' : 'webp', obj = objOf(ext), bytes = Buffer.from(m[2], 'base64');
+    if (bytes.length > 350 * 1024) return { success: false, message: 'حجم الصورة كبير (الحد 350 ك.ب).' };
+    const up = await fetch(obj, { method: 'POST', headers: { Authorization: `Bearer ${key}`, apikey: key, 'Content-Type': 'image/' + m[1], 'x-upsert': 'true', 'Cache-Control': 'max-age=31536000' }, body: bytes });
+    if (!up.ok) { console.error('cover upload', up.status, await up.text()); return { success: false, message: 'تعذر رفع الصورة. حاول مرة أخرى.' }; }
+    await del(ext === 'jpg' ? 'webp' : 'jpg'); // صورة واحدة لكل كتاب
+    const url = `${base}/storage/v1/object/public/book-covers/${id}.${ext}?v=${Date.now()}`;
+    return await rt.run(store, 'SET_BOOK_COVER', rt.apiFn('SET_BOOK_COVER', { bookId: id, url }, s));
+  }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);
     if (await isLocked(fk)) return LOCKED;
