@@ -218,10 +218,12 @@ Router.add("/e/home", view => {
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
 // ============================================================ الكتالوج والسلة
+/** سعر بند: رقم، أو «مع الشحنة» لكتاب لم يُسعَّر بعد */
+const lineAmt = l => n(l.price) ? fmt(l.qty * n(l.price)) : "🚚 مع الشحنة";
 const pubLogo = (p, sub) => logoFor(APP.emp && APP.emp.pubLogos, p, sub);
 on("coverZoom", id => {
   const b = APP.emp.books.find(x => x.Book_ID === id); if (!b || !b.Cover_URL) return;
-  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open() && b.Book_Status !== "Pricing";
+  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open();
   const m = UI.open(`<img src="${esc(b.Cover_URL)}" alt="" class="w-full max-h-[60vh] object-contain rounded-2xl bg-slate-50">
     <div class="mt-3 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500">${esc(gradeTitle(b.Grade))}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
     ${b.Book_Status !== "Pricing" ? `<div class="text-left shrink-0"><div class="text-xl font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)} <span class="text-[11px] text-slate-500">ج.م</span></div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div>` : ""}</div>`,
@@ -239,7 +241,7 @@ function cartHTML() {
         <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[11.5px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
         <div class="text-left shrink-0"><div class="font-bold text-[13.5px] text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
       <ul class="divide-y divide-slate-100 px-3">${g.lines.map(l => `<li class="flex items-center gap-3 py-2.5">
-      <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(l.name)}</div><div class="text-[12px] text-slate-500 num">${fmt(l.price)} × ${l.qty} = <b class="text-slate-700">${fmt(n(l.price) * l.qty)}</b></div></div>
+      <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(l.name)}</div><div class="text-[12px] text-slate-500 num">${n(l.price) ? `${fmt(l.price)} × ${l.qty} = <b class="text-slate-700">${fmt(n(l.price) * l.qty)}</b>` : `<span class="text-amber-700">🚚 السعر جاي مع الشحنة</span>`}</div></div>
       ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(l.key)}" ${l.qty >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${l.qty}</span><button data-act="cartDec" data-id="${esc(l.key)}">${ic(l.qty === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${l.qty}</span>`}
     </li>`).join("")}</ul></section>`).join("")
     : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊"))}
@@ -247,6 +249,7 @@ function cartHTML() {
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
     <div class="flex justify-between text-slate-500"><span>بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
+    ${(() => { const u = cartLines().filter(l => !n(l.price)).reduce((a, l) => a + l.qty, 0); return u ? `<div class="text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">🚚 ${booksWord(u)} سعرها جاي مع الشحنة — هتتضاف للإجمالي وقتها بخصم العاملين</div>` : ""; })()}
     <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><span class="font-bold text-slate-900">الإجمالي</span><span class="text-xl font-bold text-brand-800 num">${money(t.net)}</span></div>
   </div>
 
@@ -313,9 +316,9 @@ const schoolBadges = t => String(t || "").split(/[،,]/).map(x => x.trim()).filt
 function pubRank() { if (Emp._pr && Emp._pr.n === APP.emp.books.length) return Emp._pr.m; const m = {}; APP.emp.books.forEach(b => m[b.Publisher] = (m[b.Publisher] || 0) + 1); Emp._pr = { n: APP.emp.books.length, m }; return m; }
 function sortBooks(list) {
   const pr = pubRank(), go = gradeOrder();
-  return list.slice().sort((a, b) => ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || ((go[a.Grade] ?? 99) - (go[b.Grade] ?? 99))
+  return list.slice().sort((a, b) => ((go[a.Grade] ?? 99) - (go[b.Grade] ?? 99))
     || (subjRank(a.Subject) - subjRank(b.Subject)) || String(a.Subject).localeCompare(String(b.Subject), "ar")
-    || (n(b.Pop) - n(a.Pop)) || ((pr[b.Publisher] || 0) - (pr[a.Publisher] || 0)) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
+    || ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || (n(b.Pop) - n(a.Pop)) || ((pr[b.Publisher] || 0) - (pr[a.Publisher] || 0)) || String(a.Book_ID).localeCompare(String(b.Book_ID)));
 }
 /** «الأكثر حجزاً»: نسبة الزملاء الذين اختاروا الكتاب من بين كتب نفس المادة والصف */
 const POP_MIN = 3;
@@ -336,7 +339,7 @@ const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت"
 const kidTypeTxt = t => t ? "مدارس " + t : "كل المدارس";
 /** كم كتاب في السلة لصف هذا الابن */
 const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && (k.rel ? bn(id) === kidBen(k) : b.Grade === k.grade && !bn(id)); }).reduce((s, id) => s + APP.cart[id], 0);
-const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type) && b.Book_Status !== "Pricing").length;
+const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type)).length;
 function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.q = ""; Emp.kidIx = i;
   Emp.ben = kidBen(k); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
 on("pickKid", v => openKid(+v));
@@ -467,7 +470,7 @@ function bookCard(b) {
   const save = n(b.Cover_Price) ? Math.round((1 - n(b.Emp_Selling_Price) / n(b.Cover_Price)) * 100) : 0;
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3, pricing = b.Book_Status === "Pricing";
   const title = String(b.Book_Name || "").replace(new RegExp("\\s*[—-]\\s*" + String(b.Subject || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$"), "") || b.Book_Name;
-  return `<article class="card p-3 flex gap-3 transition ${q ? "ring-2 ring-brand-500 bg-brand-50/40" : ""} ${pricing ? "opacity-80" : ""}" id="bk_${esc(b.Book_ID)}">
+  return `<article class="card p-3 flex gap-3 transition ${q ? "ring-2 ring-brand-500 bg-brand-50/40" : ""} " id="bk_${esc(b.Book_ID)}">
     ${!b.Cover_URL && pubLogo(b.Publisher, b.Subject) ? `<div class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-white flex flex-col">
       <span class="flex-1 flex items-center justify-center p-1.5"><img src="${esc(pubLogo(b.Publisher, b.Subject))}" alt="${esc(b.Publisher)}" loading="lazy" decoding="async" class="max-w-full max-h-full object-contain"></span>
       <span class="text-[9.5px] font-bold text-white text-center py-0.5" style="background:${c2}">${esc(b.Subject || "")}</span></div>`
@@ -483,13 +486,13 @@ function bookCard(b) {
       <div class="flex items-start gap-2"><h3 class="flex-1 font-bold text-slate-900 leading-snug text-[15px] line-clamp-2">${esc(title)}</h3>${q ? `<span class="shrink-0 w-6 h-6 rounded-full bg-brand-600 text-white flex items-center justify-center text-[13px]">${ic("check")}</span>` : ""}</div>
       ${(() => { const p = popInfo(b); return p ? `<div class="flex items-center gap-1.5 mt-1 text-[11.5px] font-bold ${p.top ? "text-orange-600" : "text-slate-500"}">${p.top ? `<span class="inline-flex items-center gap-1 rounded-full bg-orange-50 ring-1 ring-orange-200 px-2 h-5">🔥 الأكثر حجزاً</span>` : ""}<span class="font-semibold">اختيار ${p.pct}% من الزملاء</span></div>` : ""; })()}
       <div class="flex flex-wrap items-center gap-1 mt-1">${b.Book_Part ? `<span class="inline-flex items-center rounded-md px-1.5 h-5 text-[10.5px] font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-100">${esc(b.Book_Part)}</span>` : ""}${schoolBadges(b.School_Types)}${elsewhere ? pill("", `${elsewhere} لمستفيد آخر`, "blue") : ""}${b.Book_Status === "Not_Yet_Printed" ? pill("Not_Yet_Printed") : ""}</div>
-      ${pricing ? `<div class="mt-auto pt-2 text-[12px] text-amber-700 flex items-center gap-1">${ic("hourglass")} جاري التسعير — يُتاح فور إعلان السعر</div>` : `
       <div class="mt-auto pt-2 flex items-end justify-between gap-2">
-        <div class="leading-tight"><span class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</span>${save > 0 ? ` <span class="text-[11px] font-bold text-emerald-600">وفّر ${save}%</span>` : ""}
-          <div><span class="text-[19px] font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)}</span> <span class="text-[11px] text-slate-500">ج.م</span></div></div>
+        ${pricing ? `<div class="leading-tight text-[12px] text-amber-700 font-semibold">🚚 السعر جاي مع الشحنة<div class="text-[11px] text-slate-500 font-normal">احجز دلوقتي وخلّيك مطمّن 😉 بخصم العاملين برضه</div></div>`
+        : `<div class="leading-tight"><span class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</span>${save > 0 ? ` <span class="text-[11px] font-bold text-emerald-600">وفّر ${save}%</span>` : ""}
+          <div><span class="text-[19px] font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)}</span> <span class="text-[11px] text-slate-500">ج.م</span></div></div>`}
         ${q ? `<div class="stepper"><button data-act="cartInc" data-id="${esc(b.Book_ID)}" ${!open || q >= mx ? "disabled" : ""} aria-label="زيادة">${ic("plus")}</button><span>${q}</span><button data-act="cartDec" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"} aria-label="تقليل">${ic(q === 1 ? "trash-2" : "minus")}</button></div>`
-          : `<button class="btn btn-primary btn-sm !px-3" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("plus")} أضف</button>`}
-      </div>`}
+          : `<button class="btn btn-primary btn-sm !px-3 shrink-0" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("plus")} أضف</button>`}
+      </div>
     </div></article>`;
 }
 /** شاشة اختيار الصف: بطاقات كبيرة مجمعة حسب المرحلة */
@@ -514,14 +517,14 @@ function gradePicker() {
 const BAG = { rows: [], m: null };
 /** يبني الشنطة المقترحة: لكل مادة كتاب واحد؛ يفضّل سلسلة واحدة تغطي أكثر المواد، ثم الأشهر */
 function bagBuild() {
-  const pr = pubRank(), list = gradeList().list.filter(b => b.Book_Status !== "Pricing");
+  const pr = pubRank(), list = gradeList().list;
   const bySub = {}; list.forEach(b => (bySub[b.Subject] = bySub[b.Subject] || []).push(b));
   const cover = {}; list.forEach(b => { cover[b.Publisher] = cover[b.Publisher] || new Set(); cover[b.Publisher].add(b.Subject); });
   const popSub = {}; list.forEach(b => popSub[b.Subject] = (popSub[b.Subject] || 0) + n(b.Pop));
   const series = Object.keys(cover).sort((a, b) => cover[b].size - cover[a].size || (pr[b] || 0) - (pr[a] || 0))[0];
   const favored = b => popSub[b.Subject] >= POP_MIN ? n(b.Pop) * 1000 : 0; // إن وُجدت حجوزات كافية: الأكثر حجزاً أولاً
   return Object.keys(bySub).sort((a, b) => subjRank(a) - subjRank(b) || a.localeCompare(b, "ar")).map(s => {
-    const opts = bySub[s].slice().sort((a, b) => (favored(b) - favored(a)) || (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
+    const opts = bySub[s].slice().sort((a, b) => (favored(b) - favored(a)) || (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
     const inCart = opts.find(b => APP.cart[ck(b.Book_ID, Emp.ben)]);
     return { s, opts, pick: (inCart || opts[0]).Book_ID, on: !inCart && !["حاسب آلي", "أي سي تي", "تكنولوجيا", "ديسكفري", "مهارات"].includes(s), had: !!inCart };
   });
@@ -533,7 +536,7 @@ function bagHTML() {
     <div class="flex items-center gap-3"><button class="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${r.on ? "bg-brand-600 text-white" : "bg-white ring-1 ring-slate-300 text-transparent"}" data-act="bagTog" data-id="${i}" aria-label="تضمين">${ic("check")}</button>
       <span class="w-1.5 h-8 rounded-full shrink-0" style="background:${c1}"></span>
       <div class="flex-1 min-w-0"><div class="font-bold text-[14.5px] text-slate-900">${esc(r.s)}${r.had ? ` <span class="text-[11px] font-semibold text-emerald-600">في السلة ✓</span>` : ""}</div><div class="text-[12px] text-slate-500 truncate">${esc(b.Publisher)}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
-      <div class="text-left shrink-0"><div class="font-bold num text-brand-800">${fmt(b.Emp_Selling_Price)}</div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div></div>
+      <div class="text-left shrink-0">${b.Book_Status === "Pricing" ? `<div class="text-[11.5px] font-bold text-amber-700">🚚 مع الشحنة</div>` : `<div class="font-bold num text-brand-800">${fmt(b.Emp_Selling_Price)}</div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>`}</div></div>
     ${r.opts.length > 1 && r.on ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pr-10 pb-0.5" style="scrollbar-width:none">${r.opts.map(o => `<button class="chip !h-7 !px-2.5 !text-[11.5px] shrink-0" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${o.Book_ID === r.pick}">${(popInfo(o) || {}).top ? "🔥 " : ""}${esc(o.Publisher)}${o.Book_Part ? " (" + esc(o.Book_Part) + ")" : ""} · <span class="num">${fmt(o.Emp_Selling_Price)}</span></button>`).join("")}</div>` : ""}</li>`; }).join("")}</ul>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
     <div class="flex justify-between text-slate-500"><span>${sel.length} كتب بسعر الغلاف</span><span class="line-through num">${moneyTxt(cov)}</span></div>
@@ -563,7 +566,7 @@ on("bagAdd", () => {
 
 /** باقات سريعة: كل كتب ناشر واحد للصف بضغطة */
 function bundles(list) {
-  const by = {}; list.filter(b => b.Book_Status !== "Pricing").forEach(b => (by[b.Publisher] = by[b.Publisher] || []).push(b));
+  const by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || []).push(b));
   const pr = pubRank(), pubs = Object.keys(by).filter(p => by[p].length >= 2 && p !== "-").sort((a, b) => by[b].length - by[a].length || (pr[b] || 0) - (pr[a] || 0)).slice(0, 8);
   if (!pubs.length || !Emp.open()) return "";
   return `<section class="mb-4"><div class="flex items-center justify-between mb-2"><h3 class="font-bold text-slate-800 text-[14px] flex items-center gap-1.5">${ic("sparkles", "text-gold-500")} حجز سريع بالسلسلة</h3><span class="text-[11.5px] text-slate-400">نسخة من كل كتاب</span></div>
@@ -587,7 +590,7 @@ function renderBookGrid() {
     el.innerHTML = gradePicker();
   } else {
     const { list, sorted } = gradeList(); count = list.length;
-    const groups = []; sorted.forEach(b => { const key = b.Book_Status === "Pricing" ? "__p" : b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
+    const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
     el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? "جرّب «كل المدارس»." : "")
       : bundles(list) + groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="flex items-center gap-2 mb-2">
           <span class="w-1.5 h-5 rounded-full" style="background:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}"></span><h3 class="font-display font-bold text-slate-900 text-[16px]">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}</h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
@@ -600,7 +603,7 @@ Router.add("/e/books", view => {
   const r = APP.emp, f = Emp.filter;
   if (!r.activePhase) { view.innerHTML = Art.empty("calendar", "لا توجد مرحلة حجز", "سيظهر الكتالوج عند فتح مرحلة حجز جديدة."); return; }
   const types = (r.catalog || {}).schoolTypes || [];
-  const subs = f.grade && !f.q ? uniq(sortBooks(gradeList().list.filter(b => b.Book_Status !== "Pricing")).map(b => b.Subject)) : [];
+  const subs = f.grade && !f.q ? uniq(sortBooks(gradeList().list).map(b => b.Subject)) : [];
   const [c1, c2] = toneOf(f.grade || "x");
   view.innerHTML = `
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
@@ -638,7 +641,7 @@ on("fGrade", v => { Emp.filter.grade = v; Emp.filter.q = ""; Shell.rerender(); s
 on("fType", v => { Emp.filter.type = v; Shell.rerender(); });
 on("jumpSubj", v => { const el = document.getElementById("sub_" + v); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });
 on("addBundle", async pub => {
-  const list = gradeList().list.filter(b => b.Publisher === pub && b.Book_Status !== "Pricing");
+  const list = gradeList().list.filter(b => b.Publisher === pub);
   const add = list.filter(b => !APP.cart[ck(b.Book_ID, Emp.ben)]);
   if (!add.length) return toast("كل كتب " + pub + " في السلة بالفعل ✅", "info");
   const sum = add.reduce((s, b) => s + n(b.Emp_Selling_Price), 0);
@@ -713,7 +716,7 @@ function resSummaryHTML(lines, opts) {
       <div class="flex items-center gap-3 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[26px] leading-none">${g.emoji}</span>
         <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
         <div class="text-left shrink-0"><div class="font-bold text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
-      <ul class="divide-y divide-slate-100">${g.lines.map(l => `<li class="flex items-center gap-2 px-3.5 py-2 text-[13px]"><span class="flex-1 min-w-0 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="text-slate-400 num">×${l.qty}</span>` : ""}<span class="num font-semibold text-slate-800 w-16 text-left">${fmt(l.qty * n(l.price))}</span></li>`).join("")}</ul></section>`).join("")}</div>
+      <ul class="divide-y divide-slate-100">${g.lines.map(l => `<li class="flex items-center gap-2 px-3.5 py-2 text-[13px]"><span class="flex-1 min-w-0 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="text-slate-400 num">×${l.qty}</span>` : ""}<span class="num font-semibold text-slate-800 text-left whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul></section>`).join("")}</div>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
     <div class="flex justify-between text-slate-500"><span>${booksWord(cnt)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(cover)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(cover - net)}</span></div>
@@ -799,7 +802,7 @@ function wzMember() {
     <button class="w-full mt-3 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzNoBooks">${esc(wzName(m))} مش محتاج كتب ← ${last ? "المراجعة" : "التالي"}</button>
     ${WZ.i ? `<button class="btn btn-ghost w-full" data-act="wzPrev">${ic("arrow-right")} رجوع</button>` : `<button class="btn btn-ghost w-full" data-act="wzToFamily">${ic("arrow-right")} العائلة</button>`}`;
   if (mode === "series" && !WZ.pub[WZ.i]) {
-    const list = gradeList().list.filter(b => b.Book_Status !== "Pricing"), by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || new Set()).add(b.Subject));
+    const list = gradeList().list, by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || new Set()).add(b.Subject));
     const pubs = Object.keys(by).sort((a, b) => by[b].size - by[a].size);
     return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">اختار السلسلة</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
       ${logoFor(APP.emp.pubLogos, p, "") ? `<span class="w-12 h-9 rounded-lg bg-white ring-1 ring-slate-100 flex items-center justify-center p-0.5 shrink-0"><img src="${esc(logoFor(APP.emp.pubLogos, p, ""))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}
@@ -823,7 +826,7 @@ function wzReviewHTML() {
     ${gs.length ? gs.map(g => `<section class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden mb-3">
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[24px]">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div>
         <div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
-      <ul class="divide-y divide-slate-100 px-3.5">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[13px]"><span class="flex-1 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold w-14 text-left">${fmt(l.qty * n(l.price))}</span></li>`).join("")}</ul>
+      <ul class="divide-y divide-slate-100 px-3.5">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[13px]"><span class="flex-1 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold text-left whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul>
       <div class="px-3.5 pb-3"><button class="btn btn-ghost btn-sm" data-act="wzEdit" data-id="${esc(g.lines[0].ben || "")}|${esc(g.lines[0].grade || "")}">${ic("pencil")} تعديل</button></div></section>`).join("")
       : Art.empty("cart", "لسه ما اخترتش كتب", "ارجع واختار كتب لكل فرد")}
     <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
@@ -871,7 +874,7 @@ on("wzEdit", v => { const [ben, grade] = String(v).split("|"); const ms = wzMemb
 /** ملخص نصي للحجز للمشاركة على واتساب */
 function resShareText() {
   const gs = resGroups(cartLines()), t = Emp.totals(), pc = Emp.planCalc(t.net);
-  return `📚 ${Brand.platform || "منصة حجز الكتب المخفضة"}\nحجز: ${APP.user.fullName} (${APP.user.empId})\n\n` + gs.map(g => `${g.emoji} ${g.title}${g.sub ? " — " + g.sub : ""}\n` + g.lines.map(l => `• ${l.name}${l.qty > 1 ? " ×" + l.qty : ""} = ${fmt(l.qty * n(l.price))}`).join("\n") + `\nالإجمالي: ${fmt(g.net)} ج.م`).join("\n\n")
+  return `📚 ${Brand.platform || "منصة حجز الكتب المخفضة"}\nحجز: ${APP.user.fullName} (${APP.user.empId})\n\n` + gs.map(g => `${g.emoji} ${g.title}${g.sub ? " — " + g.sub : ""}\n` + g.lines.map(l => `• ${l.name}${l.qty > 1 ? " ×" + l.qty : ""} = ${n(l.price) ? fmt(l.qty * n(l.price)) : "السعر مع الشحنة"}`).join("\n") + `\nالإجمالي: ${fmt(g.net)} ج.م`).join("\n\n")
     + `\n\n💰 الإجمالي: ${fmt(t.net)} ج.م (وفّرت ${fmt(t.cover - t.net)} ج.م)` + (APP.plan.method === "INSTALLMENT" ? `\nمقدم ${fmt(pc.down)} ثم ${pc.cnt} أقساط × ${fmt(pc.per)}` : `\nالسداد: ${Doc.methodAr(APP.plan.method)}`);
 }
 on("shareWa", () => { window.open("https://wa.me/?text=" + encodeURIComponent(resShareText()), "_blank"); });
