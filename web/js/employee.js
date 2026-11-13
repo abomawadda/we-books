@@ -145,8 +145,8 @@ Router.add("/e/home", view => {
 
   // رسالة واحدة واضحة حسب موقفك الآن
   let msg;
-  if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز", href: "#/e/books" };
-  else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ ✅ ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "عدّل حجزك", href: "#/e/books" };
+  if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
+  else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ ✅ ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
   else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم`, cta: "التفاصيل", href: "#/e/orders" };
   else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
@@ -170,7 +170,7 @@ Router.add("/e/home", view => {
         </div>
         ${inv ? `<div class="relative shrink-0">${UI.donut(paidPct, 104, "مسدد")}</div>` : ""}
       </div>
-      <a ${msg.href ? `href="${msg.href}"` : ""} class="relative mt-5 flex items-center gap-3 rounded-2xl bg-white/10 ring-1 ring-white/15 p-3.5 ${msg.href ? "active:scale-[.98] transition" : ""}">
+      <a ${msg.href ? `href="${msg.href}"` : ""} ${msg.act ? `data-act="${msg.act}"` : ""} class="relative mt-5 flex items-center gap-3 rounded-2xl bg-white/10 ring-1 ring-white/15 p-3.5 ${msg.href ? "active:scale-[.98] transition" : ""}">
         <span class="w-11 h-11 rounded-xl bg-gold-400/20 text-gold-300 flex items-center justify-center text-xl shrink-0">${ic(msg.icon)}</span>
         <span class="flex-1 min-w-0"><span class="block font-bold text-[15.5px]">${esc(msg.title)}</span><span class="block text-[12.5px] text-brand-200 mt-0.5">${esc(msg.sub)}</span></span>
         ${msg.cta ? `<span class="btn btn-gold btn-sm shrink-0 !text-brand-950">${esc(msg.cta)} ${ic("chevron-left")}</span>` : ""}
@@ -209,6 +209,8 @@ Router.add("/e/home", view => {
     </section>
   </div>`;
   startCountdown();
+  // أول دخول في الجلسة بدون حجز: نفتح معالج الحجز تلقائياً
+  try { if (ph.Booking_Open && !reqQty && !Emp.dirty && !sessionStorage.getItem("wb_wz_auto")) { sessionStorage.setItem("wb_wz_auto", "1"); setTimeout(() => { if (Router.current === "/e/home") ACTIONS.wizStart(); }, 400); } } catch (_) {}
 });
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
@@ -229,7 +231,7 @@ function cartHTML() {
   const methods = [["INSTALLMENT", "calendar-check", "تقسيط", "مقدم + أقساط شهرية"], ["CASH", "banknote", "نقداً", "كامل القيمة عند الاستلام"], ["INSTAPAY", "send", "إنستاباي", "تحويل كامل القيمة"], ["WALLET", "smartphone", "محفظة", "تحويل كامل القيمة"]];
   const ids = Object.keys(APP.cart);
   return `
-  ${ids.length ? resGroups(cartLines()).map(g => `<section class="mt-3 first:mt-0 rounded-2xl ring-1 ring-slate-200 overflow-hidden">
+  ${Emp._noList ? "" : (ids.length ? resGroups(cartLines()).map(g => `<section class="mt-3 first:mt-0 rounded-2xl ring-1 ring-slate-200 overflow-hidden">
       <div class="flex items-center gap-2.5 px-3 py-2 bg-brand-50/60"><span class="text-[22px] leading-none">${g.emoji}</span>
         <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[11.5px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
         <div class="text-left shrink-0"><div class="font-bold text-[13.5px] text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
@@ -237,7 +239,7 @@ function cartHTML() {
       <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(l.name)}</div><div class="text-[12px] text-slate-500 num">${fmt(l.price)} × ${l.qty} = <b class="text-slate-700">${fmt(n(l.price) * l.qty)}</b></div></div>
       ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(l.key)}" ${l.qty >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${l.qty}</span><button data-act="cartDec" data-id="${esc(l.key)}">${ic(l.qty === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${l.qty}</span>`}
     </li>`).join("")}</ul></section>`).join("")
-    : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊")}
+    : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊"))}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
     <div class="flex justify-between text-slate-500"><span>بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
@@ -276,6 +278,7 @@ function planPreview(pc) {
 function refreshCartViews() {
   const t = Emp.totals();
   $$(".cart-body").forEach(el => el.innerHTML = cartHTML());
+  $$(".wiz-pay").forEach(el => { Emp._noList = true; try { el.innerHTML = cartHTML(); } finally { Emp._noList = false; } });
   const bar = $("#cartBar");
   if (bar) {
     bar.classList.toggle("hidden", !t.count && !Emp.activeItems().length);
@@ -338,11 +341,15 @@ on("pickKid", v => openKid(+v));
 /** شريط الأبناء (الرئيسية وصفحة الحجز) */
 function kidsStrip(compact) {
   const ks = myKids();
-  return `<div class="scroll-x ${compact ? "" : "mt-1"}">${ks.map((k, i) => { const on = Emp.filter.grade === k.grade && (Emp.filter.type || "") === (k.type || "") && Emp.ben === kidBen(k), c = kidCartCount(k);
+  const chip = (k, i) => { const on = Emp.filter.grade === k.grade && (Emp.filter.type || "") === (k.type || "") && Emp.ben === kidBen(k), c = kidCartCount(k);
     return `<button class="shrink-0 flex items-center gap-2 rounded-2xl pl-3 pr-1.5 py-1.5 ring-1 transition active:scale-95 ${on ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-700 ring-slate-200"}" data-act="pickKid" data-id="${i}">
       <span class="w-9 h-9 rounded-xl ${on ? "bg-white/15" : "bg-gold-50"} flex items-center justify-center text-[20px]">${kidEmoji(k)}</span>
-      <span class="text-right leading-tight"><span class="block font-bold text-[13px]">${esc(kidName(k, i))}</span><span class="block text-[11px] ${on ? "text-brand-100" : "text-slate-500"}">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${c ? ` · <b class="num">${c}</b> في السلة` : ""}</span></span></button>`; }).join("")}
-    <button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "تعديل" : "أضف أبنائي"}</button>${relOn() ? `<button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50/50 text-[13px] font-bold" data-act="addRel">${ic("users")} قريب</button>` : ""}</div>`;
+      <span class="text-right leading-tight"><span class="block font-bold text-[13px]">${esc(kidName(k, i))}</span><span class="block text-[11px] ${on ? "text-brand-100" : "text-slate-500"}">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${c ? ` · <b class="num">${c}</b> في السلة` : ""}</span></span></button>`; };
+  const kids = ks.map((k, i) => [k, i]).filter(x => !x[0].rel), rels = ks.map((k, i) => [k, i]).filter(x => x[0].rel);
+  return `<div class="space-y-2 ${compact ? "" : "mt-1"}">
+    ${kids.length ? `<div class="flex flex-wrap gap-2">${kids.map(x => chip(x[0], x[1])).join("")}</div>` : ""}
+    ${rels.length ? `<div class="flex flex-wrap gap-2">${rels.map(x => chip(x[0], x[1])).join("")}</div>` : ""}
+    <div class="flex flex-wrap gap-2"><button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "تعديل" : "أضف أبنائي"}</button>${relOn() ? `<button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50/50 text-[13px] font-bold" data-act="addRel">${ic("users")} قريب</button>` : ""}</div></div>`;
 }
 
 // ---------------- محرّر الأبناء: خطوات قصيرة لكل ابن ----------------
@@ -409,6 +416,7 @@ on("kdSave", async () => {
   if (KD.m) KD.m.close(); KD.m = null;
   toast(kids.length > 1 ? `رائع! جهّزنا كتب ${kids.length} أفراد 🎉` : "رائع! جهّزنا الكتب 🎉", "success");
   const last = KD._addRel ? kids.length - 1 : 0;
+  if (Router.current === "/e/wiz") { WZ.sel = null; wzSave(); setTimeout(() => Shell.rerender(), 350); return; }
   setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
 });
 
@@ -511,8 +519,8 @@ function bagHTML() {
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
     <div class="flex justify-between items-baseline pt-1 border-t border-slate-200"><b>إجمالي الشنطة</b><span class="text-xl font-bold text-brand-800 num">${money(tot)}</span></div></div>`;
 }
-const bagRender = () => { if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.filter(r => r.on).length, b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
-on("bagOpen", () => {
+const bagRender = () => { if (BAG.inline && $("#wzBag")) return bagRenderInline(); if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.filter(r => r.on).length, b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
+on("bagOpen", () => { BAG.inline = false; BAG._for = "";
   if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
   if (!Emp.filter.grade) return toast("اختر الصف أولاً", "info");
   BAG.rows = bagBuild();
@@ -577,7 +585,7 @@ Router.add("/e/books", view => {
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
     <div>
       ${!Emp.open() ? `<div class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 p-4 mb-4 flex gap-3 text-sm">${ic("lock", "text-lg mt-0.5")}<div><b>الحجز ${esc(ar(r.activePhase.Effective_Status))}</b> — يمكنك تصفح الكتب، والتعديل متاح فقط أثناء فترة الحجز.</div></div>` : ""}
-      ${myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
+      ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900">اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
       ${f.grade ? `<div class="rounded-3xl p-4 mb-3 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
         <span class="absolute -left-6 -top-8 w-32 h-32 rounded-full bg-white/5"></span>
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
@@ -703,13 +711,149 @@ on("submitRes", async () => {
   if (!r.success) return toast(r.message, "danger");
   Emp.dirty = false;
   if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
-  if (Router.current === "/e/cart") Router.go("/e/home");
+  if (Router.current === "/e/cart" || Router.current === "/e/wiz") Router.go("/e/home");
   (r.warnings || []).forEach(w => toast(w, "warning"));
   await Emp.load();
   if (!items.length) { UI.open(`<div class="text-center py-4"><div class="text-4xl">🗑️</div><h3 class="text-xl font-bold mt-3">تم إلغاء الحجز</h3><p class="text-sm text-slate-500 mt-2">${esc(r.message || "")}</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تم</button>` }); return; }
   UI.open(resSummaryHTML(cartLines(), { title: "تمام! حجزك اتسجل 🎉", msg: r.message }), { title: "تأكيد الحجز",
-    footer: `<div class="flex gap-2"><button data-act="printRes" class="btn btn-outline">${ic("download")} احفظ</button><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
+    footer: `<div class="grid grid-cols-2 gap-2 mb-2"><button data-act="printRes" class="btn btn-outline">${ic("download")} صورة / PDF</button><button data-act="shareWa" class="btn btn-success">${ic("message-circle")} أرسله واتساب</button></div><div class="flex gap-2"><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
+  wzClear(); Emp.wzManual = false;
 });
+
+// ============================================================ معالج الحجز خطوة بخطوة
+// العائلة ← حجز كل فرد (الأشهر / سلسلة / بنفسي) ← المراجعة ← السداد ← الحفظ والمشاركة
+const WZ_KEY = () => "wb_wz_" + (APP.user && APP.user.empId);
+const WZ = { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {} };
+const wzSave = () => { try { localStorage.setItem(WZ_KEY(), JSON.stringify({ step: WZ.step, i: WZ.i, sel: WZ.sel, temp: WZ.temp, mode: WZ.mode, pub: WZ.pub })); } catch (_) {} };
+const wzLoad = () => { try { const o = JSON.parse(localStorage.getItem(WZ_KEY())); if (o) Object.assign(WZ, o); return !!o; } catch (_) { return false; } };
+const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {} }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
+/** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
+function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
+const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
+function wzFocus(m) { Emp.filter.grade = m.grade; Emp.filter.type = m.type || ""; Emp.filter.q = ""; Emp.ben = kidBen(m); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); }
+const wzGo = (step, i) => { WZ.step = step; if (i !== undefined) WZ.i = i; wzSave(); if (Router.current !== "/e/wiz") Router.go("/e/wiz"); else Shell.rerender(); scrollTo({ top: 0 }); };
+
+function wzSteps() {
+  const ms = wzMembers(), steps = [["family", "العائلة"], ["member", "الكتب"], ["review", "المراجعة"], ["pay", "السداد"]], cur = steps.findIndex(s => s[0] === WZ.step);
+  return `<ol class="flex items-center gap-1.5 mb-4">${steps.map((s, k) => `<li class="flex-1"><div class="h-1.5 rounded-full ${k <= cur ? "bg-brand-600" : "bg-slate-200"}"></div><div class="text-[11px] mt-1 font-semibold ${k === cur ? "text-brand-800" : "text-slate-400"}">${s[1]}${s[0] === "member" && ms.length > 1 && WZ.step === "member" ? ` <span class="num">${WZ.i + 1}/${ms.length}</span>` : ""}</div></li>`).join("")}</ol>`;
+}
+const personCard = (k, i, on, act) => `<button class="text-right rounded-2xl p-3 ring-2 transition active:scale-[.98] flex items-center gap-3 ${on ? "ring-brand-600 bg-brand-50" : "ring-slate-200 bg-white opacity-70"}" data-act="${act}" data-id="${i}">
+  <span class="w-11 h-11 rounded-xl ${k.rel ? "bg-sky-50" : "bg-gold-50"} flex items-center justify-center text-[24px] shrink-0">${kidEmoji(k)}</span>
+  <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}</span></span>
+  <span class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check") : ""}</span></button>`;
+
+function wzFamily() {
+  const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i), kids = ks.map((k, i) => [k, i]).filter(x => !x[0].rel), rels = ks.map((k, i) => [k, i]).filter(x => x[0].rel);
+  if (WZ.skip) return wzGradePick();
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">لمين هتحجز السنة دي؟ 👨‍👩‍👧‍👦</h1>
+    <p class="text-[13.5px] text-slate-500 mt-1 mb-4">اختار الأبناء والأقارب اللي محتاجين كتب، وهنجهّز لكل واحد كتب صفه.</p>
+    ${kids.length ? `<div class="text-[12.5px] font-bold text-brand-700 mb-2">أبنائي</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">${kids.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
+    ${rels.length ? `<div class="text-[12.5px] font-bold text-sky-700 mb-2">أقاربي</div><div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">${rels.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
+    ${WZ.temp.length ? `<div class="text-[12.5px] font-bold text-slate-600 mb-2">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => `<span class="chip">${esc(gradeTitle(t.grade))}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`).join("")}</div>` : ""}
+    <div class="grid grid-cols-2 gap-2">
+      <button class="rounded-2xl p-3 border-2 border-dashed border-brand-300 text-brand-700 font-bold text-[13.5px] flex items-center justify-center gap-1.5" data-act="kidsEdit">${ic("plus")} ${kids.length ? "ابن / بنت" : "أضف أبنائي"}</button>
+      ${relOn() ? `<button class="rounded-2xl p-3 border-2 border-dashed border-sky-300 text-sky-700 font-bold text-[13.5px] flex items-center justify-center gap-1.5" data-act="addRel">${ic("users")} قريب</button>` : `<span></span>`}
+    </div>
+    <button class="w-full mt-2 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzSkip">${ks.length ? "أحجز لصف آخر بدون تسجيل" : "تخطّي — أحجز بالصف مباشرة"}</button>
+    <button class="btn btn-primary btn-lg w-full mt-3" data-act="wzStart" ${wzMembers().length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز (${wzMembers().length})</button>`;
+}
+function wzGradePick() {
+  const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
+  return `<h1 class="font-display font-bold text-[20px] text-slate-900">اختر الصف</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">بدون تسجيل — تقدر تضيف أكثر من صف.</p>
+    ${stages.map(s => `<div class="text-[12.5px] font-bold text-brand-700 mb-2">${esc(s)}</div><div class="grid grid-cols-3 gap-2 mb-4">${(cat.grades || []).filter(g => g.stage === s && cnt[g.label]).map(g => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 font-bold text-[15px] active:scale-95" data-act="wzTempAdd" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>`).join("")}
+    <button class="btn btn-ghost w-full" data-act="wzUnskip">${ic("arrow-right")} رجوع</button>`;
+}
+function wzMember() {
+  const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
+  wzFocus(m);
+  const mode = WZ.mode[WZ.i], last = WZ.i === ms.length - 1;
+  const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#552c83,#2e1650)">
+    <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px]">${m._temp ? "📚" : kidEmoji(m)}</span>
+    <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${ms.length > 1 ? `الفرد ${WZ.i + 1} من ${ms.length}` : "الحجز"}</div><div class="font-display font-bold text-[19px] leading-tight truncate">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div><div class="text-[12.5px] text-gold-300">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}</div></div></div>`;
+  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">إزاي تحب نختار الكتب؟</h2>
+    <div class="grid gap-2.5">${[["popular", "🎒", "جهّز لي الأشهر", "كتاب لكل مادة: الأكثر حجزاً والأشهر — وتعدّل براحتك", "bg-gold-50 ring-gold-300"],
+      ["series", "📚", "سلسلة واحدة", "تختار الناشر (الأضواء، سلاح التلميذ…) ونجيب كتبه كلها", "bg-brand-50 ring-brand-200"],
+      ["manual", "🔍", "أختار بنفسي", "تتصفح كتب الصف وتختار كتاب كتاب", "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
+        <span class="text-[30px]">${o[1]}</span><span class="flex-1"><b class="block text-[15.5px] text-slate-900">${o[2]}</b><span class="block text-[12.5px] text-slate-600 mt-0.5">${o[3]}</span></span>${ic("chevron-left", "text-slate-400")}</button>`).join("")}</div>
+    <button class="w-full mt-3 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzNoBooks">${esc(wzName(m))} مش محتاج كتب ← ${last ? "المراجعة" : "التالي"}</button>
+    ${WZ.i ? `<button class="btn btn-ghost w-full" data-act="wzPrev">${ic("arrow-right")} رجوع</button>` : `<button class="btn btn-ghost w-full" data-act="wzToFamily">${ic("arrow-right")} العائلة</button>`}`;
+  if (mode === "series" && !WZ.pub[WZ.i]) {
+    const list = gradeList().list.filter(b => b.Book_Status !== "Pricing"), by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || new Set()).add(b.Subject));
+    const pubs = Object.keys(by).sort((a, b) => by[b].size - by[a].size);
+    return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">اختار السلسلة</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
+      ${logoFor(APP.emp.pubLogos, p, "") ? `<span class="w-12 h-9 rounded-lg bg-white ring-1 ring-slate-100 flex items-center justify-center p-0.5 shrink-0"><img src="${esc(logoFor(APP.emp.pubLogos, p, ""))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}
+      <span class="min-w-0"><b class="block text-[14px] text-slate-900 truncate">${esc(p)}</b><span class="text-[11.5px] text-slate-500">${by[p].size} مادة</span></span></button>`).join("")}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "")}
+      <button class="btn btn-ghost w-full mt-3" data-act="wzModeReset">${ic("arrow-right")} تغيير الطريقة</button>`;
+  }
+  // الأشهر أو السلسلة: قائمة مقترحة قابلة للتعديل
+  if (!BAG._for || BAG._for !== WZ.i + "|" + mode + "|" + (WZ.pub[WZ.i] || "")) {
+    BAG.rows = bagBuild(); BAG._for = WZ.i + "|" + mode + "|" + (WZ.pub[WZ.i] || "");
+    if (mode === "series") BAG.rows.forEach(r => { const o = r.opts.find(x => x.Publisher === WZ.pub[WZ.i]); if (o) { r.pick = o.Book_ID; r.on = true; } else r.on = r.had; });
+  }
+  BAG.inline = true;
+  return head + (BAG.rows.length ? `<div id="wzBag">${bagHTML()}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "تقدر تكمل لباقي الأفراد"))
+    + `<div class="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] md:bottom-4 mt-4 grid grid-cols-[auto_1fr] gap-2 bg-slate-50/90 backdrop-blur py-2">
+      <button class="btn btn-outline" data-act="wzModeReset">${ic("arrow-right")} طريقة أخرى</button>
+      <button class="btn btn-primary btn-lg" data-act="wzNext">${ic("check")} تمام${last ? "، المراجعة" : "، التالي: " + esc(wzName(ms[WZ.i + 1]))} ←</button></div>`;
+}
+function wzReviewHTML() {
+  const lines = cartLines(), gs = resGroups(lines), t = Emp.totals();
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">راجع حجزك 👀</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">كتب كل فرد لوحده — اضغط «تعديل» لأي حد.</p>
+    ${gs.length ? gs.map(g => `<section class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden mb-3">
+      <div class="flex items-center gap-2.5 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[24px]">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div>
+        <div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
+      <ul class="divide-y divide-slate-100 px-3.5">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[13px]"><span class="flex-1 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold w-14 text-left">${fmt(l.qty * n(l.price))}</span></li>`).join("")}</ul>
+      <div class="px-3.5 pb-3"><button class="btn btn-ghost btn-sm" data-act="wzEdit" data-id="${esc(g.lines[0].ben || "")}|${esc(g.lines[0].grade || "")}">${ic("pencil")} تعديل</button></div></section>`).join("")
+      : Art.empty("cart", "لسه ما اخترتش كتب", "ارجع واختار كتب لكل فرد")}
+    <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
+      <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
+      <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b>الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(t.net)}</span></div></div>
+    <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة فرد آخر</button>
+    <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("wallet")} التالي: طريقة السداد ←</button>`;
+}
+function wzPayHTML() {
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">هتدفع إزاي؟ 💳</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">اختار طريقة السداد، وبعدها أكّد الحجز.</p>
+    <div class="wiz-pay card card-pad"></div><button class="btn btn-ghost w-full mt-2" data-act="wzReview">${ic("arrow-right")} رجوع للمراجعة</button>`;
+}
+Router.add("/e/wiz", view => {
+  if (!APP.emp.activePhase || !Emp.open()) { view.innerHTML = Art.empty("calendar", "الحجز مغلق حالياً", "تابع الإشعارات لمعرفة موعد الحجز القادم"); return; }
+  const body = WZ.step === "member" ? wzMember() : WZ.step === "review" ? wzReviewHTML() : WZ.step === "pay" ? wzPayHTML() : wzFamily();
+  view.innerHTML = `<div class="max-w-xl mx-auto">${wzSteps()}${body}<div class="h-6"></div></div>`;
+  if (WZ.step === "pay") refreshCartViews();
+});
+const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
+on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
+on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
+on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
+on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
+on("wzTempAdd", g => { WZ.temp.push({ name: "", grade: g, type: "" }); WZ.skip = false; wzSave(); Shell.rerender(); });
+on("wzTempDel", j => { WZ.temp.splice(+j, 1); wzSave(); Shell.rerender(); });
+on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; wzGo("member", 0); });
+on("wzToFamily", () => wzGo("family"));
+on("wzMode", v => { WZ.mode[WZ.i] = v; wzSave(); if (v === "manual") { wzFocus(wzMembers()[WZ.i]); Emp.wzManual = true; Router.go("/e/books"); scrollTo({ top: 0 }); return; } Shell.rerender(); });
+on("wzModeReset", () => { delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = ""; wzSave(); Shell.rerender(); });
+on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); });
+const wzAdvance = () => { const ms = wzMembers(); BAG._for = ""; BAG.inline = false; if (WZ.i + 1 < ms.length) wzGo("member", WZ.i + 1); else wzGo("review"); };
+on("wzNext", () => {
+  BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) APP.cart[k] = 1; });
+  BAG.rows.filter(r => !r.on).forEach(r => r.opts.forEach(o => { delete APP.cart[ck(o.Book_ID, Emp.ben)]; }));
+  Emp.dirty = true; refreshCartViews(); wzAdvance();
+});
+on("wzNoBooks", () => wzAdvance());
+on("wzPrev", () => { BAG._for = ""; wzGo("member", Math.max(0, WZ.i - 1)); });
+on("wzBack", () => { Emp.wzManual = false; wzAdvance(); });
+on("wzReview", () => wzGo("review"));
+on("wzBackReview", () => { Emp.wzManual = false; wzGo("review"); });
+on("wzPay", () => wzGo("pay"));
+on("wzEdit", v => { const [ben, grade] = String(v).split("|"); const ms = wzMembers(); let i = ms.findIndex(m => (ben ? kidBen(m) === ben : !kidBen(m) && m.grade === grade)); if (i < 0) { WZ.temp.push({ name: "", grade, type: "" }); i = wzMembers().length - 1; }
+  WZ.mode[i] = "manual"; WZ.i = i; wzSave(); wzFocus(wzMembers()[i]); Emp.wzManual = "review"; Router.go("/e/books"); });
+/** ملخص نصي للحجز للمشاركة على واتساب */
+function resShareText() {
+  const gs = resGroups(cartLines()), t = Emp.totals(), pc = Emp.planCalc(t.net);
+  return `📚 ${Brand.platform || "منصة حجز الكتب المخفضة"}\nحجز: ${APP.user.fullName} (${APP.user.empId})\n\n` + gs.map(g => `${g.emoji} ${g.title}${g.sub ? " — " + g.sub : ""}\n` + g.lines.map(l => `• ${l.name}${l.qty > 1 ? " ×" + l.qty : ""} = ${fmt(l.qty * n(l.price))}`).join("\n") + `\nالإجمالي: ${fmt(g.net)} ج.م`).join("\n\n")
+    + `\n\n💰 الإجمالي: ${fmt(t.net)} ج.م (وفّرت ${fmt(t.cover - t.net)} ج.م)` + (APP.plan.method === "INSTALLMENT" ? `\nمقدم ${fmt(pc.down)} ثم ${pc.cnt} أقساط × ${fmt(pc.per)}` : `\nالسداد: ${Doc.methodAr(APP.plan.method)}`);
+}
+on("shareWa", () => { window.open("https://wa.me/?text=" + encodeURIComponent(resShareText()), "_blank"); });
 
 // ============================================================ حجوزاتي
 Router.add("/e/orders", view => {
