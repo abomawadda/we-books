@@ -35,6 +35,14 @@ const e1 = ok(api('LOGIN_EMPLOYEE', { empId: '1001', natIdLast4: '4512', mobile:
 const e2 = ok(api('LOGIN_EMPLOYEE', { empId: '1002', natIdLast4: '8834', mobile: '01122334455' }), 'emp2').sessionToken;
 const e3 = ok(api('LOGIN_EMPLOYEE', { empId: '1003', natIdLast4: '0921', mobile: '01233445566' }), 'emp3 leading zero').sessionToken;
 fail(api('GET_ADMIN_DASHBOARD_DATA', {}, e1), 'employee blocked from admin');
+// أبنائي: حفظ وتحقق وترقية تلقائية مع السنة الدراسية الجديدة
+fail(api('SAVE_MY_KIDS', { kids: [{ name: 'x', grade: 'صف وهمي' }] }, e1), 'kid bad grade', /صف/);
+ok(api('SAVE_MY_KIDS', { kids: [{ name: 'محمد', gender: 'b', grade: '4 ابتدائي', type: 'لغات' }, { name: 'سارة', gender: 'g', grade: '3 ثانوي', type: '' }] }, e1), 'save kids');
+assert.deepStrictEqual(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal kids').employee.kids.map(k => k.grade + k.promoted), ['4 ابتدائي0', '3 ثانوي0']);
+{ const sv = clock.now; clock.now = new Date(2027, 8, 1).getTime();
+  const ks = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal next year').employee.kids;
+  assert.deepStrictEqual(ks.map(k => [k.grade, k.promoted, !!k.graduated]), [['5 ابتدائي', 1, false], ['', 1, true]]); clock.now = sv; }
+fail(api('SAVE_MY_KIDS', { kids: [] }, adm.sessionToken), 'admin cannot save kids');
 
 // 2) الحجز بالشرائح
 at(2026, 11, 5, 9, 0, 0, 100);
