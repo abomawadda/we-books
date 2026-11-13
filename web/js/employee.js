@@ -886,12 +886,14 @@ Router.add("/e/orders", view => {
   ${items.length ? `<section class="card card-pad mb-4">${tracker(Math.min(...Emp.activeItems().map(i => itemStage(i).step).filter(x => x >= 0).concat([4])))}</section>` : ""}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-[1fr_360px] items-start">
     <div class="space-y-3">
-      ${items.length ? items.map(i => {
+      ${items.length ? resGroups(items.map(i => ({ item: i, ben: i.Beneficiary || "", grade: (bm[i.Book_ID] || {}).Grade, qty: n(i.Requested_Qty), price: i.Unit_Emp_Price, cover: (bm[i.Book_ID] || {}).Cover_Price }))).map(g => `
+      <div class="flex items-center gap-2.5 pt-2 first:pt-0"><span class="text-[24px] leading-none">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 text-[15.5px] truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div><div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
+      ${g.lines.map(l => { const i = l.item;
         const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty), b = bm[i.Book_ID] || {}, [c1, c2] = toneOf(b.Subject);
         return `<article class="card p-4">
           <div class="flex items-start gap-3">
             <div class="w-11 h-14 rounded-lg shrink-0 flex items-center justify-center text-white text-lg" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>
-            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}${i.Beneficiary ? `<span class="block text-[12px] font-semibold text-sky-700 mt-0.5">لـ ${esc(i.Beneficiary)}</span>` : ""}</h3>${stagePill(itemStage(i))}</div>
+            <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}</h3>${stagePill(itemStage(i))}</div>
               <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للكتاب</div>
               <div class="text-[11.5px] text-slate-400 mt-0.5 flex items-center gap-1">${ic("clock")} أسبقية <span dir="ltr" class="num">${esc(i.Priority_Timestamp)}</span></div></div>
           </div>
@@ -899,7 +901,7 @@ Router.add("/e/orders", view => {
           ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
         </article>`;
-      }).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
+      }).join("")}`).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>
     <aside class="space-y-4 lg:sticky lg:top-24">
       ${inv ? `<section class="card overflow-hidden">
