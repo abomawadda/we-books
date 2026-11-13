@@ -557,6 +557,7 @@ const ACTION_ACL = {
   BULK_IMPORT_BOOKS: ["Coordinator"],
   BULK_PRICE_BOOKS: ["Coordinator"],
   SET_BOOK_COVER: ["Coordinator"],
+  SET_PUBLISHER_LOGO: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
@@ -636,6 +637,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
       case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
+      case "SET_PUBLISHER_LOGO": return E.setPublisherLogo(session, payload.publisher, payload.url);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
@@ -846,7 +848,7 @@ const OperationsEngine = {
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
       },
-      brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
+      pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp) },
       books: books,
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
@@ -867,7 +869,7 @@ const OperationsEngine = {
       brand: this.brand_(), announcements: this.announcements_(),
       success: true,
       settings: DB_Engine.getAllRecords(S.SETTINGS),
-      settingsMap: getSettings_(),
+      settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
       books: DB_Engine.getAllRecords(S.BOOKS),
@@ -1205,6 +1207,24 @@ const OperationsEngine = {
     DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, { Cover_URL: u });
     DB_Engine.logAudit(session.userId, session.role, "Catalog", u ? "SET_COVER" : "REMOVE_COVER", id, { Cover_URL: b.Cover_URL || "" }, { Cover_URL: u });
     return { success: true, message: u ? "تم حفظ صورة الغلاف." : "تم حذف صورة الغلاف.", url: u };
+  },
+  /** شعارات الناشرين {اسم الناشر: رابط} — تظهر على كل كتب الناشر التي ليس لها غلاف خاص */
+  publisherLogos_: function() {
+    const row = DB_Engine.getAllRecords(this.S().SETTINGS).find(r => r.Setting_Key === "PUBLISHER_LOGOS");
+    try { return row && row.Setting_Value ? JSON.parse(String(row.Setting_Value)) : {}; } catch (e) { return {}; }
+  },
+  setPublisherLogo: function(session, publisher, url) {
+    const S = this.S(), pub = Util.str(publisher), u = Util.str(url);
+    // «الناشر|lang» = شعار مختلف لكتب اللغات (إنجليزي، ماث، ساينس…) لنفس الناشر
+    const pubName = pub.replace(/\|lang$/, "");
+    Util.require(pubName && DB_Engine.getAllRecords(S.BOOKS).some(b => Util.str(b.Publisher) === pubName), "الناشر غير موجود في الكتالوج.");
+    Util.require(!u || /^https:\/\/[a-z0-9.-]+\/storage\/v1\/object\/public\/book-covers\/pub-[a-f0-9]+\.(webp|jpg)(\?v=\d+)?$/.test(u), "رابط صورة غير مسموح.");
+    const map = this.publisherLogos_(); if (u) map[pub] = u; else delete map[pub];
+    const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PUBLISHER_LOGOS");
+    const rec = { Setting_Key: "PUBLISHER_LOGOS", Setting_Value: JSON.stringify(map), Data_Type: "JSON", Description: "شعارات الناشرين (تُدار من صفحة الكتب)", Updated_At: Util.now(), Updated_By: Util.actor(session) };
+    if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PUBLISHER_LOGOS", rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
+    DB_Engine.logAudit(session.userId, session.role, "Catalog", u ? "SET_PUB_LOGO" : "REMOVE_PUB_LOGO", pub, null, { url: u });
+    return { success: true, message: (u ? "تم حفظ شعار " : "تم حذف شعار ") + pubName + (pubName !== pub ? " (كتب اللغات)" : "") + ".", url: u };
   },
   saveBook: function(session, payload) {
     return DB_Engine.executeWithLock(() => {

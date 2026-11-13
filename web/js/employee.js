@@ -213,6 +213,7 @@ Router.add("/e/home", view => {
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 
 // ============================================================ الكتالوج والسلة
+const pubLogo = (p, sub) => logoFor(APP.emp && APP.emp.pubLogos, p, sub);
 on("coverZoom", id => {
   const b = APP.emp.books.find(x => x.Book_ID === id); if (!b || !b.Cover_URL) return;
   const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open() && b.Book_Status !== "Pricing";
@@ -418,7 +419,10 @@ function bookCard(b) {
   const mx = n(APP.emp.settings.MAX_QTY_PER_BOOK) || 3, pricing = b.Book_Status === "Pricing";
   const title = String(b.Book_Name || "").replace(new RegExp("\\s*[—-]\\s*" + String(b.Subject || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "$"), "") || b.Book_Name;
   return `<article class="card p-3 flex gap-3 transition ${q ? "ring-2 ring-brand-500 bg-brand-50/40" : ""} ${pricing ? "opacity-80" : ""}" id="bk_${esc(b.Book_ID)}">
-    ${b.Cover_URL ? `<button class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-slate-100" data-act="coverZoom" data-id="${esc(b.Book_ID)}" aria-label="تكبير الغلاف">
+    ${!b.Cover_URL && pubLogo(b.Publisher, b.Subject) ? `<div class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-white flex flex-col">
+      <span class="flex-1 flex items-center justify-center p-1.5"><img src="${esc(pubLogo(b.Publisher, b.Subject))}" alt="${esc(b.Publisher)}" loading="lazy" decoding="async" class="max-w-full max-h-full object-contain"></span>
+      <span class="text-[9.5px] font-bold text-white text-center py-0.5" style="background:${c2}">${esc(b.Subject || "")}</span></div>`
+    : b.Cover_URL ? `<button class="shrink-0 w-[68px] h-[88px] rounded-xl overflow-hidden relative shadow-soft ring-1 ring-slate-200 bg-slate-100" data-act="coverZoom" data-id="${esc(b.Book_ID)}" aria-label="تكبير الغلاف">
       <img src="${esc(b.Cover_URL)}" alt="غلاف ${esc(b.Book_Name)}" loading="lazy" decoding="async" class="w-full h-full object-cover">
       <span class="absolute bottom-0 inset-x-0 text-[9.5px] font-bold text-white text-center py-0.5" style="background:${c2}cc">${esc(b.Subject || "")}</span></button>`
     : `<div class="shrink-0 w-[68px] h-[88px] rounded-xl flex flex-col justify-between p-2 text-white relative overflow-hidden shadow-soft" style="background:linear-gradient(150deg,${c1},${c2})">
@@ -516,7 +520,7 @@ function bundles(list) {
   return `<section class="mb-4"><div class="flex items-center justify-between mb-2"><h3 class="font-bold text-slate-800 text-[14px] flex items-center gap-1.5">${ic("sparkles", "text-gold-500")} حجز سريع بالسلسلة</h3><span class="text-[11.5px] text-slate-400">نسخة من كل كتاب</span></div>
     <div class="scroll-x">${pubs.map(p => { const sum = by[p].reduce((s, b) => s + n(b.Emp_Selling_Price), 0), subs = uniq(by[p].map(b => b.Subject)).slice(0, 4);
       return `<button class="shrink-0 w-[190px] text-right rounded-2xl p-3 bg-gradient-to-bl from-brand-700 to-brand-900 text-white active:scale-[.98] transition" data-act="addBundle" data-id="${esc(p)}">
-        <span class="block font-bold text-[15px]">${esc(p)}</span><span class="block text-[11.5px] text-brand-200 truncate mt-0.5">${esc(subs.join(" · "))}</span>
+        <span class="flex items-center gap-2">${pubLogo(p) ? `<span class="w-8 h-8 rounded-lg bg-white p-0.5 shrink-0 flex items-center justify-center"><img src="${esc(pubLogo(p))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}<span class="block font-bold text-[15px]">${esc(p)}</span></span><span class="block text-[11.5px] text-brand-200 truncate mt-0.5">${esc(subs.join(" · "))}</span>
         <span class="flex items-center justify-between mt-2"><span class="text-[12px] text-brand-100 num">${by[p].length} كتب · ${fmt(sum)} ج.م</span><span class="w-7 h-7 rounded-lg bg-gold-400 text-brand-950 flex items-center justify-center">${ic("plus")}</span></span></button>`; }).join("")}</div></section>`;
 }
 function gradeList() {

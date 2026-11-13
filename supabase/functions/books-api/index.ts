@@ -226,14 +226,18 @@ async function handle(action: string, payload: any, token: string) {
     const s: any = await verify(token);
     if (!s) return EXPIRED;
     if (!(s.userType === 'ADMIN' && ['Admin', 'Coordinator'].includes(s.role))) return { success: false, message: 'ليست لديك صلاحية تعديل الكتب.' };
-    const id = String(payload.bookId || '').trim();
-    if (!/^[A-Za-z0-9_-]{1,40}$/.test(id)) return { success: false, message: 'كود كتاب غير صالح.' };
+    // شعار ناشر (payload.publisher) أو غلاف كتاب (payload.bookId)
+    const pub = String(payload.publisher || '').trim();
+    const id = pub ? 'pub-' + createHash('sha256').update(pub, 'utf8').digest('hex').slice(0, 16) : String(payload.bookId || '').trim();
+    if (!pub && !/^[A-Za-z0-9_-]{1,40}$/.test(id)) return { success: false, message: 'كود كتاب غير صالح.' };
+    const save = (url: string) => pub ? rt.run(store, 'SET_PUBLISHER_LOGO', rt.apiFn('SET_PUBLISHER_LOGO', { publisher: pub, url }, s))
+      : rt.run(store, 'SET_BOOK_COVER', rt.apiFn('SET_BOOK_COVER', { bookId: id, url }, s));
     const base = Deno.env.get('SUPABASE_URL')!, key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const objOf = (ext: string) => `${base}/storage/v1/object/book-covers/${id}.${ext}`;
     const del = (ext: string) => fetch(objOf(ext), { method: 'DELETE', headers: { Authorization: `Bearer ${key}`, apikey: key } }).then(r => r.text()).catch(() => {});
     if (!payload.dataUrl) { // حذف الصورة
       await del('webp'); await del('jpg');
-      return await rt.run(store, 'SET_BOOK_COVER', rt.apiFn('SET_BOOK_COVER', { bookId: id, url: '' }, s));
+      return await save('');
     }
     const m = String(payload.dataUrl).match(/^data:image\/(webp|jpeg);base64,([A-Za-z0-9+/=]+)$/);
     if (!m) return { success: false, message: 'صيغة الصورة غير مدعومة.' };
@@ -243,7 +247,7 @@ async function handle(action: string, payload: any, token: string) {
     if (!up.ok) { console.error('cover upload', up.status, await up.text()); return { success: false, message: 'تعذر رفع الصورة. حاول مرة أخرى.' }; }
     await del(ext === 'jpg' ? 'webp' : 'jpg'); // صورة واحدة لكل كتاب
     const url = `${base}/storage/v1/object/public/book-covers/${id}.${ext}?v=${Date.now()}`;
-    return await rt.run(store, 'SET_BOOK_COVER', rt.apiFn('SET_BOOK_COVER', { bookId: id, url }, s));
+    return await save(url);
   }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);

@@ -284,7 +284,7 @@ function booksTable() {
 Router.add("/a/books", view => {
   const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
+    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
     + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
       ${bookFilters()}
@@ -292,13 +292,38 @@ Router.add("/a/books", view => {
 });
 on("qBooks", v => { Q.books = v.trim(); rerenderList("booksList", booksTable); });
 // ---------------- صور أغلفة الكتب ----------------
-const coverThumb = x => `<button class="w-9 h-12 rounded-md shrink-0 overflow-hidden ring-1 ring-slate-200 bg-slate-50 flex items-center justify-center text-slate-300 hover:ring-brand-400" data-act="${can("SAVE_BOOK") ? "coverPick" : "coverView"}" data-id="${esc(x.Book_ID)}" title="صورة الغلاف">${x.Cover_URL ? `<img src="${esc(x.Cover_URL)}" alt="" loading="lazy" class="w-full h-full object-cover">` : ic("plus")}</button>`;
+const coverThumb = x => `<button class="w-9 h-12 rounded-md shrink-0 overflow-hidden ring-1 ring-slate-200 bg-slate-50 flex items-center justify-center text-slate-300 hover:ring-brand-400" data-act="${can("SAVE_BOOK") ? "coverPick" : "coverView"}" data-id="${esc(x.Book_ID)}" title="صورة الغلاف">${x.Cover_URL ? `<img src="${esc(x.Cover_URL)}" alt="" loading="lazy" class="w-full h-full object-cover">` : logoFor(A().pubLogos, x.Publisher, x.Subject) ? `<img src="${esc(logoFor(A().pubLogos, x.Publisher, x.Subject))}" alt="" loading="lazy" class="w-full h-full object-contain p-0.5 bg-white opacity-70">` : ic("plus")}</button>`;
 /** يختار ملف(ات) صور من الجهاز */
 const pickFiles = multiple => new Promise(res => { const i = document.createElement("input"); i.type = "file"; i.accept = "image/*"; if (multiple) i.multiple = true; i.onchange = () => res([...(i.files || [])]); i.click(); });
-async function uploadCover(bookId, file) {
-  const dataUrl = await imgToWebp(file);
-  return call("UPLOAD_BOOK_COVER", { bookId, dataUrl });
+async function uploadCover(bookId, file, publisher) {
+  const dataUrl = await imgToWebp(file, publisher ? 400 : 600);
+  return call("UPLOAD_BOOK_COVER", publisher ? { publisher, dataUrl } : { bookId, dataUrl });
 }
+/** شعارات الناشرين: شعار واحد يظهر على كل كتب الناشر التي ليس لها غلاف خاص */
+function pubLogosHTML() {
+  const d = A(), logos = Object.assign({}, PUB_LOGOS_BUILTIN, d.pubLogos || {}), cnt = {}, lang = {}; d.books.forEach(b => { if (!b.Publisher) return; cnt[b.Publisher] = (cnt[b.Publisher] || 0) + 1; if (LANG_SUBJECTS.includes(b.Subject)) lang[b.Publisher] = (lang[b.Publisher] || 0) + 1; });
+  const pubs = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]);
+  const row = (key, title, sub) => `<li class="flex items-center gap-3 py-2.5 ${key.endsWith("|lang") ? "pr-6" : ""}">
+    <span class="w-14 h-11 rounded-xl ring-1 ring-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">${logos[key] ? `<img src="${esc(logos[key])}" alt="" class="max-w-full max-h-full object-contain">` : `<span class="text-slate-300">${ic("store")}</span>`}</span>
+    <span class="flex-1 min-w-0"><b class="block text-slate-800 truncate">${title}</b><span class="text-[12px] text-slate-500">${sub}</span></span>
+    <button class="btn btn-${logos[key] ? "ghost" : "soft"} btn-xs" data-act="pubLogoUp" data-id="${esc(key)}">${ic("upload")} ${logos[key] ? "تغيير" : "رفع"}</button>
+    ${logos[key] ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="pubLogoDel" data-id="${esc(key)}" aria-label="حذف">${ic("trash-2")}</button>` : ""}</li>`;
+  return `<p class="text-[13px] text-slate-500 mb-3">ارفع شعار كل ناشر مرة واحدة ويظهر على كل كتبه التي ليس لها صورة غلاف خاصة. ولو للناشر شعار مختلف لكتب اللغات (إنجليزي، ماث، ساينس…) ارفعه في السطر الفرعي. <b>${pubs.filter(p => logos[p]).length}</b> من ${pubs.length} لها شعار.</p>
+  <ul class="divide-y divide-slate-100">${pubs.map(p => row(p, esc(p), `<span class="num">${cnt[p]}</span> كتاب`) + (lang[p] ? row(p + "|lang", `${ic("graduation-cap", "text-emerald-600")} ${esc(p)} — كتب اللغات`, `<span class="num">${lang[p]}</span> كتاب · ${logos[p + "|lang"] ? "شعار خاص" : "يُستخدم الشعار الأساسي"}`) : "")).join("")}</ul>`;
+}
+let PL = null;
+on("pubLogos", () => { PL = UI.open(pubLogosHTML(), { title: "شعارات الناشرين", wide: true }); });
+const plRefresh = async () => { await Admin.load(); if (PL && PL.body && document.body.contains(PL.root)) PL.body.innerHTML = pubLogosHTML(); };
+on("pubLogoUp", async pub => {
+  const [f] = await pickFiles(false); if (!f) return;
+  busy(true, true);
+  try { const r = await uploadCover("", f, pub); toast(r.message, r.success ? "success" : "danger"); if (r.success) await plRefresh(); }
+  catch (e) { toast("تعذر قراءة الصورة", "danger"); } finally { busy(false, false); }
+});
+on("pubLogoDel", async pub => {
+  if (!await UI.confirm({ title: "حذف الشعار", message: "حذف شعار " + pub.replace("|lang", " (كتب اللغات)") + "؟", ok: "حذف", tone: "danger" })) return;
+  const r = await call("UPLOAD_BOOK_COVER", { publisher: pub, dataUrl: "" }, { block: true }); toast(r.message, r.success ? "success" : "danger"); if (r.success) await plRefresh();
+});
 on("coverView", id => { const b = A().books.find(x => x.Book_ID === id); if (b && b.Cover_URL) UI.open(`<img src="${esc(b.Cover_URL)}" class="w-full rounded-2xl" alt="">`, { title: esc(b.Book_Name) }); });
 on("coverPick", async id => {
   const b = A().books.find(x => x.Book_ID === id); if (!b) return;
