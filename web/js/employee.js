@@ -146,7 +146,7 @@ Router.add("/e/home", view => {
   // رسالة واحدة واضحة حسب موقفك الآن
   let msg;
   if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
-  else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ ✅ ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
+  else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ — ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
   else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم`, cta: "التفاصيل", href: "#/e/orders" };
   else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
@@ -170,15 +170,18 @@ Router.add("/e/home", view => {
         </div>
         ${inv ? `<div class="relative shrink-0">${UI.donut(paidPct, 104, "مسدد")}</div>` : ""}
       </div>
-      <a ${msg.href ? `href="${msg.href}"` : ""} ${msg.act ? `data-act="${msg.act}"` : ""} class="relative mt-5 flex items-center gap-3 rounded-2xl bg-white/10 ring-1 ring-white/15 p-3.5 ${msg.href ? "active:scale-[.98] transition" : ""}">
-        <span class="w-11 h-11 rounded-xl bg-gold-400/20 text-gold-300 flex items-center justify-center text-xl shrink-0">${ic(msg.icon)}</span>
-        <span class="flex-1 min-w-0"><span class="block font-bold text-[15.5px]">${esc(msg.title)}</span><span class="block text-[12.5px] text-brand-200 mt-0.5">${esc(msg.sub)}</span></span>
-        ${msg.cta ? `<span class="btn btn-gold btn-sm shrink-0 !text-brand-950">${esc(msg.cta)} ${ic("chevron-left")}</span>` : ""}
-      </a>
+      <div class="relative mt-5 rounded-2xl bg-white/10 ring-1 ring-white/15 p-4">
+        <div class="flex items-start gap-3">
+          <span class="w-11 h-11 rounded-xl bg-gold-400/20 text-gold-300 flex items-center justify-center text-xl shrink-0">${ic(msg.icon)}</span>
+          <div class="flex-1 min-w-0"><div class="font-bold text-[16px] leading-snug">${esc(msg.title)}</div><div class="text-[13px] text-brand-200 mt-1 leading-relaxed">${esc(msg.sub)}</div></div>
+        </div>
+        ${msg.cta ? `<a ${msg.href ? `href="${msg.href}"` : ""} ${msg.act ? `data-act="${msg.act}"` : ""} class="btn btn-gold w-full mt-4 !h-12 !text-[15px] !text-brand-950 justify-center">${esc(msg.cta)} ${ic("chevron-left")}</a>` : ""}
+      </div>
     </section>
 
   </div>
 
+  ${ph.Booking_Open ? wzHomeCard(reqQty) : ""}
   ${kidsHomeCard()}
   ${countdownHTML(nextMilestone(ph))}
   ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>
@@ -420,6 +423,24 @@ on("kdSave", async () => {
   setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
 });
 
+/** بطاقة «مساعد الحجز» في الرئيسية: خطوات الرحلة وموضعك الحالي فيها */
+function wzHomeCard(reqQty) {
+  let saved = null; try { saved = JSON.parse(localStorage.getItem(WZ_KEY())); } catch (_) {}
+  const steps = [["users", "العائلة"], ["book-open", "الكتب"], ["list-checks", "المراجعة"], ["wallet", "السداد"]];
+  const cur = saved ? ["family", "member", "review", "pay"].indexOf(saved.step) : reqQty ? 4 : -1;
+  const title = saved ? "كمّل حجزك من مكانك 👋" : reqQty ? "حجزك جاهز — تقدر تراجعه في أي وقت" : "احجز في دقيقتين خطوة بخطوة";
+  const cta = saved ? "كمّل الحجز" : reqQty ? "راجع وعدّل حجزك" : "ابدأ مع مساعد الحجز";
+  return `<section class="mt-4 lg:mt-6 card overflow-hidden">
+    <div class="p-4 sm:p-5 flex items-center gap-3 border-b border-slate-100">
+      <span class="w-12 h-12 rounded-2xl bg-gradient-to-br from-brand-600 to-brand-800 text-white flex items-center justify-center text-[22px] shrink-0 shadow-glow">🧭</span>
+      <div class="flex-1 min-w-0"><div class="text-[11.5px] font-bold text-brand-600">مساعد الحجز</div><h2 class="font-display font-bold text-[16.5px] text-slate-900 leading-snug">${title}</h2></div>
+    </div>
+    <ol class="grid grid-cols-4 gap-1 px-4 sm:px-5 pt-4">${steps.map((st, k) => `<li class="flex flex-col items-center text-center gap-1.5">
+      <span class="w-10 h-10 rounded-full flex items-center justify-center text-[17px] ${k < cur ? "bg-brand-600 text-white" : k === cur ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(k < cur ? "check" : st[0])}</span>
+      <span class="text-[11.5px] font-semibold ${k <= cur ? "text-slate-800" : "text-slate-400"}">${st[1]}</span></li>`).join("")}</ol>
+    <div class="p-4 sm:p-5 pt-4"><button class="btn btn-primary w-full !h-12 !text-[15px]" data-act="wizStart">${ic("chevron-left")} ${cta}</button></div>
+  </section>`;
+}
 /** بطاقة الرئيسية: دعوة لإضافة الأبناء أو شريطهم أو تهنئة بالصف الجديد */
 function kidsHomeCard() {
   const all = (APP.emp.employee && APP.emp.employee.kids) || [], ks = myKids(), promoted = all.filter(k => k.promoted);
