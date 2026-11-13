@@ -229,10 +229,14 @@ function cartHTML() {
   const methods = [["INSTALLMENT", "calendar-check", "تقسيط", "مقدم + أقساط شهرية"], ["CASH", "banknote", "نقداً", "كامل القيمة عند الاستلام"], ["INSTAPAY", "send", "إنستاباي", "تحويل كامل القيمة"], ["WALLET", "smartphone", "محفظة", "تحويل كامل القيمة"]];
   const ids = Object.keys(APP.cart);
   return `
-  ${ids.length ? ["", ...new Set(ids.map(bn).filter(Boolean))].filter(g => ids.some(k => bn(k) === g)).map(g => `${relOn() || g ? `<div class="text-[12px] font-bold ${g ? "text-sky-700" : "text-brand-700"} mt-2 mb-0.5 flex items-center gap-1">${ic(g ? "users" : "user")} ${g ? "لـ " + esc(g) : "لي ولأبنائي"}</div>` : ""}<ul class="divide-y divide-slate-100 -my-1">${ids.filter(k => bn(k) === g).map(id => { const b = t.m[bk(id)]; if (!b) return ""; return `<li class="flex items-center gap-3 py-2.5">
-      <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500 num">${fmt(b.Emp_Selling_Price)} × ${APP.cart[id]} = <b class="text-slate-700">${fmt(n(b.Emp_Selling_Price) * APP.cart[id])}</b></div></div>
-      ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(id)}" ${APP.cart[id] >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${APP.cart[id]}</span><button data-act="cartDec" data-id="${esc(id)}">${ic(APP.cart[id] === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${APP.cart[id]}</span>`}
-    </li>`; }).join("")}</ul>`).join("")
+  ${ids.length ? resGroups(cartLines()).map(g => `<section class="mt-3 first:mt-0 rounded-2xl ring-1 ring-slate-200 overflow-hidden">
+      <div class="flex items-center gap-2.5 px-3 py-2 bg-brand-50/60"><span class="text-[22px] leading-none">${g.emoji}</span>
+        <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[11.5px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
+        <div class="text-left shrink-0"><div class="font-bold text-[13.5px] text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
+      <ul class="divide-y divide-slate-100 px-3">${g.lines.map(l => `<li class="flex items-center gap-3 py-2.5">
+      <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(l.name)}</div><div class="text-[12px] text-slate-500 num">${fmt(l.price)} × ${l.qty} = <b class="text-slate-700">${fmt(n(l.price) * l.qty)}</b></div></div>
+      ${open ? `<div class="stepper scale-90 origin-left"><button data-act="cartInc" data-id="${esc(l.key)}" ${l.qty >= (n(s.MAX_QTY_PER_BOOK) || 3) ? "disabled" : ""}>${ic("plus")}</button><span>${l.qty}</span><button data-act="cartDec" data-id="${esc(l.key)}">${ic(l.qty === 1 ? "trash-2" : "minus")}</button></div>` : `<span class="font-bold num">${l.qty}</span>`}
+    </li>`).join("")}</ul></section>`).join("")
     : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊")}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
@@ -663,7 +667,7 @@ function resGroups(lines) {
   });
   return Object.values(map).sort((a, b) => a.ord - b.ord);
 }
-const cartLines = () => { const bm = Emp.bookMap(); return Object.keys(APP.cart).map(k => { const b = bm[bk(k)] || {}; return { code: bk(k), name: b.Book_Name || bk(k), subject: b.Subject || "", grade: b.Grade, ben: bn(k), qty: APP.cart[k], cover: b.Cover_Price, price: b.Emp_Selling_Price }; }); };
+const cartLines = () => { const bm = Emp.bookMap(); return Object.keys(APP.cart).map(k => { const b = bm[bk(k)] || {}; return { key: k, code: bk(k), name: b.Book_Name || bk(k), subject: b.Subject || "", grade: b.Grade, ben: bn(k), qty: APP.cart[k], cover: b.Cover_Price, price: b.Emp_Selling_Price }; }); };
 /** محتوى صفحة تأكيد الحجز: كتب كل ابن وصفه ثم الإجمالي وخطة السداد */
 function resSummaryHTML(lines, opts) {
   const gs = resGroups(lines), cnt = lines.reduce((a, l) => a + l.qty, 0), net = gs.reduce((a, g) => a + g.net, 0), cover = gs.reduce((a, g) => a + g.cover, 0), pc = Emp.planCalc(net), p = APP.plan;
