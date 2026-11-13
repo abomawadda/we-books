@@ -43,6 +43,9 @@ assert.deepStrictEqual(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal kids'
   const ks = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal next year').employee.kids;
   assert.deepStrictEqual(ks.map(k => [k.grade, k.promoted, !!k.graduated]), [['5 ابتدائي', 1, false], ['', 1, true]]); clock.now = sv; }
 fail(api('SAVE_MY_KIDS', { kids: [] }, adm.sessionToken), 'admin cannot save kids');
+fail(api('SAVE_MY_KIDS', { kids: [{ name: '', grade: '1 ثانوي', rel: 'ابن أخ' }] }, e1), 'relative needs name', /اسم/);
+ok(api('SAVE_MY_KIDS', { kids: [{ name: 'محمد', grade: '4 ابتدائي' }, { name: 'أحمد', grade: '1 ثانوي', type: 'أزهر', rel: 'ابن أخ' }] }, e1), 'save kid + relative');
+assert.strictEqual(ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, e1), 'portal rel').employee.kids[1].rel, 'ابن أخ'); passed++;
 // شعار الناشر: روابط المخزن فقط، ويظهر للموظف
 fail(api('SET_PUBLISHER_LOGO', { publisher: 'ناشر وهمي', url: '' }, adm.sessionToken), 'logo unknown pub', /الناشر/);
 { const pub = rows(S.BOOKS)[0].Publisher;

@@ -322,28 +322,32 @@ function popInfo(b) {
 const typeOk = (b, t) => !t || String(b.School_Types || "").split(/[،,]/).map(x => x.trim()).includes(t);
 // ============================================================ أبنائي (محفوظون في حساب الموظف على الخادم)
 const myKids = () => ((APP.emp && APP.emp.employee && APP.emp.employee.kids) || []).filter(k => k.grade);
-const kidEmoji = k => k.gender === "g" ? "👧" : "👦";
+const kidEmoji = k => k.rel ? "🧒" : k.gender === "g" ? "👧" : "👦";
 const kidName = (k, i) => k.name || (k.gender === "g" ? "ابنتي" : "ابني") + (i ? " " + (i + 1) : "");
+/** اسم المستفيد في الحجز: فارغ لأبناء الموظف، و«الاسم — الصلة» للقريب */
+const kidBen = k => k && k.rel ? String(k.name).trim() + " — " + k.rel : "";
+const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت", "حفيد", "حفيدة", "أخ", "أخت", "ابن عم", "ابن خال", "أخرى"];
 const kidTypeTxt = t => t ? "مدارس " + t : "كل المدارس";
 /** كم كتاب في السلة لصف هذا الابن */
-const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && b.Grade === k.grade && !bn(id); }).reduce((s, id) => s + APP.cart[id], 0);
+const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && (k.rel ? bn(id) === kidBen(k) : b.Grade === k.grade && !bn(id)); }).reduce((s, id) => s + APP.cart[id], 0);
 const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type) && b.Book_Status !== "Pricing").length;
-function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.q = ""; Emp.kidIx = i; if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
+function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.q = ""; Emp.kidIx = i;
+  Emp.ben = kidBen(k); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
 on("pickKid", v => openKid(+v));
 
 /** شريط الأبناء (الرئيسية وصفحة الحجز) */
 function kidsStrip(compact) {
   const ks = myKids();
-  return `<div class="scroll-x ${compact ? "" : "mt-1"}">${ks.map((k, i) => { const on = Emp.filter.grade === k.grade && (Emp.filter.type || "") === (k.type || ""), c = kidCartCount(k);
+  return `<div class="scroll-x ${compact ? "" : "mt-1"}">${ks.map((k, i) => { const on = Emp.filter.grade === k.grade && (Emp.filter.type || "") === (k.type || "") && Emp.ben === kidBen(k), c = kidCartCount(k);
     return `<button class="shrink-0 flex items-center gap-2 rounded-2xl pl-3 pr-1.5 py-1.5 ring-1 transition active:scale-95 ${on ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-700 ring-slate-200"}" data-act="pickKid" data-id="${i}">
       <span class="w-9 h-9 rounded-xl ${on ? "bg-white/15" : "bg-gold-50"} flex items-center justify-center text-[20px]">${kidEmoji(k)}</span>
-      <span class="text-right leading-tight"><span class="block font-bold text-[13px]">${esc(kidName(k, i))}</span><span class="block text-[11px] ${on ? "text-brand-100" : "text-slate-500"}">${esc(gradeShort(k.grade))}${c ? ` · <b class="num">${c}</b> في السلة` : ""}</span></span></button>`; }).join("")}
-    <button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "تعديل" : "أضف أبنائي"}</button></div>`;
+      <span class="text-right leading-tight"><span class="block font-bold text-[13px]">${esc(kidName(k, i))}</span><span class="block text-[11px] ${on ? "text-brand-100" : "text-slate-500"}">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${c ? ` · <b class="num">${c}</b> في السلة` : ""}</span></span></button>`; }).join("")}
+    <button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "تعديل" : "أضف أبنائي"}</button>${relOn() ? `<button class="shrink-0 flex items-center gap-1.5 rounded-2xl px-3 py-1.5 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50/50 text-[13px] font-bold" data-act="addRel">${ic("users")} قريب</button>` : ""}</div>`;
 }
 
 // ---------------- محرّر الأبناء: خطوات قصيرة لكل ابن ----------------
 const KD = { list: [], i: 0, m: null };
-const kdBlank = () => ({ name: "", gender: "b", grade: "", type: "" });
+const kdBlank = rel => ({ name: "", gender: "b", grade: "", type: "", rel: rel ? "ابن أخ" : "" });
 function kdHTML() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), k = KD.list[KD.i] || kdBlank();
   const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
@@ -352,12 +356,15 @@ function kdHTML() {
   return `
   <div class="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">${KD.list.map((x, i) => `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdPick" data-id="${i}">
       <span class="w-14 h-14 rounded-2xl flex items-center justify-center text-[28px] transition ${i === KD.i ? "bg-brand-700 ring-4 ring-brand-100" : x.grade ? "bg-gold-100" : "bg-slate-100"}">${kidEmoji(x)}</span>
-      <span class="text-[11px] font-semibold truncate w-full text-center ${i === KD.i ? "text-brand-800" : "text-slate-500"}">${esc(x.name || "ابن " + (i + 1))}</span></button>`).join("")}
-    ${KD.list.length < 8 ? `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdAdd"><span class="w-14 h-14 rounded-2xl border-2 border-dashed border-brand-300 text-brand-600 flex items-center justify-center text-2xl">${ic("plus")}</span><span class="text-[11px] font-semibold text-brand-700">ابن آخر</span></button>` : ""}</div>
+      <span class="text-[11px] font-semibold truncate w-full text-center ${i === KD.i ? "text-brand-800" : "text-slate-500"}">${esc(x.name || (x.rel ? "قريب" : "ابن " + (i + 1)))}</span></button>`).join("")}
+    ${KD.list.length < 12 ? `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdAdd"><span class="w-14 h-14 rounded-2xl border-2 border-dashed border-brand-300 text-brand-600 flex items-center justify-center text-2xl">${ic("plus")}</span><span class="text-[11px] font-semibold text-brand-700">إضافة</span></button>` : ""}</div>
 
   <div class="rounded-3xl bg-slate-50 p-4 mt-2 space-y-4">
+    ${relOn() ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["", "👦👧 ابني / بنتي"], ["rel", "🧒 قريب"]].map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${!!k.rel === !!o[0]}">${o[1]}</button>`).join("")}</div>` : ""}
+    ${k.rel ? `<div><div class="label">صلة القرابة</div><div class="flex flex-wrap gap-1.5">${RELS.map(r => `<button class="chip !h-8 !text-xs" data-act="kdRel" data-id="${esc(r)}" aria-pressed="${k.rel === r}">${esc(r)}</button>`).join("")}</div>
+      <p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5")} كتب القريب تُحسب على حسابك (المقدم والأقساط) وتظهر باسمه في الطلب.</p></div>` : ""}
     <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
-      <div><label class="label" for="kdName">الاسم <span class="text-slate-400 font-normal">(اختياري)</span></label><input id="kdName" class="input" maxlength="30" placeholder="مثلاً: محمد" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
+      <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="مثلاً: محمد" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
       <div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>
     </div>
     <div><div class="label">في أي مرحلة؟</div>
@@ -367,34 +374,42 @@ function kdHTML() {
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
     ${k.grade ? `<div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-3 flex items-center gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500")} <span>${esc(kidName(k, KD.i))} في <b>${esc(gradeTitle(k.grade))}</b> — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>` : ""}
   </div>
-  ${KD.list.length > 1 ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف هذا الابن</button>` : ""}
+  ${KD.list.length > 1 ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${k.rel ? "هذا القريب" : "هذا الابن"}</button>` : ""}
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
-const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; b.innerHTML = `${ic("check-check")} حفظ ${n2 > 1 ? n2 + " أبناء" : ""}`; } } };
-on("kidsEdit", () => {
-  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "" }));
-  KD.list = ks.length ? ks : [kdBlank()]; KD.i = Math.max(0, KD.list.findIndex(k => !k.grade)); if (KD.i < 0) KD.i = 0;
-  KD.m = UI.open(kdHTML(), { title: "👨‍👩‍👧 عرّفنا على أبنائك", sub: "20 ثانية لكل ابن — ونجهّز لكل واحد كتبه تلقائياً",
+const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; b.innerHTML = `${ic("check-check")} حفظ ${n2 > 1 ? "(" + n2 + ")" : ""}`; } } };
+function kidsEditor(addRel) {
+  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", rel: k.rel || "" }));
+  KD.list = ks.length ? ks : [kdBlank(addRel)];
+  if (addRel && ks.length) KD.list.push(kdBlank(true));
+  KD.i = addRel ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
+  KD.m = UI.open(kdHTML(), { title: addRel ? "🧒 إضافة قريب" : "👨‍👩‍👧 أبنائي وأقاربي", sub: "20 ثانية لكل فرد — ونجهّز لكل واحد كتب صفه تلقائياً",
     footer: `<button class="btn btn-primary btn-lg w-full" data-act="kdSave">${ic("check-check")} حفظ</button>` });
   kdRender();
-});
+}
+on("kidsEdit", () => { KD._addRel = false; kidsEditor(false); });
+on("addRel", () => { KD._addRel = true; kidsEditor(true); });
+on("kdKind", v => { const k = KD.list[KD.i]; k.rel = v ? (k.rel || "ابن أخ") : ""; kdRender(); });
+on("kdRel", v => { KD.list[KD.i].rel = v; kdRender(); });
 on("kdName", v => { (KD.list[KD.i] || {}).name = v; });
 on("kdGender", v => { KD.list[KD.i].gender = v; kdRender(); });
 on("kdStage", v => { const k = KD.list[KD.i]; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) k.grade = ""; kdRender(); });
 on("kdGrade", v => { KD.list[KD.i].grade = v; kdRender(); });
 on("kdType", v => { KD.list[KD.i].type = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdPick", v => { KD.i = +v; kdRender(); });
-on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast("اختر صف الابن الحالي أولاً 👆", "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
+on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast("اختر الصف أولاً 👆", "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
 on("kdDel", () => { KD.list.splice(KD.i, 1); KD.i = Math.max(0, KD.i - 1); kdRender(); });
 on("kdSave", async () => {
-  const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "" }));
-  if (!kids.length) return toast("اختر صف ابن واحد على الأقل", "warning");
+  const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "", rel: k.rel || "" }));
+  if (!kids.length) return toast("اختر الصف لفرد واحد على الأقل", "warning");
+  const noName = kids.findIndex(k => k.rel && !k.name); if (noName >= 0) { KD.i = KD.list.indexOf(KD.list.filter(k => k.grade)[noName]); kdRender(); return toast("اكتب اسم القريب", "warning"); }
   const r = await call("SAVE_MY_KIDS", { kids }, { block: true });
   if (!r.success) return toast(r.message, "danger");
   APP.emp.employee.kids = kids.map(k => Object.assign({ promoted: 0 }, k));
   if (KD.m) KD.m.close(); KD.m = null;
-  toast(kids.length > 1 ? `رائع! جهّزنا كتب ${kids.length} أبناء 🎉` : "رائع! جهّزنا كتب ابنك 🎉", "success");
-  setTimeout(() => openKid(0), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
+  toast(kids.length > 1 ? `رائع! جهّزنا كتب ${kids.length} أفراد 🎉` : "رائع! جهّزنا الكتب 🎉", "success");
+  const last = KD._addRel ? kids.length - 1 : 0;
+  setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
 });
 
 /** بطاقة الرئيسية: دعوة لإضافة الأبناء أو شريطهم أو تهنئة بالصف الجديد */
@@ -408,12 +423,13 @@ function kidsHomeCard() {
           <li class="flex gap-1.5">${ic("check", "text-emerald-600 mt-0.5")} كتب كل ابن جاهزة له بضغطة — بدون بحث</li>
           <li class="flex gap-1.5">${ic("check", "text-emerald-600 mt-0.5")} المواد الأساسية والأشهر أولاً لصفه ونوع مدرسته</li>
           <li class="flex gap-1.5">${ic("check", "text-emerald-600 mt-0.5")} ننقلهم للصف الجديد تلقائياً كل سنة</li></ul>
-        <button class="btn btn-primary mt-4" data-act="kidsEdit">${ic("plus")} أضف أبنائي — أقل من دقيقة</button></div></section>`;
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4"><button class="btn btn-primary" data-act="kidsEdit">${ic("plus")} أضف أبنائي — أقل من دقيقة</button>
+          <a href="#/e/books" class="text-[13px] font-semibold text-brand-800 underline underline-offset-4">أو احجز مباشرة بدون تسجيل ←</a></div></div></section>`;
   return `${promoted.length ? `<section class="mt-4 lg:mt-6 rounded-3xl bg-emerald-50 ring-1 ring-emerald-200 p-4 flex items-center gap-3">
       <span class="text-[30px]">🎓</span><div class="flex-1 min-w-0"><b class="block text-emerald-900 text-[14.5px]">سنة دراسية جديدة! نقلنا أبناءك للصف التالي</b>
       <span class="block text-[12.5px] text-emerald-800/80 mt-0.5">${all.map((k, i) => esc(kidName(k, i)) + " ← " + esc(k.graduated ? "تخرّج 🎉" : gradeShort(k.grade))).join(" · ")}</span></div>
       <button class="btn btn-success btn-sm shrink-0" data-act="kidsEdit">راجع وأكّد</button></section>` : ""}
-    <section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-2"><h2 class="card-title">${ic("users", "text-brand-600")} أبنائي</h2><span class="text-[12px] text-slate-400">اضغط على ابن لعرض كتبه</span></div>${kidsStrip(true)}</section>`;
+    <section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-2"><h2 class="card-title">${ic("users", "text-brand-600")} أبنائي${myKids().some(k => k.rel) ? " وأقاربي" : ""}</h2><span class="text-[12px] text-slate-400">اضغط على الاسم لعرض كتبه</span></div>${kidsStrip(true)}</section>`;
 }
 
 function bookCard(b) {
@@ -455,10 +471,10 @@ function gradePicker() {
   const go = gradeOrder(), grades = Object.keys(cnt).sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99) || a.localeCompare(b, "ar"));
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
-  return `${ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-3 text-right flex items-center gap-3 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-12 h-12 rounded-2xl bg-gold-50 flex items-center justify-center text-[26px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[12px] text-slate-500">${esc(gradeTitle(k.grade))} · ${esc(kidTypeTxt(k.type))}</span></span>${c ? `<span class="pill pill-green">${c} في السلة</span>` : `<span class="pill pill-brand">${kidAvail(k)} كتاب</span>`}</button>`; }).join("")}</div>
-      <button class="btn btn-ghost btn-sm mt-2" data-act="kidsEdit">${ic("pencil")} تعديل أبنائي</button></section>`
-    : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك مرة واحدة</b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل ابن كتبه بضغطة في كل مرة</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
+  return `${ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-3 text-right flex items-center gap-3 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-12 h-12 rounded-2xl bg-gold-50 flex items-center justify-center text-[26px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[12px] text-slate-500">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeTitle(k.grade))} · ${esc(kidTypeTxt(k.type))}</span></span>${c ? `<span class="pill pill-green">${c} في السلة</span>` : `<span class="pill pill-brand">${kidAvail(k)} كتاب</span>`}</button>`; }).join("")}</div>
+      <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
+    : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
     <h2 class="font-display font-bold text-slate-800 mb-1 flex items-center gap-2">${ic("graduation-cap", "text-brand-600")} ${ks.length ? "أو اختر صفاً آخر" : "اختر صف ابنك"}</h2>
     <p class="text-[13px] text-slate-500 mb-4">نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر.</p>
     ${stages.map(s => `<section class="mb-5"><div class="text-[13px] font-bold text-brand-700 mb-2">${esc(s)}</div>
@@ -565,12 +581,12 @@ Router.add("/e/books", view => {
       ${f.grade ? `<div class="rounded-3xl p-4 mb-3 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
         <span class="absolute -left-6 -top-8 w-32 h-32 rounded-full bg-white/5"></span>
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
-          <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${(() => { const i = myKids().findIndex(k => k.grade === f.grade && (k.type || "") === (f.type || "")); return i >= 0 ? "كتب " + esc(kidName(myKids()[i], i)) + " " + kidEmoji(myKids()[i]) : "كتب"; })()}</div><div class="font-display font-bold text-[20px] leading-tight">${esc(gradeTitle(f.grade))}</div></div>
+          <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${(() => { const i = myKids().findIndex(k => k.grade === f.grade && (k.type || "") === (f.type || "") && kidBen(k) === Emp.ben); return i >= 0 ? "كتب " + esc(kidName(myKids()[i], i)) + " " + kidEmoji(myKids()[i]) : "كتب"; })()}</div><div class="font-display font-bold text-[20px] leading-tight">${esc(gradeTitle(f.grade))}</div></div>
           <button class="btn btn-sm !bg-white/15 !text-white !ring-white/20" data-act="fGrade" data-id="">${ic("arrow-left-right")} تغيير</button></div>
         <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div>${Emp.open() ? `<button class="mt-3 w-full flex items-center gap-3 rounded-2xl bg-gold-400 text-brand-950 px-4 py-3 font-bold active:scale-[.98] transition shadow-soft" data-act="bagOpen"><span class="text-[26px] leading-none">🎒</span><span class="flex-1 text-right"><span class="block text-[15.5px]">جهّز الشنطة كاملة</span><span class="block text-[11.5px] font-semibold opacity-75">كتاب لكل مادة بضغطة — وعدّل براحتك</span></span>${ic("chevron-left")}</button>` : ""}</div>` : ""}
       <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-2 bg-slate-50/90 backdrop-blur-xl">
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="${f.grade ? "ابحث في كتب " + esc(gradeShort(f.grade)) : "ابحث باسم الكتاب أو الناشر أو المادة"}" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
-        ${relOn() && Emp.open() ? `<div class="scroll-x mt-2 items-center"><span class="text-[12px] font-semibold text-slate-500 shrink-0">أحجز لـ:</span><button class="chip !h-8 !text-xs" data-act="pickBen" data-id="" aria-pressed="${!Emp.ben}">${ic("user")} لي ولأبنائي</button>${Emp.bens.map(x => `<button class="chip !h-8 !text-xs" data-act="pickBen" data-id="${esc(x)}" aria-pressed="${Emp.ben === x}">${ic("users")} ${esc(x)}</button>`).join("")}<button class="chip !h-8 !text-xs" data-act="addBen">${ic("plus")} قريب</button></div>` : ""}
+        ${relOn() && Emp.open() && Emp.ben && !myKids().some(k => kidBen(k) === Emp.ben) ? `<div class="mt-2 rounded-xl bg-sky-50 ring-1 ring-sky-200 text-sky-800 text-[12.5px] px-3 py-2 flex items-center gap-2">${ic("users")} تحجز الآن لـ <b>${esc(Emp.ben)}</b><button class="mr-auto text-sky-700 underline" data-act="pickBen" data-id="">رجوع لأبنائي</button></div>` : ""}
         ${subs.length > 1 ? `<div class="scroll-x mt-2">${subs.map(x => `<button class="chip !h-8 !text-xs" data-act="jumpSubj" data-id="${esc(x)}">${esc(x)}</button>`).join("")}</div>` : ""}
         ${!f.grade && types.length ? `<div class="scroll-x mt-2"><span class="text-[12px] font-semibold text-slate-500 shrink-0 self-center">نوع المدرسة:</span>${[["", "الكل"], ...types.map(t => [t, t])].map(t => `<button class="chip !h-8 !text-xs" data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}">${esc(t[1])}</button>`).join("")}</div>` : ""}
       </div>
@@ -603,17 +619,7 @@ on("addBundle", async pub => {
 });
 
 on("pickBen", v => { Emp.ben = v; Shell.rerender(); });
-on("addBen", async () => {
-  const mx = n(APP.emp.settings.MAX_RELATIVES) || 5;
-  if (Emp.bens.length >= mx) return toast("الحد الأقصى " + mx + " أقارب", "warning");
-  const v = await UI.form({ title: "الحجز لقريب", intro: "تُضاف كتب القريب إلى حجزك وتُحسب على حسابك (المقدم والأقساط).",
-    fields: [{ name: "name", label: "اسم القريب", required: true }, { name: "rel", label: "صلة القرابة", type: "select", value: "ابن أخ", options: ["ابن أخ", "ابن أخت", "حفيد", "أخ", "أخت", "ابن عم", "ابن خال", "أخرى"].map(x => [x, x]) }], ok: "متابعة" });
-  if (!v || !v.name.trim()) return;
-  const label = v.name.trim().replace(/[|]/g, " ") + " — " + v.rel;
-  if (!Emp.bens.includes(label)) Emp.bens.push(label);
-  Emp.ben = label; Shell.rerender();
-  toast("اختر الكتب الآن لـ " + label, "info");
-});
+on("addBen", () => ACTIONS.addRel());
 on("fSubject", v => { Emp.filter.subject = v; Shell.rerender(); });
 /** ترتيب الصفوف كما في الكتالوج (تأسيس ← كي جي ← ابتدائي ← إعدادي ← ثانوي) */
 function gradeOrder() { const o = {}; ((APP.emp && APP.emp.catalog && APP.emp.catalog.grades) || []).forEach((g, i) => { o[g.label] = i; }); return o; }
@@ -660,8 +666,9 @@ function resGroups(lines) {
     g.lines.push(l); g.count += l.qty; g.net += l.qty * n(l.price); g.cover += l.qty * n(l.cover);
   });
   Object.values(map).forEach(g => {
-    if (g.key.startsWith("ben:")) { g.title = g.key.slice(4); g.emoji = "🧒"; g.sub = "قريب"; g.ord = 900; return; }
-    const grade = g.key.slice(2), kids = ks.map((k, i) => ({ k, i })).filter(x => x.k.grade === grade);
+    if (g.key.startsWith("ben:")) { const b = g.key.slice(4), ri = ks.findIndex(k => kidBen(k) === b), rk = ks[ri];
+      g.title = rk ? rk.name + " (" + rk.rel + ")" : b; g.emoji = "🧒"; g.sub = rk ? gradeTitle(rk.grade) : "قريب"; g.ord = rk ? 500 + ri : 900; return; }
+    const grade = g.key.slice(2), kids = ks.map((k, i) => ({ k, i })).filter(x => x.k.grade === grade && !x.k.rel);
     g.title = kids.length ? kids.map(x => kidName(x.k, x.i)).join(" و") : gradeTitle(grade) || "كتب أخرى";
     g.emoji = kids.length ? kidEmoji(kids[0].k) : "📚"; g.sub = kids.length ? gradeTitle(grade) : ""; g.ord = kids.length ? kids[0].i : 100 + (go[grade] ?? 99);
   });

@@ -65,7 +65,12 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="cartInc"][data-id="BK-101"]');
   await click('[data-act="cartInc"][data-id="BK-201"]');
   // الحجز لقريب
-  await click('[data-act="addBen"]'); fill('name', 'أحمد'); await ok();
+  await click('[data-act="addRel"]');
+  { const i = dialog().querySelector('#kdName'); i.value = 'أحمد'; i.dispatchEvent(new w.Event('input', { bubbles: true })); }
+  await click('[data-act="kdStage"][data-id="المرحلة الابتدائية"]', dialog()); await click('[data-act="kdGrade"][data-id="4 ابتدائي"]', dialog());
+  await click('[data-act="kdSave"]', dialog()); await settle(); await sleep(450); await settle();
+  check(w.eval('Emp').ben === 'أحمد — ابن أخ', 'relative profile selected as beneficiary');
+  w.eval('Emp').filter.q = 'BK'; w.eval('Emp').filter.grade = ''; w.eval('Emp').filter.type = ''; w.eval('renderBookGrid')();
   await click('[data-act="cartInc"][data-id="BK-101"]');
   check(Object.keys(w.eval('APP').cart).some(k => k === 'BK-101|أحمد — ابن أخ'), 'relative line in cart');
   check(/BK-101|سلاح/.test(d.querySelector('.cart-body').textContent) || true, 'cart updated');

@@ -813,9 +813,11 @@ const OperationsEngine = {
   },
   saveMyKids: function(empId, kids) {
     const S = this.S(), lists = SYSTEM_CONFIG.CATALOG;
-    Util.require(Array.isArray(kids) && kids.length <= 8, "الحد الأقصى 8 أبناء.");
-    const clean = kids.map(k => ({ name: Util.str(k.name).replace(/[|<>]/g, " ").slice(0, 30), gender: k.gender === "g" ? "g" : "b",
-      grade: Util.str(k.grade), type: Util.str(k.type) }));
+    Util.require(Array.isArray(kids) && kids.length <= 12, "الحد الأقصى 12 (أبناء وأقارب).");
+    // rel = صلة القرابة لقريب (كتبه تُسجَّل باسمه كمستفيد)، وفارغة لأبناء الموظف
+    const clean = kids.map(k => ({ name: Util.str(k.name).replace(/[|<>—]/g, " ").slice(0, 30), gender: k.gender === "g" ? "g" : "b",
+      grade: Util.str(k.grade), type: Util.str(k.type), rel: Util.str(k.rel).replace(/[|<>—]/g, " ").slice(0, 20) }));
+    clean.forEach((k, i) => Util.require(!k.rel || k.name, "اكتب اسم القريب رقم " + (i + 1) + "."));
     clean.forEach((k, i) => { Util.require(lists.GRADES.some(g => g.label === k.grade), "اختر صف الابن رقم " + (i + 1) + "."); Util.require(!k.type || lists.SCHOOL_TYPES.indexOf(k.type) !== -1, "نوع مدرسة غير صحيح."); });
     const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === Util.str(empId));
     Util.require(emp, "الحساب غير موجود.");
