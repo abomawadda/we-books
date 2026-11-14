@@ -65,6 +65,43 @@ const SYSTEM_CONFIG = {
   EXPENSE_CATEGORIES: ["مصاريف شحن ونقل", "مصاريف تحميل وتنزيل ومشال", "مصاريف تعبئة وتغليف", "أجور عمال ومكافآت تنظيم", "أخرى"]
 };
 
+// قوائم دور النشر والمواد حسب الشهرة (المعاصر، الأضواء، سلاح التلميذ... / عربي، إنجليزي، رياضيات...)
+const POPULAR_PUBLISHERS = [
+  "المعاصر", "الأضواء", "سلاح التلميذ", "الامتحان", "بوني", "سندباد",
+  "الشاطر", "الباهر", "قطر الندى", "بيت باي بيت", "ستيب أهيد", "جيم",
+  "برافو", "التفوق", "الوافي", "نيوتن", "مندليف", "المرشد", "الإبداع",
+  "كيان", "الفايز", "الموسوعة", "النفيس", "الوسام", "نور البيان",
+  "التأسيس السليم", "الأستاذ", "المعلم", "البيان", "الأبرار", "الميسر",
+  "ترافيللر", "جينيال", "ستار", "لافي أليكس", "لو اكسلانس", "ماي دريم", "ميرسي"
+];
+
+const POPULAR_SUBJECTS = [
+  "عربي", "نحو", "نحو وصرف", "بلاغة", "إنجليزي", "رياضيات", "ماث",
+  "رياضيات بحتة", "رياضيات تطبيقية", "رياضيات أدبي", "إحصاء",
+  "علوم", "ساينس", "علوم متكاملة", "فيزياء", "كيمياء", "أحياء",
+  "دراسات", "تاريخ", "جغرافيا", "فلسفة ومنطق", "علم نفس",
+  "دين", "فقه شافعي", "تفسير", "حديث", "توحيد", "أصول دين",
+  "حاسب آلي", "تكنولوجيا", "أي سي تي", "ديسكفري", "مهارات", "مهارات مهنية",
+  "فرنساوي", "ألماني"
+];
+
+function normArText(s) {
+  return String(s || "").trim().replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/\s+/g, " ").toLowerCase();
+}
+const PUB_POP_MAP = {};
+POPULAR_PUBLISHERS.forEach((p, i) => { PUB_POP_MAP[normArText(p)] = i; });
+const SUB_POP_MAP = {};
+POPULAR_SUBJECTS.forEach((s, i) => { SUB_POP_MAP[normArText(s)] = i; });
+
+function publisherPopularityRank(name) {
+  const norm = normArText(name);
+  return PUB_POP_MAP[norm] !== undefined ? PUB_POP_MAP[norm] : 9999;
+}
+function subjectPopularityRank(name) {
+  const norm = normArText(name);
+  return SUB_POP_MAP[norm] !== undefined ? SUB_POP_MAP[norm] : 9999;
+}
+
 // أعمدة تُخزَّن كنص حتى لا تضيع الأصفار اليسرى (أكواد، موبايل، رقم قومي)
 const TEXT_COLUMNS = ["Emp_ID", "National_ID_Last4", "Mobile", "Phone", "Book_ID", "Supplier_ID",
   "Phase_ID", "Res_ID", "Res_Item_ID", "Transaction_Ref", "Receipt_No", "Supplier_Invoice_No",
@@ -467,8 +504,8 @@ function seedInitialData_() {
       st("CASH_ACCOUNT_HOLDER", "محمود العراقي", "STRING", "اسم صاحب المحفظة وحساب إنستاباي"),
       st("DEFICIT_BEARER", "أمين الصندوق", "STRING", "الجهة التي تتحمل العجز ويؤول إليها الفائض"),
       st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى"),
-      st("BOOK_PUBLISHERS", "الأبرار،الأستاذ،الأضواء،الإبداع،الامتحان،الباهر،البيان،التأسيس السليم،التفوق،الشاطر،الفايز،المرشد،المعاصر،المعلم،الموسوعة،الميسر،النفيس،الوافي،الوسام،برافو،بوني،بيت باي بيت،ترافيللر،جيم،جينيال،ستار،ستيب أهيد،سلاح التلميذ،سندباد،قطر الندى،كيان،لافي أليكس،لو اكسلانس،ماي دريم،مندليف،ميرسي،نور البيان،نيوتن", "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)"),
-      st("BOOK_SUBJECTS", "عربي،نحو،نحو وصرف،بلاغة،إنجليزي،فرنساوي،ألماني،رياضيات،ماث،رياضيات بحتة،رياضيات تطبيقية،رياضيات أدبي،إحصاء،علوم،ساينس،علوم متكاملة،فيزياء،كيمياء،أحياء،دراسات،تاريخ،جغرافيا،فلسفة ومنطق،علم نفس،دين،فقه شافعي،تفسير،حديث،توحيد،أصول دين،حاسب آلي،أي سي تي،تكنولوجيا،ديسكفري،مهارات", "STRING", "قائمة المواد في نموذج الكتاب (مفصولة بفاصلة)"),
+      st("BOOK_PUBLISHERS", POPULAR_PUBLISHERS.join("،"), "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)"),
+      st("BOOK_SUBJECTS", POPULAR_SUBJECTS.join("،"), "STRING", "قائمة المواد في نموذج الكتاب (مفصولة بفاصلة)"),
       st("BOOK_PARTS", "شرح،أسئلة،تدريبات،بلاس،جرامر،مستوى رفيع،أوليف", "STRING", "أجزاء الكتاب: شرح، أسئلة، تدريبات... (مفصولة بفاصلة)")
     ]);
   }
@@ -720,17 +757,21 @@ const OperationsEngine = {
     return n;
   },
 
-  /** ترتيب عرض الكتب حسب: الناشر ثم المادة ثم الصف الدراسي ثم الكود */
+  /** ترتيب عرض الكتب حسب الشهرة: الناشر (المعاصر، الأضواء...) ثم المادة (عربي، إنجليزي...) ثم الصف الدراسي ثم الكود */
   sortBooks_: function(booksList) {
     if (!Array.isArray(booksList)) return [];
     const grades = (this.catalogLists_ && this.catalogLists_().grades) || [];
     const gOrder = {}; grades.forEach((g, i) => { gOrder[g.label] = i; });
     return booksList.slice().sort((a, b) => {
       const pA = Util.str(a.Publisher), pB = Util.str(b.Publisher);
+      const rPA = publisherPopularityRank(pA), rPB = publisherPopularityRank(pB);
+      if (rPA !== rPB) return rPA - rPB;
       const pubCmp = pA.localeCompare(pB, "ar");
       if (pubCmp !== 0) return pubCmp;
 
       const sA = Util.str(a.Subject), sB = Util.str(b.Subject);
+      const rSA = subjectPopularityRank(sA), rSB = subjectPopularityRank(sB);
+      if (rSA !== rSB) return rSA - rSB;
       const subCmp = sA.localeCompare(sB, "ar");
       if (subCmp !== 0) return subCmp;
 

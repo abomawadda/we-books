@@ -2,12 +2,53 @@
  * لوحة الإدارة
  * ========================================================================== */
 "use strict";
+// قوائم دور النشر والمواد حسب الشهرة (المعاصر، الأضواء، سلاح التلميذ... / عربي، إنجليزي، رياضيات...)
+const POPULAR_PUBLISHERS = [
+  "المعاصر", "الأضواء", "سلاح التلميذ", "الامتحان", "بوني", "سندباد",
+  "الشاطر", "الباهر", "قطر الندى", "بيت باي بيت", "ستيب أهيد", "جيم",
+  "برافو", "التفوق", "الوافي", "نيوتن", "مندليف", "المرشد", "الإبداع",
+  "كيان", "الفايز", "الموسوعة", "النفيس", "الوسام", "نور البيان",
+  "التأسيس السليم", "الأستاذ", "المعلم", "البيان", "الأبرار", "الميسر",
+  "ترافيللر", "جينيال", "ستار", "لافي أليكس", "لو اكسلانس", "ماي دريم", "ميرسي"
+];
+
+const POPULAR_SUBJECTS = [
+  "عربي", "نحو", "نحو وصرف", "بلاغة", "إنجليزي", "رياضيات", "ماث",
+  "رياضيات بحتة", "رياضيات تطبيقية", "رياضيات أدبي", "إحصاء",
+  "علوم", "ساينس", "علوم متكاملة", "فيزياء", "كيمياء", "أحياء",
+  "دراسات", "تاريخ", "جغرافيا", "فلسفة ومنطق", "علم نفس",
+  "دين", "فقه شافعي", "تفسير", "حديث", "توحيد", "أصول دين",
+  "حاسب آلي", "تكنولوجيا", "أي سي تي", "ديسكفري", "مهارات", "مهارات مهنية",
+  "فرنساوي", "ألماني"
+];
+
+function normArText(s) {
+  return String(s || "").trim().replace(/[إأآا]/g, "ا").replace(/ة/g, "ه").replace(/\s+/g, " ").toLowerCase();
+}
+const PUB_POP_MAP = {};
+POPULAR_PUBLISHERS.forEach((p, i) => { PUB_POP_MAP[normArText(p)] = i; });
+const SUB_POP_MAP = {};
+POPULAR_SUBJECTS.forEach((s, i) => { SUB_POP_MAP[normArText(s)] = i; });
+
+function publisherPopularityRank(name) {
+  const norm = normArText(name);
+  return PUB_POP_MAP[norm] !== undefined ? PUB_POP_MAP[norm] : 9999;
+}
+function subjectPopularityRank(name) {
+  const norm = normArText(name);
+  return SUB_POP_MAP[norm] !== undefined ? SUB_POP_MAP[norm] : 9999;
+}
+
 function bookSortComparator(a, b, catalog) {
   const pA = String(a.Publisher || "").trim(), pB = String(b.Publisher || "").trim();
+  const rPA = publisherPopularityRank(pA), rPB = publisherPopularityRank(pB);
+  if (rPA !== rPB) return rPA - rPB;
   const pubCmp = pA.localeCompare(pB, "ar");
   if (pubCmp !== 0) return pubCmp;
 
   const sA = String(a.Subject || "").trim(), sB = String(b.Subject || "").trim();
+  const rSA = subjectPopularityRank(sA), rSB = subjectPopularityRank(sB);
+  if (rSA !== rSB) return rSA - rSB;
   const subCmp = sA.localeCompare(sB, "ar");
   if (subCmp !== 0) return subCmp;
 
@@ -302,25 +343,41 @@ const BK_UI = {
   editingRow: null,
   dirty: {}, // { bookId: { coverPrice, supplierDiscountPct, empDiscountPct, bookStatus } }
   quickOpen: false,
+  openDropdown: null, // المفتاح المفتوح حالياً للقائمة المنسدلة: "pub" | "sub" | "grade" | "type" | "st"
+  msSearch: {},       // نص البحث الداخلي داخل القائمة المنسدلة
   qForm: { mode: "single", stage: "", grade: "4 ابتدائي", publisher: "", subject: "", bookPart: "شرح", schoolTypes: "حكومي", coverPrice: "", supplierDiscountPct: "" }
 };
 
+function getFilterArr(f, key) {
+  if (!f || f[key] === undefined || f[key] === null) return [];
+  if (Array.isArray(f[key])) return f[key].map(v => String(v).trim()).filter(Boolean);
+  const s = String(f[key]).trim();
+  return s ? s.split(/[,|]/).map(x => x.trim()).filter(Boolean) : [];
+}
+
 function getBookFilterScope(excludeKey) {
   const d = A(), f = Q.bookF || {}, q = (Q.books || "").trim().toLowerCase();
+  const stages = getFilterArr(f, "stage");
+  const grades = getFilterArr(f, "grade");
+  const pubs = getFilterArr(f, "pub");
+  const subs = getFilterArr(f, "sub");
+  const types = getFilterArr(f, "type");
+  const sts = getFilterArr(f, "st");
+
   return (d.books || []).filter(x => {
     if (excludeKey !== "q" && q) {
       const hay = (x.Book_ID + " " + x.Book_Name + " " + x.Grade + " " + x.Stage + " " + x.Subject + " " + x.Publisher + " " + (x.Book_Part || "")).toLowerCase();
       if (!hay.includes(q)) return false;
     }
-    if (excludeKey !== "stage" && f.stage && x.Stage !== f.stage) return false;
-    if (excludeKey !== "grade" && f.grade && x.Grade !== f.grade) return false;
-    if (excludeKey !== "pub" && f.pub && x.Publisher !== f.pub) return false;
-    if (excludeKey !== "sub" && f.sub && x.Subject !== f.sub) return false;
-    if (excludeKey !== "type" && f.type) {
-      const types = String(x.School_Types || "").split(/[,،]/).map(s => s.trim());
-      if (!types.includes(f.type)) return false;
+    if (excludeKey !== "stage" && stages.length > 0 && !stages.includes(x.Stage)) return false;
+    if (excludeKey !== "grade" && grades.length > 0 && !grades.includes(x.Grade)) return false;
+    if (excludeKey !== "pub" && pubs.length > 0 && !pubs.includes(x.Publisher)) return false;
+    if (excludeKey !== "sub" && subs.length > 0 && !subs.includes(x.Subject)) return false;
+    if (excludeKey !== "type" && types.length > 0) {
+      const bTypes = String(x.School_Types || "").split(/[,،]/).map(s => s.trim());
+      if (!types.some(t => bTypes.includes(t))) return false;
     }
-    if (excludeKey !== "st" && f.st && x.Book_Status !== f.st) return false;
+    if (excludeKey !== "st" && sts.length > 0 && !sts.includes(x.Book_Status)) return false;
     return true;
   });
 }
@@ -332,12 +389,37 @@ function filteredBooksList() {
 function validateBookFilters() {
   const f = Q.bookF;
   if (!f) return;
-  if (f.pub && !getBookFilterScope("pub").some(b => b.Publisher === f.pub)) f.pub = "";
-  if (f.stage && !getBookFilterScope("stage").some(b => b.Stage === f.stage)) f.stage = "";
-  if (f.grade && !getBookFilterScope("grade").some(b => b.Grade === f.grade)) f.grade = "";
-  if (f.sub && !getBookFilterScope("sub").some(b => b.Subject === f.sub)) f.sub = "";
-  if (f.type && !getBookFilterScope("type").some(b => String(b.School_Types || "").split(/[,،]/).map(s => s.trim()).includes(f.type))) f.type = "";
-  if (f.st && !getBookFilterScope("st").some(b => b.Book_Status === f.st)) f.st = "";
+  const scopePub = getBookFilterScope("pub");
+  const scopeStage = getBookFilterScope("stage");
+  const scopeGrade = getBookFilterScope("grade");
+  const scopeSub = getBookFilterScope("sub");
+  const scopeType = getBookFilterScope("type");
+  const scopeSt = getBookFilterScope("st");
+
+  if (f.pub !== undefined) {
+    const arr = getFilterArr(f, "pub").filter(p => scopePub.some(b => b.Publisher === p));
+    f.pub = arr;
+  }
+  if (f.stage !== undefined) {
+    const arr = getFilterArr(f, "stage").filter(st => scopeStage.some(b => b.Stage === st));
+    f.stage = arr;
+  }
+  if (f.grade !== undefined) {
+    const arr = getFilterArr(f, "grade").filter(g => scopeGrade.some(b => b.Grade === g));
+    f.grade = arr;
+  }
+  if (f.sub !== undefined) {
+    const arr = getFilterArr(f, "sub").filter(s => scopeSub.some(b => b.Subject === s));
+    f.sub = arr;
+  }
+  if (f.type !== undefined) {
+    const arr = getFilterArr(f, "type").filter(t => scopeType.some(b => String(b.School_Types || "").split(/[,،]/).map(s => s.trim()).includes(t)));
+    f.type = arr;
+  }
+  if (f.st !== undefined) {
+    const arr = getFilterArr(f, "st").filter(st => scopeSt.some(b => b.Book_Status === st));
+    f.st = arr;
+  }
 }
 
 function rowDraftOf(x) {
@@ -494,8 +576,14 @@ function quickBookEntryBarHTML() {
   if (!can("SAVE_BOOK") || !BK_UI.quickOpen) return "";
   const d = A(), c = d.catalog || {}, qf = BK_UI.qForm;
   const grades = c.grades || [];
-  const pubs = c.publishers || [];
-  const subs = c.subjects || [];
+  const pubs = (c.publishers || []).slice().sort((a, b) => {
+    const ra = publisherPopularityRank(a), rb = publisherPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
+  const subs = (c.subjects || []).slice().sort((a, b) => {
+    const ra = subjectPopularityRank(a), rb = subjectPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
   const parts = c.parts || [];
   if (!qf.publisher && pubs[0]) qf.publisher = pubs[0];
   if (!qf.subject && subs[0]) qf.subject = subs[0];
@@ -594,7 +682,7 @@ function quickBookEntryBarHTML() {
     </div>`;
 }
 
-/** فلاتر الكتالوج الاحترافية: تصفية ذكية ومتتالية للقوائم المنسدلة وشريط المراحل */
+/** فلاتر الكتالوج الاحترافية: تصفية ذكية متتالية وقوائم منسدلة متعددة الاختيار (Multi-Select) */
 function bookFilters() {
   const d = A(), c = d.catalog || {}, f = Q.bookF || {};
   validateBookFilters();
@@ -603,10 +691,11 @@ function bookFilters() {
 
   // 1. نطاق المراحل: الكتب المتطابقة مع بقية الفلاتر (مثل الناشر أو المادة أو البحث)
   const scopeStage = getBookFilterScope("stage");
+  const actStages = getFilterArr(f, "stage");
   const stageChips = stages.map(st => {
     const cnt = scopeStage.filter(b => b.Stage === st).length;
-    const isAct = f.stage === st;
-    if (cnt === 0 && !isAct && (f.pub || f.sub || f.grade || Q.books)) return "";
+    const isAct = actStages.includes(st);
+    if (cnt === 0 && !isAct && (getFilterArr(f, "pub").length || getFilterArr(f, "sub").length || getFilterArr(f, "grade").length || Q.books)) return "";
     return `<button type="button" class="qchip ${isAct ? "active" : ""}" data-act="bkStageF" data-id="${esc(st)}">${esc(st.replace("المرحلة ", ""))} <span class="num opacity-75">(${cnt})</span></button>`;
   }).filter(Boolean).join("");
 
@@ -622,17 +711,23 @@ function bookFilters() {
     return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
   });
 
-  // 3. نطاق دور النشر: حسب المرحلة والصف والمادة...
+  // 3. نطاق دور النشر: مرتبة حسب الشهرة ثم أبجدياً
   const scopePub = getBookFilterScope("pub");
   const pubCounts = {};
   scopePub.forEach(b => { if (b.Publisher) pubCounts[b.Publisher] = (pubCounts[b.Publisher] || 0) + 1; });
-  const availPubs = Object.keys(pubCounts).sort((a, b) => a.localeCompare(b, "ar"));
+  const availPubs = Object.keys(pubCounts).sort((a, b) => {
+    const ra = publisherPopularityRank(a), rb = publisherPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
 
-  // 4. نطاق المواد: حسب دار النشر والمرحلة والصف...
+  // 4. نطاق المواد: مرتبة حسب الشهرة ثم أبجدياً
   const scopeSub = getBookFilterScope("sub");
   const subCounts = {};
   scopeSub.forEach(b => { if (b.Subject) subCounts[b.Subject] = (subCounts[b.Subject] || 0) + 1; });
-  const availSubs = Object.keys(subCounts).sort((a, b) => a.localeCompare(b, "ar"));
+  const availSubs = Object.keys(subCounts).sort((a, b) => {
+    const ra = subjectPopularityRank(a), rb = subjectPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
 
   // 5. نطاق المدارس
   const scopeType = getBookFilterScope("type");
@@ -653,27 +748,92 @@ function bookFilters() {
     ["Suspended", "موقوف"],
     ["Discontinued", "ملغى"]
   ];
+  const actSts = getFilterArr(f, "st");
   const availSt = stLabels.map(([stKey, stLbl]) => {
     const cnt = scopeSt.filter(b => b.Book_Status === stKey).length;
     return { key: stKey, label: stLbl, count: cnt };
-  }).filter(item => item.count > 0 || f.st === item.key);
+  }).filter(item => item.count > 0 || actSts.includes(item.key));
 
-  const sel = (k, label, opts) => {
-    const activeVal = f[k] || "";
-    return `<select class="input !h-9 !w-auto !text-xs font-semibold ${activeVal ? "!border-brand-500 bg-brand-50/80 text-brand-900 ring-1 ring-brand-300" : "bg-slate-50/70 hover:bg-white"}" data-change="bookF" data-k="${k}">
-      <option value="">${label}</option>
-      ${opts.map(o => `<option value="${esc(o[0])}" ${activeVal === o[0] ? "selected" : ""}>${esc(o[1])}</option>`).join("")}
-    </select>`;
+  const msDropdown = (k, title, defaultLabel, items) => {
+    const activeVals = getFilterArr(f, k);
+    const isOpen = BK_UI.openDropdown === k;
+    const qSearch = (BK_UI.msSearch[k] || "").toLowerCase().trim();
+    const filtered = qSearch ? items.filter(it => it.label.toLowerCase().includes(qSearch) || it.value.toLowerCase().includes(qSearch)) : items;
+    const count = activeVals.length;
+
+    let triggerText = `${defaultLabel} (${items.length})`;
+    const isAct = count > 0;
+    if (count === 1) {
+      const match = items.find(it => it.value === activeVals[0]);
+      triggerText = match ? match.label : activeVals[0];
+    } else if (count === 2) {
+      const m1 = items.find(it => it.value === activeVals[0]), m2 = items.find(it => it.value === activeVals[1]);
+      const l1 = m1 ? m1.label : activeVals[0], l2 = m2 ? m2.label : activeVals[1];
+      triggerText = `${l1}، ${l2}`;
+      if (triggerText.length > 20) triggerText = `${l1} (+1)`;
+    } else if (count > 2) {
+      const m1 = items.find(it => it.value === activeVals[0]);
+      const l1 = m1 ? m1.label : activeVals[0];
+      triggerText = `${l1} (+${count - 1})`;
+    }
+
+    return `
+      <div class="relative inline-block" data-ms-root="${k}">
+        <select class="sr-only" data-k="${k}" data-change="bookF" multiple tabindex="-1">
+          <option value="">${defaultLabel}</option>
+          ${items.map(it => `<option value="${esc(it.value)}" ${activeVals.includes(it.value) ? "selected" : ""}>${esc(it.label)}</option>`).join("")}
+        </select>
+
+        <button type="button" class="btn btn-xs !h-9 !px-2.5 flex items-center gap-1.5 rounded-xl border text-xs font-semibold transition ${isAct ? "!border-brand-500 bg-brand-50/90 text-brand-900 ring-1 ring-brand-300 shadow-xs" : "border-slate-200 bg-slate-50/80 hover:bg-white text-slate-700"}" data-act="bkMsTrigger" data-id="${k}">
+          <span class="max-w-[160px] truncate" title="${esc(triggerText)}">${esc(triggerText)}</span>
+          ${count > 1 ? `<span class="w-4 h-4 rounded-full bg-brand-600 text-white text-[10px] flex items-center justify-center font-bold num">${count}</span>` : ""}
+          ${isAct ? `<span class="text-brand-400 hover:text-rose-600 p-0.5" data-act="bkMsClear" data-id="${k}" title="إلغاء التحديد">${ic("x", "!w-3 !h-3")}</span>` : ""}
+          <span class="text-slate-400 shrink-0 ${isOpen ? "rotate-180" : ""} transition-transform duration-150">${ic("chevron-down", "!w-3.5 !h-3.5")}</span>
+        </button>
+
+        ${isOpen ? `
+          <div class="absolute right-0 top-full mt-1.5 z-50 min-w-[230px] max-w-[300px] w-max bg-white rounded-2xl shadow-lift ring-1 ring-slate-200 p-2.5 space-y-2 text-right animate-in fade-in zoom-in-95 duration-100" data-ms-menu="${k}">
+            <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-100 text-slate-700">
+              <span class="font-bold text-xs">${esc(title)} <span class="text-[11px] text-slate-400 font-normal">(${items.length})</span></span>
+              <div class="flex items-center gap-1.5 text-[11px]">
+                <button type="button" class="text-brand-700 font-bold hover:underline" data-act="bkMsAll" data-id="${k}">الكل</button>
+                <span class="text-slate-200">|</span>
+                <button type="button" class="text-rose-600 font-bold hover:underline" data-act="bkMsNone" data-id="${k}">مسح</button>
+              </div>
+            </div>
+            ${items.length > 5 ? `
+              <div class="relative">
+                <input type="text" class="input !h-8 !text-xs !pr-7 !pl-2 w-full" placeholder="ابحث في الخيارات…" value="${esc(BK_UI.msSearch[k] || "")}" data-input="bkMsSearch" data-id="${k}">
+                <span class="absolute right-2 top-2 text-slate-400 pointer-events-none">${ic("search", "!w-3.5 !h-3.5")}</span>
+              </div>` : ""}
+            <div class="max-h-56 overflow-y-auto space-y-0.5 p-0.5">
+              ${filtered.map(it => {
+                const checked = activeVals.includes(it.value);
+                return `
+                  <button type="button" class="w-full flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-50 text-right text-xs transition cursor-pointer ${checked ? "bg-brand-50/70 font-bold text-brand-900 ring-1 ring-brand-200" : "text-slate-700"}" data-act="bkMsToggle" data-id="${k}|${esc(it.value)}">
+                    <div class="flex items-center gap-2 min-w-0 pointer-events-none">
+                      <span class="w-4 h-4 rounded border flex items-center justify-center shrink-0 ${checked ? "bg-brand-600 border-brand-600 text-white" : "border-slate-300 bg-white"}">
+                        ${checked ? ic("check", "!w-3 !h-3") : ""}
+                      </span>
+                      <span class="truncate ${checked ? "font-bold text-brand-900" : "text-slate-700"}">${esc(it.label)}</span>
+                    </div>
+                    <span class="text-[11px] num shrink-0 pointer-events-none ${checked ? "text-brand-700 font-bold" : "text-slate-400 font-normal"}">(${fmt(it.count)})</span>
+                  </button>`;
+              }).join("")}
+              ${!filtered.length ? `<div class="py-3 text-center text-xs text-slate-400">لا توجد خيارات مطابقة</div>` : ""}
+            </div>
+          </div>` : ""}
+      </div>`;
   };
 
-  const hasFilters = !!(f.stage || f.grade || f.type || f.pub || f.sub || f.st || Q.books);
+  const hasFilters = !!(actStages.length || getFilterArr(f, "grade").length || getFilterArr(f, "pub").length || getFilterArr(f, "sub").length || getFilterArr(f, "type").length || getFilterArr(f, "st").length || Q.books);
   const matchCount = filteredBooksList().length;
 
   return `
     <div class="w-full space-y-2.5">
       <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
         <div class="flex flex-wrap items-center gap-1.5">
-          <button type="button" class="qchip ${!f.stage ? "active" : ""}" data-act="bkStageF" data-id="">كل المراحل <span class="num opacity-75">(${scopeStage.length})</span></button>
+          <button type="button" class="qchip ${!actStages.length ? "active" : ""}" data-act="bkStageF" data-id="">كل المراحل <span class="num opacity-75">(${scopeStage.length})</span></button>
           ${stageChips}
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
@@ -684,11 +844,11 @@ function bookFilters() {
       </div>
       <div class="flex flex-wrap items-center gap-2">
         ${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر أو المادة…")}
-        ${sel("grade", f.stage ? `صفوف ${f.stage.replace("المرحلة ", "")} (${availGrades.length})` : `كل الصفوف (${availGrades.length})`, availGrades.map(g => [g, `${g} (${gradeCounts[g]})`]))}
-        ${sel("pub", `كل دور النشر (${availPubs.length})`, availPubs.map(p => [p, `${p} (${pubCounts[p]})`]))}
-        ${sel("sub", `كل المواد (${availSubs.length})`, availSubs.map(s => [s, `${s} (${subCounts[s]})`]))}
-        ${sel("type", `كل المدارس (${availTypes.length})`, availTypes.map(t => [t, `${t} (${typeCounts[t]})`]))}
-        ${sel("st", `كل الحالات (${availSt.length})`, availSt.map(item => [item.key, `${item.label} (${item.count})`]))}
+        ${msDropdown("grade", "الصف الدراسي", actStages.length ? `صفوف محددة (${availGrades.length})` : `كل الصفوف (${availGrades.length})`, availGrades.map(g => ({ value: g, label: g, count: gradeCounts[g] || 0 })))}
+        ${msDropdown("pub", "دار النشر", `كل دور النشر (${availPubs.length})`, availPubs.map(p => ({ value: p, label: p, count: pubCounts[p] || 0 })))}
+        ${msDropdown("sub", "المادة الدراسية", `كل المواد (${availSubs.length})`, availSubs.map(s => ({ value: s, label: s, count: subCounts[s] || 0 })))}
+        ${msDropdown("type", "نوع المدرسة", `كل المدارس (${availTypes.length})`, availTypes.map(t => ({ value: t, label: t, count: typeCounts[t] || 0 })))}
+        ${msDropdown("st", "حالة الكتاب", `كل الحالات (${availSt.length})`, availSt.map(item => ({ value: item.key, label: item.label, count: item.count })))}
         ${hasFilters ? `<button type="button" class="btn btn-ghost btn-xs text-rose-600 font-semibold" data-act="bkClearF">${ic("x")} مسح الفلاتر (${fmt(matchCount)})</button>` : `<span class="text-[11.5px] text-slate-400 font-semibold mr-1 num">مطابق: ${fmt(matchCount)}</span>`}
       </div>
     </div>`;
@@ -736,14 +896,24 @@ on("qBooks", v => {
   rerenderList("booksList", booksTable);
 });
 on("bookF", (v, el) => {
-  Q.bookF = Object.assign({}, Q.bookF, { [el.dataset.k]: v });
+  const k = el.dataset.k;
+  const selectedVals = Array.from(el.selectedOptions || []).map(o => o.value).filter(Boolean);
+  Q.bookF = Object.assign({}, Q.bookF, { [k]: selectedVals.length ? selectedVals : (v ? [v] : []) });
   validateBookFilters();
   const fw = $("#bookFiltersWrap");
   if (fw) fw.innerHTML = bookFilters();
   rerenderList("booksList", booksTable);
 });
 on("bkStageF", stg => {
-  Q.bookF = Object.assign({}, Q.bookF, { stage: stg || "", grade: "" });
+  if (!stg) {
+    Q.bookF = Object.assign({}, Q.bookF, { stage: [], grade: [] });
+  } else {
+    const curStages = getFilterArr(Q.bookF, "stage");
+    const idx = curStages.indexOf(stg);
+    if (idx >= 0) curStages.splice(idx, 1);
+    else curStages.push(stg);
+    Q.bookF = Object.assign({}, Q.bookF, { stage: curStages, grade: [] });
+  }
   validateBookFilters();
   const fw = $("#bookFiltersWrap");
   if (fw) fw.innerHTML = bookFilters();
@@ -752,10 +922,118 @@ on("bkStageF", stg => {
 on("bkClearF", () => {
   Q.books = "";
   Q.bookF = {};
+  BK_UI.openDropdown = null;
+  BK_UI.msSearch = {};
   const fw = $("#bookFiltersWrap");
   if (fw) fw.innerHTML = bookFilters();
   rerenderList("booksList", booksTable);
 });
+on("bkMsTrigger", k => {
+  BK_UI.openDropdown = BK_UI.openDropdown === k ? null : k;
+  const fw = $("#bookFiltersWrap");
+  if (fw) {
+    fw.innerHTML = bookFilters();
+    if (BK_UI.openDropdown) {
+      const sInp = fw.querySelector(`[data-input="bkMsSearch"]`);
+      if (sInp) sInp.focus();
+    }
+  }
+});
+on("bkMsToggle", idStr => {
+  const [k, ...rest] = idStr.split("|");
+  const val = rest.join("|");
+  const cur = getFilterArr(Q.bookF, k);
+  const idx = cur.indexOf(val);
+  if (idx >= 0) cur.splice(idx, 1);
+  else cur.push(val);
+  Q.bookF = Object.assign({}, Q.bookF, { [k]: cur });
+  validateBookFilters();
+  BK_UI.openDropdown = k;
+  const fw = $("#bookFiltersWrap");
+  if (fw) {
+    fw.innerHTML = bookFilters();
+    const sInp = fw.querySelector(`[data-input="bkMsSearch"]`);
+    if (sInp && BK_UI.msSearch[k]) {
+      sInp.focus();
+      sInp.value = BK_UI.msSearch[k];
+    }
+  }
+  rerenderList("booksList", booksTable);
+});
+on("bkMsAll", k => {
+  const scope = getBookFilterScope(k);
+  let allVals = [];
+  if (k === "pub") allVals = [...new Set(scope.map(b => b.Publisher).filter(Boolean))];
+  else if (k === "sub") allVals = [...new Set(scope.map(b => b.Subject).filter(Boolean))];
+  else if (k === "grade") allVals = [...new Set(scope.map(b => b.Grade).filter(Boolean))];
+  else if (k === "type") {
+    const set = new Set();
+    scope.forEach(b => String(b.School_Types || "").split(/[,،]/).map(s => s.trim()).filter(Boolean).forEach(t => set.add(t)));
+    allVals = [...set];
+  } else if (k === "st") allVals = [...new Set(scope.map(b => b.Book_Status).filter(Boolean))];
+
+  const qSearch = (BK_UI.msSearch[k] || "").toLowerCase().trim();
+  if (qSearch) {
+    allVals = allVals.filter(v => v.toLowerCase().includes(qSearch));
+    const cur = getFilterArr(Q.bookF, k);
+    allVals = [...new Set(cur.concat(allVals))];
+  }
+  Q.bookF = Object.assign({}, Q.bookF, { [k]: allVals });
+  validateBookFilters();
+  BK_UI.openDropdown = k;
+  const fw = $("#bookFiltersWrap");
+  if (fw) fw.innerHTML = bookFilters();
+  rerenderList("booksList", booksTable);
+});
+on("bkMsNone", k => {
+  Q.bookF = Object.assign({}, Q.bookF, { [k]: [] });
+  validateBookFilters();
+  BK_UI.openDropdown = k;
+  const fw = $("#bookFiltersWrap");
+  if (fw) fw.innerHTML = bookFilters();
+  rerenderList("booksList", booksTable);
+});
+on("bkMsClear", (k, el, e) => {
+  if (e) { try { e.stopPropagation(); } catch (_) {} }
+  Q.bookF = Object.assign({}, Q.bookF, { [k]: [] });
+  validateBookFilters();
+  BK_UI.openDropdown = null;
+  const fw = $("#bookFiltersWrap");
+  if (fw) fw.innerHTML = bookFilters();
+  rerenderList("booksList", booksTable);
+});
+on("bkMsSearch", (v, el) => {
+  const k = el.dataset.id;
+  BK_UI.msSearch[k] = v;
+  BK_UI.openDropdown = k;
+  const fw = $("#bookFiltersWrap");
+  if (fw) {
+    fw.innerHTML = bookFilters();
+    const sInp = fw.querySelector(`[data-input="bkMsSearch"]`);
+    if (sInp) {
+      sInp.focus();
+      sInp.value = v;
+    }
+  }
+});
+
+if (typeof document !== "undefined") {
+  document.addEventListener("click", e => {
+    if (!BK_UI.openDropdown) return;
+    if (!e.target.closest("[data-ms-root]")) {
+      BK_UI.openDropdown = null;
+      const fw = $("#bookFiltersWrap");
+      if (fw) fw.innerHTML = bookFilters();
+    }
+  });
+  document.addEventListener("keydown", e => {
+    if (e.key === "Escape" && BK_UI.openDropdown) {
+      BK_UI.openDropdown = null;
+      const fw = $("#bookFiltersWrap");
+      if (fw) fw.innerHTML = bookFilters();
+    }
+  });
+}
 on("toggleQuickEntry", () => { BK_UI.quickOpen = !BK_UI.quickOpen; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); const fw = $("#bookFiltersWrap"); if (fw) fw.innerHTML = bookFilters(); });
 on("qbMode", m => { BK_UI.qForm.mode = m; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); });
 on("qbSeries", stg => { BK_UI.qForm.mode = "series"; BK_UI.qForm.stage = stg; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); });
@@ -1128,8 +1406,14 @@ async function openBookModal(id, cloneFromId) {
   const x = id ? (src || {}) : (src ? Object.assign({}, src, { Book_ID: "", Grade: "" }) : {});
   const c = A().catalog || {};
   const grades = (c.grades || []).slice();
-  const publishers = (c.publishers || []).slice();
-  const subjects = (c.subjects || []).slice();
+  const publishers = (c.publishers || []).slice().sort((a, b) => {
+    const ra = publisherPopularityRank(a), rb = publisherPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
+  const subjects = (c.subjects || []).slice().sort((a, b) => {
+    const ra = subjectPopularityRank(a), rb = subjectPopularityRank(b);
+    return ra !== rb ? ra - rb : a.localeCompare(b, "ar");
+  });
   const parts = (c.parts || []).slice();
   const stages = [...new Set(["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"].concat(grades.map(g => g.stage).filter(Boolean)))];
   const extra = { grades: [], newPublisher: "", newSubject: "", newBookPart: "", newGradeLabel: "", newGradeStage: "المرحلة الابتدائية", newGradeCode: "", addedPubs: [], addedSubs: [], addedParts: [], addedGrades: [] };

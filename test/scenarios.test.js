@@ -457,18 +457,34 @@ assert.strictEqual(customVolInv.invoiceHeader.Volume_Discount_Amount, 39.6);
 assert.strictEqual(customVolInv.invoiceHeader.Net_Payable_Amount, 840.4);
 passed++;
 
-// د) التحقق من ترتيب عرض الكتب: الناشر ثم المادة ثم الصف الدراسي ثم الكود
+// د) التحقق من ترتيب عرض الكتب حسب الشهرة: الناشر (المعاصر، الأضواء، سلاح التلميذ...) ثم المادة (عربي، إنجليزي...) ثم الصف الدراسي ثم الكود
 const catalogGrades = adminData.catalog.grades || [];
 const gradeOrder = {}; catalogGrades.forEach((g, i) => { gradeOrder[g.label] = i; });
+const POP_PUBS = ['المعاصر', 'الأضواء', 'سلاح التلميذ', 'الامتحان', 'بوني', 'سندباد'];
+const POP_SUBS = ['عربي', 'نحو', 'إنجليزي', 'رياضيات', 'ماث', 'علوم', 'دراسات'];
+const normP = s => String(s || '').trim().replace(/[إأآا]/g, 'ا').replace(/ة/g, 'ه').toLowerCase();
+const pRank = p => { const i = POP_PUBS.findIndex(x => normP(x) === normP(p)); return i >= 0 ? i : 9999; };
+const sRank = s => { const i = POP_SUBS.findIndex(x => normP(x) === normP(s)); return i >= 0 ? i : 9999; };
+
 for (let i = 0; i < adminData.books.length - 1; i++) {
   const b1 = adminData.books[i], b2 = adminData.books[i + 1];
   const p1 = String(b1.Publisher || ''), p2 = String(b2.Publisher || '');
+  const rp1 = pRank(p1), rp2 = pRank(p2);
+  if (rp1 !== rp2) {
+    assert.ok(rp1 <= rp2, `Books popularity order by Publisher failed between ${b1.Book_ID} (${p1}:${rp1}) and ${b2.Book_ID} (${p2}:${rp2})`);
+    continue;
+  }
   const pCmp = p1.localeCompare(p2, 'ar');
   if (pCmp !== 0) {
     assert.ok(pCmp <= 0, `Books order by Publisher failed between ${b1.Book_ID} (${p1}) and ${b2.Book_ID} (${p2})`);
     continue;
   }
   const s1 = String(b1.Subject || ''), s2 = String(b2.Subject || '');
+  const rs1 = sRank(s1), rs2 = sRank(s2);
+  if (rs1 !== rs2) {
+    assert.ok(rs1 <= rs2, `Books popularity order by Subject failed between ${b1.Book_ID} (${s1}:${rs1}) and ${b2.Book_ID} (${s2}:${rs2})`);
+    continue;
+  }
   const sCmp = s1.localeCompare(s2, 'ar');
   if (sCmp !== 0) {
     assert.ok(sCmp <= 0, `Books order by Subject failed between ${b1.Book_ID} (${s1}) and ${b2.Book_ID} (${s2})`);

@@ -200,14 +200,30 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   });
   check(renderedSorted, 'books table rendered in strict Publisher -> Subject -> Grade -> Code order');
 
-  // فحص الفلاتر الذكية والمتتالية (Cascading Smart Filters)
+  // فحص الفلاتر الذكية والمتتالية وترتيب الشهرة (Cascading Smart Filters & Popularity Sorting)
   const selPub = d.querySelector('select[data-k="pub"]');
   check(selPub, 'publisher dropdown rendered');
+  const allPubOpts = Array.from(d.querySelectorAll('select[data-k="pub"] option')).map(o => o.value).filter(Boolean);
+  const moasserIdx = allPubOpts.indexOf('المعاصر'), adwaIdx = allPubOpts.indexOf('الأضواء'), selahIdx = allPubOpts.indexOf('سلاح التلميذ');
+  if (moasserIdx >= 0 && adwaIdx >= 0 && selahIdx >= 0) {
+    check(moasserIdx < adwaIdx && adwaIdx < selahIdx, 'publishers sorted by popularity: المعاصر -> الأضواء -> سلاح التلميذ');
+  }
+
   selPub.value = 'الأضواء'; selPub.dispatchEvent(new w.Event('change', { bubbles: true })); await settle();
   const adwaSubOpts = Array.from(d.querySelectorAll('select[data-k="sub"] option')).map(o => o.value).filter(Boolean);
   const adwaBooks = admBooks.filter(b => b.Publisher === 'الأضواء');
   const actualSubs = [...new Set(adwaBooks.map(b => b.Subject))];
   check(adwaSubOpts.length === actualSubs.length && actualSubs.every(s => adwaSubOpts.includes(s)), 'subject dropdown cascades and shows only subjects published by selected publisher');
+
+  // فحص الاختيار المتعدد (Multi-Select)
+  await click('[data-act="bkClearF"]'); await settle();
+  await click('[data-act="bkMsTrigger"][data-id="pub"]'); await settle();
+  await click('[data-act="bkMsToggle"][data-id="pub|الأضواء"]'); await settle();
+  await click('[data-act="bkMsToggle"][data-id="pub|سلاح التلميذ"]'); await settle();
+  const multiPubF = w.eval('Q.bookF.pub');
+  check(Array.isArray(multiPubF) && multiPubF.includes('الأضواء') && multiPubF.includes('سلاح التلميذ'), 'multi-select enabled for publishers');
+  const multiBooks = w.eval('filteredBooksList')();
+  check(multiBooks.length > 0 && multiBooks.every(b => b.Publisher === 'الأضواء' || b.Publisher === 'سلاح التلميذ'), 'multi-select filters books table by multiple chosen publishers');
 
   // مسح الفلاتر
   await click('[data-act="bkClearF"]'); await settle();
