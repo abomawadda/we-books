@@ -221,6 +221,14 @@ async function handle(action: string, payload: any, token: string) {
     try { const r = await syncMembers(); await logJob('SYNC_MEMBERS', true, r.message); return r; }
     catch (e) { await logJob('SYNC_MEMBERS', false, String(e?.message || e)); throw e; }
   }
+  // من تجاوزتهم آخر مزامنة لنقص بياناتهم (للإدارة فقط؛ بلا أرقام قومية أو موبايلات)
+  if (action === 'GET_SYNC_SKIPPED') {
+    const s: any = await verify(token);
+    if (!s) return EXPIRED;
+    if (s.userType !== 'ADMIN') return { success: false, message: 'غير مصرح.' };
+    const rows = await sql`select job_id, name, workplace, missing, run_at from books.sync_skipped where run_at = (select max(run_at) from books.sync_skipped) order by missing, workplace, name`;
+    return { success: true, at: rows.length ? rows[0].run_at : null, rows: rows.map((r: any) => ({ job_id: r.job_id, name: r.name, workplace: r.workplace, missing: r.missing })) };
+  }
   // صورة غلاف كتاب: تُرفع إلى مخزن الصور العام book-covers ثم يُحفظ رابطها في الكتاب (المنسق ومدير المنظومة)
   if (action === 'UPLOAD_BOOK_COVER') {
     const s: any = await verify(token);
