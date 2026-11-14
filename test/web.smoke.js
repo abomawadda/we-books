@@ -200,6 +200,20 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   });
   check(renderedSorted, 'books table rendered in strict Publisher -> Subject -> Grade -> Code order');
 
+  // فحص الفلاتر الذكية والمتتالية (Cascading Smart Filters)
+  const selPub = d.querySelector('select[data-k="pub"]');
+  check(selPub, 'publisher dropdown rendered');
+  selPub.value = 'الأضواء'; selPub.dispatchEvent(new w.Event('change', { bubbles: true })); await settle();
+  const adwaSubOpts = Array.from(d.querySelectorAll('select[data-k="sub"] option')).map(o => o.value).filter(Boolean);
+  const adwaBooks = admBooks.filter(b => b.Publisher === 'الأضواء');
+  const actualSubs = [...new Set(adwaBooks.map(b => b.Subject))];
+  check(adwaSubOpts.length === actualSubs.length && actualSubs.every(s => adwaSubOpts.includes(s)), 'subject dropdown cascades and shows only subjects published by selected publisher');
+
+  // مسح الفلاتر
+  await click('[data-act="bkClearF"]'); await settle();
+  const resetPubOpts = Array.from(d.querySelectorAll('select[data-k="pub"] option')).map(o => o.value).filter(Boolean);
+  check(resetPubOpts.length === new Set(admBooks.map(b => b.Publisher).filter(Boolean)).size, 'all publishers restored on filter clear');
+
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');
   // تعديل حجز بعد التجميد ← تنبيه بالفرق
