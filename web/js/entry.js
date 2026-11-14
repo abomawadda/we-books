@@ -50,10 +50,10 @@ on("entryReg", async k => {
   if (k === "outsource" && !v.org) return toast("اختر الشركة من القائمة", "warning");
   const r = await call("REGISTER_MEMBER", Object.assign({ category: k }, v), { block: true });
   if (!r.success) return toast(r.message, r.exists ? "warning" : "danger");
-  Shell.enter(r);
+  await Shell.enter(r);
   setTimeout(() => UI.open(`<div class="text-center"><div class="text-[44px]">🎉</div><div class="font-bold text-lg mt-1">أهلاً بيك في المبادرة!</div>
     <p class="text-[13.5px] text-slate-600 mt-2">رقم عضويتك — احفظه عشان تدخل بيه بعد كده:</p>
     <div class="mt-3 rounded-2xl bg-brand-50 ring-1 ring-brand-200 py-4"><b class="text-[32px] tracking-[.25em] num text-brand-800">${esc(r.newMemberId)}</b></div>
     <p class="text-[12px] text-slate-500 mt-3">الدخول بعد كده: رقم العضوية + آخر 4 أرقام من القومي + الموبايل.</p>
-    <button class="btn btn-primary w-full mt-4" data-close>يلا نحجز 📚</button></div>`, { title: "تم التسجيل" }), 600);
+    <button class="btn btn-primary w-full mt-4" data-close>يلا نحجز 📚</button></div>`, { title: "تم التسجيل" }), 450);
 });

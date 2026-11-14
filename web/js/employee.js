@@ -213,7 +213,7 @@ Router.add("/e/home", view => {
   </div>`;
   startCountdown();
   // أول دخول في الجلسة بدون حجز: نفتح معالج الحجز تلقائياً
-  try { if (ph.Booking_Open && !reqQty && !Emp.dirty && !sessionStorage.getItem("wb_wz_auto")) { sessionStorage.setItem("wb_wz_auto", "1"); setTimeout(() => { if (Router.current === "/e/home") ACTIONS.wizStart(); }, 400); } } catch (_) {}
+  try { if (ph.Booking_Open && !reqQty && !Emp.dirty && !sessionStorage.getItem("wb_wz_auto")) { sessionStorage.setItem("wb_wz_auto", "1"); setTimeout(() => { if (Router.current === "/e/home" && !UI._stack.length) ACTIONS.wizStart(); }, 200); } } catch (_) {}
 });
 on("relQuick", () => { Router.go("/e/books"); setTimeout(() => ACTIONS.addBen(), 300); });
 

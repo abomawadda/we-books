@@ -120,7 +120,7 @@ const Shell = {
     store.set("session", { token: APP.token, user: APP.user });
     const scope = res.user.userType === "ADMIN" ? "/a/dash" : "/e/home";
     if (location.hash !== "#" + scope) location.hash = scope; else Router.render();
-    reloadData();
+    return reloadData();
   },
 
   /** بناء الإطار مرة واحدة ثم تبديل المحتوى */
