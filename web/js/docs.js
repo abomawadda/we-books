@@ -50,6 +50,9 @@ tfoot td { background: #f3eefa !important; font-weight: 700; border-top: 1.2px s
 td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
 .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 .sub { color: #6b6585; font-size: .86em; }
+td.code { font-size: .86em; color: #4c3d73; white-space: nowrap; direction: ltr; text-align: center; }
+td.info { font-size: .76em; color: #5b5478; line-height: 1.3; } td.info i { font-style: normal; color: #a39dbb; margin: 0 .6mm; }
+td.bk b { font-weight: 700; } td.bk .ben { font-size: .78em; color: #0369a1; font-weight: 700; }
 .grp td { background: #f3eefa !important; color: #552c83; font-weight: 700; font-size: .92em; }
 .tot { margin-top: 3mm; display: grid; grid-template-columns: 1.15fr 1fr; gap: 3mm; align-items: start; }
 .sum .kv { padding: .9mm 0; border-bottom: 1px dashed #e4def0; }
@@ -104,6 +107,14 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
   methodAr(m) { return ({ INSTALLMENT: "تقسيط", CASH: "نقدي", INSTAPAY: "إنستاباي", WALLET: "محفظة إلكترونية", PAYROLL: "خصم من المرتب" })[m] || ar(m) || "—"; },
 
   // ---------------------------------------------------------------- القوالب
+  /** بيانات الكتاب من الدليل المحمّل (الإدارة أو الموظف) لأعمدة الكود/الناشر/المادة/الصف */
+  bk(code) { const list = (APP.adm && APP.adm.books) || (APP.emp && APP.emp.books) || []; if (Doc._bkSrc !== list) { Doc._bkSrc = list; Doc._bk = {}; list.forEach(b => { Doc._bk[b.Book_ID] = b; }); } return Doc._bk[code] || {}; },
+  /** «الصف الرابع الابتدائي» ← «4 ابتدائي» لتوفير المساحة */
+  shortGrade(v) { const ORD = { "الأول": 1, "الثاني": 2, "الثالث": 3, "الرابع": 4, "الخامس": 5, "السادس": 6 }; let t = String(v || "").replace(/^الصف\s+/, "");
+    Object.keys(ORD).forEach(k => { t = t.replace(new RegExp("^" + k + "\\s+"), ORD[k] + " "); }); return t.replace(/\s+ال(ابتدائي|إعدادي|ثانوي)/, " $1"); },
+  infoCell(l) { const b = Doc.bk(l.code); const g = Doc.shortGrade(l.grade || b.Grade); const parts = [l.publisher || b.Publisher, l.subject || b.Subject, g].filter(Boolean); return `<td class="info">${parts.map(esc).join("<i>·</i>")}</td>`; },
+  bookCells(l, ben) { return `<td class="code num">${esc(l.code)}</td><td class="bk"><b>${esc(l.name)}</b>${ben && l.ben ? `<div class="ben">لـ ${esc(l.ben)}</div>` : ""}</td>${Doc.infoCell(l)}`; },
+  bookHead: `<th class="c" style="width:10%">الكود</th><th>الكتاب</th><th style="width:25%">الناشر · المادة · الصف</th>`,
   /** طلب حجز: d = {no,date,phase,status,emp:{name,id,dept,mobile},lines:[{code,name,grade,ben,qty,cover,price}],plan:{method,down,count,per,last}} */
   reservation(d) {
     // التجميع: حسب الابن وصفه (l.grp) إن وُجد، وإلا حسب المستفيد
@@ -114,12 +125,12 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
     const cover = d.lines.reduce((s, l) => s + l.qty * n(l.cover), 0), net = d.lines.reduce((s, l) => s + l.qty * n(l.price), 0), cnt = d.lines.reduce((s, l) => s + l.qty, 0);
     let i = 0;
     const sub = k => { const g = groups[k], c = g.reduce((a, l) => a + l.qty, 0), v = g.reduce((a, l) => a + l.qty * n(l.price), 0); return `<span style="float:left">${booksWord(c).replace(/^(\d+)/, '<span class="num">$1</span>')} · <span class="num">${Doc.money(v)}</span> ج.م</span>`; };
-    const rows = keys.map(k => `${byGrp ? `<tr class="grp"><td colspan="6">${esc(k)}${sub(k)}</td></tr>` : keys.length > 1 || k ? `<tr class="grp"><td colspan="6">${k ? "لـ " + esc(k) : "للعضو وأبنائه"}</td></tr>` : ""}${groups[k].map(l => `<tr><td class="c num">${++i}</td><td><b>${esc(l.name)}</b><div class="sub"><span class="num">${esc(l.code)}</span> · ${esc(l.grade || "")}</div></td><td class="c num">${l.qty}</td><td class="l num"><span class="sub">${Doc.money(l.cover)}</span></td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(l.qty * n(l.price))}</b></td></tr>`).join("")}`).join("");
+    const rows = keys.map(k => `${byGrp ? `<tr class="grp"><td colspan="8">${esc(k)}${sub(k)}</td></tr>` : keys.length > 1 || k ? `<tr class="grp"><td colspan="8">${k ? "لـ " + esc(k) : "للعضو وأبنائه"}</td></tr>` : ""}${groups[k].map(l => `<tr><td class="c num">${++i}</td>${Doc.bookCells(l)}<td class="c num">${l.qty}</td><td class="l num"><span class="sub">${Doc.money(l.cover)}</span></td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(l.qty * n(l.price))}</b></td></tr>`).join("")}`).join("");
     const p = d.plan || {};
     return Doc.page(`${Doc.head("طلب حجز كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${d.status === "مؤكد" ? "g" : "a"}">${esc(d.status || "")}</span></div>`)}
       <div class="meta"><div class="box"><h4>بيانات العضو</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}${d.emp.mobile ? Doc.kv("الموبايل", `<span class="num">${esc(d.emp.mobile)}</span>`) : ""}</div>
         <div class="box"><h4>بيانات الطلب</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("تاريخ الطلب", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("عدد الكتب", `<span class="num">${cnt}</span>`)}${Doc.kv("طريقة السداد", esc(Doc.methodAr(p.method)))}</div></div>
-      <table><thead><tr><th class="c" style="width:6%">#</th><th>الكتاب</th><th class="c" style="width:9%">العدد</th><th class="l" style="width:13%">الغلاف</th><th class="l" style="width:13%">سعرك</th><th class="l" style="width:15%">القيمة</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">العدد</th><th class="l" style="width:10%">الغلاف</th><th class="l" style="width:10%">سعرك</th><th class="l" style="width:11%">القيمة</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="tot"><div>
         <div class="note">• الأسعار بعد خصم العاملين، وتُحتسب الأسبقية بوقت حجز كل كتاب.<br>• هذا طلب حجز وليس فاتورة؛ تصدر الفاتورة عند جاهزية الكتب للتسليم.</div></div>
         <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}<div class="kv save"><span>توفيرك</span><b class="num">${Doc.money(cover - net)}</b></div><div class="kv big"><span>الإجمالي (ج.م)</span><b class="num">${Doc.money(net)}</b></div></div></div>
@@ -133,12 +144,12 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
     const net = Math.max(0, gross + n(d.adj));
     const st = { Paid_In_Full: ["مسددة بالكامل", "g"], Overdue: ["متأخرة", "r"], Partially_Paid: ["مسددة جزئياً", "a"], Unpaid: ["غير مسددة", "a"], Refund_Due: ["مستحق رد", "a"] }[d.status] || [ar(d.status), ""];
     let i = 0;
-    const rows = lines.map(l => { const q = Math.max(l.alloc, l.deliv) - l.ret; return `<tr><td class="c num">${++i}</td><td><b>${esc(l.name)}</b><div class="sub"><span class="num">${esc(l.code)}</span> · ${esc(l.grade || "")}${l.ben ? " · لـ " + esc(l.ben) : ""}</div></td><td class="c num">${q}</td><td class="c num">${l.deliv - l.ret > 0 ? l.deliv - l.ret : "—"}</td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(q * n(l.price))}</b></td></tr>`; }).join("");
+    const rows = lines.map(l => { const q = Math.max(l.alloc, l.deliv) - l.ret; return `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, true)}<td class="c num">${q}</td><td class="c num">${l.deliv - l.ret > 0 ? l.deliv - l.ret : "—"}</td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(q * n(l.price))}</b></td></tr>`; }).join("");
     const sched = (d.schedule || []).length ? `<table><thead><tr><th>القسط</th><th class="c">الاستحقاق</th><th class="l">القيمة</th><th class="l">المسدد</th><th class="c">الحالة</th></tr></thead><tbody>${d.schedule.map(s => `<tr><td>${esc(s.label)}</td><td class="c num">${esc(Doc.date(s.due))}</td><td class="l num">${Doc.money(s.amount)}</td><td class="l num">${Doc.money(s.paid)}</td><td class="c"><span class="badge ${s.status === "Paid" ? "g" : s.status === "Overdue" ? "r" : ""}">${esc(ar(s.status))}</span></td></tr>`).join("")}</tbody></table>` : "";
     return Doc.page(`${Doc.head("فاتورة بيع كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${st[1]}">${esc(st[0])}</span></div>`)}
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
         <div class="box"><h4>الفاتورة</h4>${Doc.kv("تاريخ الإصدار", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("السداد", esc(Doc.methodAr(d.method)))}</div></div>
-      <table><thead><tr><th class="c" style="width:6%">#</th><th>البيان</th><th class="c" style="width:8%">الكمية</th><th class="c" style="width:9%">سُلّم</th><th class="l" style="width:13%">السعر</th><th class="l" style="width:15%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="6" class="c sub">لا بنود</td></tr>`}</tbody></table>
+      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">الكمية</th><th class="c" style="width:6%">سُلّم</th><th class="l" style="width:10%">السعر</th><th class="l" style="width:11%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="8" class="c sub">لا بنود</td></tr>`}</tbody></table>
       <div class="tot"><div>${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>
         <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
           ${Doc.kv("المقدم المطلوب", `<span class="num">${Doc.money(d.down)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(d.paid)}</span>`)}<div class="kv" style="color:${n(d.remaining) ? "#be123c" : "#047857"}"><span>المتبقي</span><b class="num">${Doc.money(d.remaining)}</b></div>${n(d.credit) ? `<div class="kv save"><span>رصيد مستحق الرد</span><b class="num">${Doc.money(d.credit)}</b></div>` : ""}<div class="kv save"><span>وفّرت</span><b class="num">${Doc.money(cover - net)}</b></div></div></div>
@@ -162,7 +173,7 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
     let i = 0;
     return Doc.page(`${Doc.head(d.title, d.no)}
       <div class="meta"><div class="box"><h4>المستلم</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}</div><div class="box"><h4>المستند</h4>${Doc.kv("التاريخ", `<span class="num">${esc(String(d.date || "").slice(0, 16))}</span>`)}${Doc.kv("عدد الكتب", `<span class="num">${d.lines.reduce((s, l) => s + n(l.qty), 0)}</span>`)}</div></div>
-      <table><thead><tr><th class="c" style="width:7%">#</th><th>الكتاب</th><th class="c" style="width:12%">الكمية</th><th class="c" style="width:12%">✓</th></tr></thead><tbody>${d.lines.map(l => `<tr><td class="c num">${++i}</td><td><b>${esc(l.name)}</b><div class="sub num">${esc(l.code)}${l.ben ? " · لـ " + esc(l.ben) : ""}</div></td><td class="c num">${l.qty}</td><td class="c">☐</td></tr>`).join("")}</tbody></table>
+      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:8%">الكمية</th><th class="c" style="width:6%">✓</th></tr></thead><tbody>${d.lines.map(l => `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, true)}<td class="c num">${l.qty}</td><td class="c">☐</td></tr>`).join("")}</tbody></table>
       ${d.note ? `<div class="note">${esc(d.note)}</div>` : ""}<div class="note">أقر باستلام الكتب الموضحة أعلاه بحالة سليمة.</div>
       <div class="sig"><div>توقيع المستلم</div><div>أمين المخزن</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A5"));
   },
