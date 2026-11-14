@@ -612,6 +612,7 @@ function callServerApi(action, payload, sessionToken) {
     if (action === "LOGIN_ADMIN") return AuthEngine.authenticateAdmin(payload.username, payload.password);
     if (action === "LOGOUT") { AuthEngine.destroySession(sessionToken); return { success: true }; }
     if (action === "GET_PUBLIC_INIT_DATA") return OperationsEngine.getPublicInitData();
+    if (action === "REGISTER_MEMBER") return OperationsEngine.registerMember(payload);
 
     const acl = ACTION_ACL[action] && effectiveAcl_()[action];
     if (!acl) throw new Error("العملية المطلوبة غير معروفة: " + action);
@@ -1189,6 +1190,43 @@ const OperationsEngine = {
       DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", key, { Setting_Value: payload.value, Updated_At: Util.now(), Updated_By: Util.actor(session) });
       DB_Engine.logAudit(session.userId, session.role, "Settings", "SAVE_SETTING", key, { v: row.Setting_Value }, { v: payload.value });
       return { success: true, message: "تم حفظ الإعداد." };
+    });
+  },
+
+  /**
+   * تسجيل ذاتي لمن ليس في MyNekaba: زائر / معاش / شركات التعهيد ← يصبح عضواً في المبادرة فوراً.
+   * رقم عضوية من 7 أرقام (6xxxxxx تعهيد، 7xxxxxx زائر، 8xxxxxx معاش) لا يتصادم مع أرقام النقابة (5–6 أرقام).
+   * يُحفظ آخر 4 أرقام من القومي فقط، والتقسيط مغلق افتراضياً (تفتحه الإدارة من ملف العضو).
+   */
+  registerMember: function(p) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), CAT = { outsource: ["6", "شركات التعهيد"], guest: ["7", "زائر"], retiree: ["8", "معاش"] };
+      const cat = CAT[Util.str(p.category)];
+      Util.require(cat, "اختر نوع التسجيل.");
+      const digits = v => Util.str(v).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "");
+      const name = Util.str(p.name).replace(/\s+/g, " ");
+      Util.require(name.split(" ").length >= 3 && name.length <= 80, "اكتب الاسم ثلاثياً على الأقل.");
+      const nid = digits(p.nationalId);
+      Util.require(nid.length === 14 && /^[23]/.test(nid), "الرقم القومي لازم يكون 14 رقم صحيح.");
+      const mobile = AuthEngine.normalizeMobile(p.mobile);
+      Util.require(/^01[0125]\d{8}$/.test(mobile), "رقم الموبايل غير صحيح.");
+      const org = Util.str(p.org).slice(0, 80);
+      Util.require(p.category === "guest" || org.length >= 2, p.category === "outsource" ? "اكتب اسم الشركة." : "اكتب آخر جهة عمل.");
+      const emps = DB_Engine.getAllRecords(S.EMPLOYEES);
+      const dup = emps.find(e => AuthEngine.normalizeMobile(e.Mobile) === mobile);
+      if (dup) {
+        const self = /^[678]\d{6}$/.test(Util.str(dup.Emp_ID));
+        return { success: false, exists: true, message: self ? "الموبايل ده مسجّل قبل كده — ادخل برقم عضويتك " + dup.Emp_ID + "." : "الموبايل ده مسجّل كعضو في النقابة — ادخل من «موظف» برقمك الوظيفي." };
+      }
+      const max = emps.map(e => Util.str(e.Emp_ID)).filter(id => id.length === 7 && id[0] === cat[0]).reduce((m, id) => Math.max(m, parseInt(id, 10)), parseInt(cat[0] + "000000", 10));
+      const id = String(max + 1);
+      DB_Engine.insertRecordsBatch(S.EMPLOYEES, [{ Emp_ID: id, Full_Name: name, National_ID_Last4: nid.slice(-4), Mobile: mobile,
+        Department: p.category === "guest" ? (org || "زائر") : org, Job_Title: cat[1], Employment_Status: "ساري", Installment_Allowed: false, Max_Credit_Limit: 0,
+        Notes: "تسجيل ذاتي — " + cat[1], Updated_At: Util.now() }]);
+      DB_Engine.logAudit(id, "Self", "Employees", "REGISTER_MEMBER", id, null, { cat: cat[1], name: name });
+      const r = AuthEngine.authenticateEmployee(id, nid.slice(-4), mobile);
+      if (r.success) { r.newMemberId = id; r.message = "أهلاً بيك! رقم عضويتك " + id + " — احفظه عشان تدخل بيه بعد كده."; }
+      return r;
     });
   },
 

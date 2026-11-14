@@ -299,4 +299,17 @@ assert.ok(pd.announcements.some(a => a.title === 'خبر عام') && !pd.announc
 const pd3 = ok(api('GET_EMPLOYEE_PORTAL_DATA', { phaseId: 'PH-03' }, e1), 'portal ph3');
 assert.ok(pd3.announcements.some(a => a.title === 'التسليم الأحد')); passed++;
 fail(api('POST_ANNOUNCEMENT', { op: 'add', title: 'x' }, e1), 'employee cannot announce');
+
+// 25) التسجيل الذاتي: زائر / معاش / تعهيد
+const g = ok(api('REGISTER_MEMBER', { category: 'guest', name: 'سامي علي حسن', nationalId: '29001011234567', mobile: '01099887766' }), 'guest registers');
+assert.strictEqual(g.newMemberId, '7000001'); assert.ok(g.sessionToken && g.user.empId === '7000001'); passed++;
+ok(api('LOGIN_EMPLOYEE', { empId: '7000001', natIdLast4: '4567', mobile: '01099887766' }), 'guest logs in later');
+const rt = ok(api('REGISTER_MEMBER', { category: 'retiree', name: 'محمد أحمد سعيد', nationalId: '25501011234560', mobile: '01155443322', org: 'سنترال المنصورة' }), 'retiree registers');
+assert.strictEqual(rt.newMemberId, '8000001'); passed++;
+fail(api('REGISTER_MEMBER', { category: 'guest', name: 'سامي علي حسن', nationalId: '29001011234567', mobile: '01099887766' }), 'duplicate mobile rejected');
+fail(api('REGISTER_MEMBER', { category: 'guest', name: 'اسم ناقص', nationalId: '29001011234567', mobile: '01011112222' }), 'short name rejected');
+fail(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011112222' }), 'outsource needs company');
+fail(api('REGISTER_MEMBER', { category: 'guest', name: 'سامي علي حسن', nationalId: '1234', mobile: '01011113333' }), 'bad national id');
+fail(api('REGISTER_MEMBER', { category: 'guest', name: 'منى سعيد علي', nationalId: '29001011234567', mobile: '01012345678' }), 'mynekaba mobile rejected');
+ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, g.sessionToken), 'guest portal works');
 console.log('\nALL PASSED:', passed, 'checks');
