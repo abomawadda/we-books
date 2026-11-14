@@ -3,6 +3,8 @@
  * الموظف من MyNekaba برقمه الوظيفي؛ الباقون يسجّلون أنفسهم مرة واحدة ويأخذون رقم عضوية من 7 أرقام
  * ========================================================================== */
 "use strict";
+/** شركات التعهيد (نفس القائمة في logic.js ← OUTSOURCE_COMPANIES) */
+const OUTSOURCE_COMPANIES = ["Tedata", "IBS", "Proserve", "عقود يومية"];
 const ENTRY = {
   emp: { icon: "badge-check", emoji: "👔", title: "موظف", sub: "عضو النقابة — بياناتك موجودة في MyNekaba", id: "الرقم الوظيفي" },
   retiree: { icon: "user", emoji: "🧓", title: "معاش / استقالة", sub: "عضو سابق — ادخل برقمك أو سجّل لأول مرة", id: "رقم العضوية أو الرقم الوظيفي", reg: true,
@@ -41,9 +43,11 @@ on("entryReg", async k => {
   const c = ENTRY[k];
   const v = await UI.form({ title: "تسجيل جديد — " + c.title, intro: "بياناتك بتتحفظ عند المبادرة بس (من القومي بنحفظ آخر 4 أرقام للدخول). بعد التسجيل هتاخد <b>رقم عضوية</b> وتحجز على طول.",
     fields: [{ name: "name", label: "الاسم ثلاثي", required: true }, { name: "nationalId", label: "الرقم القومي (14 رقم)", type: "tel", required: true }, { name: "mobile", label: "رقم الموبايل", type: "tel", required: true },
-      ...(c.org ? [{ name: "org", label: c.org, required: k !== "guest" }] : [{ name: "org", label: "آخر جهة عمل", required: true }])],
+      ...(k === "outsource" ? [{ name: "org", label: "الشركة", type: "select", required: true, value: "", options: [["", "— اختر الشركة —"], ...OUTSOURCE_COMPANIES.map(x => [x, x])] }]
+        : c.org ? [{ name: "org", label: c.org, required: k !== "guest" }] : [{ name: "org", label: "آخر جهة عمل", required: true }])],
     ok: "سجّلني", icon: "check" });
   if (!v) return;
+  if (k === "outsource" && !v.org) return toast("اختر الشركة من القائمة", "warning");
   const r = await call("REGISTER_MEMBER", Object.assign({ category: k }, v), { block: true });
   if (!r.success) return toast(r.message, r.exists ? "warning" : "danger");
   Shell.enter(r);

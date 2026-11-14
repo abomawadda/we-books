@@ -312,4 +312,7 @@ fail(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد مح
 fail(api('REGISTER_MEMBER', { category: 'guest', name: 'سامي علي حسن', nationalId: '1234', mobile: '01011113333' }), 'bad national id');
 fail(api('REGISTER_MEMBER', { category: 'guest', name: 'منى سعيد علي', nationalId: '29001011234567', mobile: '01012345678' }), 'mynekaba mobile rejected');
 ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, g.sessionToken), 'guest portal works');
+fail(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'شركة أخرى' }), 'outsource company must be from list');
+const os1 = ok(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'Tedata' }), 'outsource Tedata');
+assert.strictEqual(os1.newMemberId, '6000001'); passed++;
 console.log('\nALL PASSED:', passed, 'checks');
