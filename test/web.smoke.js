@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -169,6 +169,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/a/expenses'); await click('[data-act="addExp"]'); fill('amount', '150'); fill('beneficiary', 'شركة نقل'); await ok(); expectNoErrorToasts('expense');
   await go('/a/supplier'); await click('[data-act="paySup"]'); fill('amount', '100'); fill('docRef', 'TR-1'); await ok(); expectNoErrorToasts('supplier payment');
 
+  await go('/a/dday'); check(d.querySelector('[data-act="ddScan"]') && d.getElementById('ddLive'), 'dday scan + live');
   // نظرة المدير: الشريط اليومي والجاهزية وفجوة التوريد ومتابعة الأعضاء
   await go('/a/dash'); check(/حجوزات جديدة اليوم/.test(d.getElementById('view').textContent), 'today strip');
   await go('/a/gap'); check(/فجوة التوريد/.test(d.getElementById('view').textContent) && d.querySelector('#gapList'), 'gap page');
