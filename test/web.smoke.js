@@ -156,6 +156,16 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   fill('grade', '1 ثانوي'); fill('schoolTypes', 'أزهر'); fill('publisher', 'المرشد'); fill('subject', 'تفسير');
   await ok(); expectNoErrorToasts('save unpriced book');
   check(w.eval('APP').adm.books.some(b => b.Book_ID === 'S1-001' && b.Book_Status === 'Pricing'), 'unpriced book saved as Pricing');
+  // إضافة سلسلة متكاملة عبر النموذج الذكي واختيار المرحلة الابتدائية كاملة (1 إلى 6 ابتدائي)
+  await click('[data-act="bookForm"]');
+  dialog().querySelector('[data-quick-series="المرحلة الابتدائية"]').click(); await settle();
+  fill('schoolTypes', 'حكومي'); fill('publisher', 'سلاح التلميذ'); fill('subject', 'دراسات'); fill('bookPart', 'شرح'); fill('coverPrice', '140'); fill('supplierDiscountPct', '20');
+  await ok(); expectNoErrorToasts('save full primary series via UI');
+  check(['P1', 'P2', 'P3', 'P4', 'P5', 'P6'].every(c => w.eval('APP').adm.books.some(b => b.Book_ID.startsWith(c + '-') && b.Publisher === 'سلاح التلميذ' && b.Subject === 'دراسات')), '6-grade primary series saved via UI without grade error');
+  // نافذة إدارة قوائم الكتالوج التفاعلية بدون فصلات
+  await click('[data-act="catalogMgr"]');
+  check(/إدارة قوائم الكتالوج/.test(dialog().textContent), 'catalog manager modal opened');
+  await closeAll();
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');

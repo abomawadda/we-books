@@ -291,7 +291,7 @@ function booksTable() {
 Router.add("/a/books", view => {
   const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
+    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("sliders-horizontal")} قوائم الكتالوج</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
     + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
       ${bookFilters()}
@@ -387,31 +387,267 @@ function nextCodePreview(gradeCode, books) {
   do { code = pre + String(n++).padStart(3, "0"); } while (taken[code.toUpperCase()]);
   return code;
 }
+/** اسم العرض التلقائي للكتاب (مطابق لمنطق الخادم) */
+function previewBookName(pub, sub, part, schoolTypes) {
+  if (!pub || !sub) return "";
+  const types = String(schoolTypes || "").split(/[,،+]/).map(s => s.trim()).filter(Boolean);
+  const langOnly = types.length === 1 && types[0] === "لغات" && !LANG_SUBJECTS.includes(sub);
+  return pub + " — " + sub + (langOnly ? " لغات" : "") + (part ? " (" + part + ")" : "");
+}
+/** تنظيف اسم عنصر كتالوج جديد من أي فواصل */
+const cleanCatItem = v => String(v || "").replace(/[,،|]/g, " ").replace(/\s+/g, " ").trim();
+
+/** حفظ قائمة كتالوج (ناشرين / مواد / أجزاء / صفوف إضافية) بطريقة متوافقة مع كل نسخ الخادم */
+async function persistCatalogList(key, itemsOrJson, opts) {
+  opts = opts || {};
+  const val = typeof itemsOrJson === "string" ? itemsOrJson : itemsOrJson.join("،");
+  if (can("SAVE_SETTING")) {
+    const r = await call("SAVE_SETTING", { key, value: val }, { block: opts.block });
+    if (r && r.success) return r;
+  }
+  const p = { catalogUpdate: true };
+  if (key === "BOOK_PUBLISHERS") p.publishers = itemsOrJson;
+  else if (key === "BOOK_SUBJECTS") p.subjects = itemsOrJson;
+  else if (key === "BOOK_PARTS") p.parts = itemsOrJson;
+  else if (key === "BOOK_GRADES") p.customGrades = typeof itemsOrJson === "string" ? JSON.parse(itemsOrJson) : itemsOrJson;
+  return call("SAVE_BOOK", p, { block: opts.block });
+}
+
+// ---------------- إدارة قوائم الكتالوج التفاعلية (دور النشر · المواد · الأجزاء · الصفوف) بلا فواصل ----------------
+const CM = { tab: "publishers", q: "", m: null };
+const BASE_GRADES = ["تأسيس", "كي جي 1", "كي جي 2", "1 ابتدائي", "2 ابتدائي", "3 ابتدائي", "4 ابتدائي", "5 ابتدائي", "6 ابتدائي", "1 إعدادي", "2 إعدادي", "3 إعدادي", "1 ثانوي", "2 ثانوي", "3 ثانوي"];
+function catalogMgrHTML() {
+  const d = A(), c = d.catalog || {}, tab = CM.tab, q = (CM.q || "").toLowerCase();
+  const stages = [...new Set(["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"].concat((c.grades || []).map(g => g.stage).filter(Boolean)))];
+  const tabs = [
+    ["publishers", "store", "دور النشر", (c.publishers || []).length],
+    ["subjects", "book-open", "المواد الدراسية", (c.subjects || []).length],
+    ["parts", "library", "أجزاء الكتاب", (c.parts || []).length],
+    ["grades", "graduation-cap", "الصفوف الدراسية", (c.grades || []).length]
+  ];
+  const usedCount = (field, val) => d.books.filter(b => b[field] === val && b.Book_Status !== "Discontinued").length;
+  let body = "";
+  if (tab === "grades") {
+    const list = (c.grades || []).filter(g => !q || (g.label + " " + g.stage + " " + g.code).toLowerCase().includes(q));
+    body = `
+      <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200 p-3.5 mb-4">
+        <div class="text-xs font-bold text-brand-900 mb-2">${ic("plus", "text-brand-600")} إضافة صف دراسي جديد إلى القائمة المنسدلة</div>
+        <div class="grid grid-cols-1 sm:grid-cols-[1.2fr_1fr_0.7fr_auto] gap-2 items-end">
+          <div><label class="label !text-[11px]">اسم الصف الدراسي</label><input id="cmNewGradeLabel" class="input !h-10" placeholder="مثال: تمهيدي أو 4 ثانوي"></div>
+          <div><label class="label !text-[11px]">المرحلة الدراسية</label><select id="cmNewGradeStage" class="input !h-10">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select></div>
+          <div><label class="label !text-[11px]">بادئة الكود (اختياري)</label><input id="cmNewGradeCode" class="input !h-10 num" placeholder="تلقائي (P7)"></div>
+          <button type="button" class="btn btn-primary !h-10" data-act="cmAddGrade">${ic("plus")} إضافة الصف</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-[50vh] overflow-y-auto p-0.5">
+        ${list.map(g => {
+          const cnt = usedCount("Grade", g.label), isBase = BASE_GRADES.includes(g.label);
+          return `<div class="flex items-center justify-between gap-2 rounded-2xl bg-white ring-1 ring-slate-200 px-3.5 py-2.5">
+            <div class="min-w-0">
+              <div class="font-bold text-slate-900 text-sm flex items-center gap-1.5"><span>${esc(g.label)}</span><span class="pill pill-brand !text-[10.5px] !px-2 num">${esc(g.code)}</span></div>
+              <div class="text-[11.5px] text-slate-400">${esc(g.stage)} · <span class="num">${cnt}</span> كتاب</div>
+            </div>
+            ${!isBase && !cnt ? `<button type="button" class="icon-btn w-8 h-8 text-rose-500 hover:bg-rose-50" data-act="cmDelGrade" data-id="${esc(g.label)}" title="حذف الصف">${ic("trash-2")}</button>` : ""}
+          </div>`;
+        }).join("")}
+      </div>`;
+  } else {
+    const cfg = {
+      publishers: { list: c.publishers || [], field: "Publisher", label: "دار نشر جديدة", ph: "اكتب اسم دار النشر الجديدة (مثل: الأضواء، التفوق…)" },
+      subjects: { list: c.subjects || [], field: "Subject", label: "مادة دراسية جديدة", ph: "اكتب اسم المادة الجديدة (مثل: مهارات مهنية…)" },
+      parts: { list: c.parts || [], field: "Book_Part", label: "جزء كتاب جديد", ph: "اكتب اسم الجزء الجديد (مثل: مراجعة نهائية، ملحق…)" }
+    }[tab];
+    const items = cfg.list.filter(x => !q || x.toLowerCase().includes(q));
+    body = `
+      <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200 p-3 mb-4 flex flex-wrap items-center gap-2">
+        <div class="flex-1 min-w-[14rem]"><input id="cmNewItem" class="input !h-10 bg-white" placeholder="${esc(cfg.ph)}"></div>
+        <button type="button" class="btn btn-primary !h-10" data-act="cmAddItem">${ic("plus")} إضافة ${esc(cfg.label)}</button>
+      </div>
+      <div class="flex items-center justify-between gap-2 mb-3">
+        ${searchBox("cmQ", CM.q, "ابحث في القائمة الحالية…")}
+        <span class="text-xs text-slate-500 font-semibold"><b class="num text-slate-800">${items.length}</b> عنصر</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-[48vh] overflow-y-auto p-0.5">
+        ${items.map(item => {
+          const cnt = usedCount(cfg.field, item);
+          const lg = tab === "publishers" ? logoFor(d.pubLogos, item, "") : "";
+          return `<div class="flex items-center justify-between gap-2.5 rounded-2xl bg-white ring-1 ring-slate-200 px-3 py-2 hover:ring-brand-300 transition">
+            <div class="flex items-center gap-2.5 min-w-0">
+              ${tab === "publishers" ? `<span class="w-8 h-8 rounded-lg ring-1 ring-slate-100 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain" alt="">` : ic("store", "text-slate-400 text-xs")}</span>` : ""}
+              <div class="min-w-0"><div class="font-bold text-slate-800 text-[13.5px] truncate">${esc(item)}</div><div class="text-[11px] text-slate-400"><span class="num">${cnt}</span> كتاب مسجل</div></div>
+            </div>
+            ${!cnt ? `<button type="button" class="icon-btn w-7 h-7 text-rose-500 hover:bg-rose-50 shrink-0" data-act="cmDelItem" data-id="${esc(item)}" title="حذف من القائمة">${ic("x")}</button>` : `<span class="pill pill-gray !text-[10px]">مستخدم</span>`}
+          </div>`;
+        }).join("") || `<div class="col-span-3 text-center py-8 text-sm text-slate-400">لا توجد عناصر مطابقة للبحث</div>`}
+      </div>`;
+  }
+  return `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-4 p-1 rounded-2xl bg-slate-100">
+      ${tabs.map(t => `<button type="button" data-act="cmTab" data-id="${t[0]}" class="flex items-center justify-center gap-1.5 rounded-xl py-2 px-2.5 text-xs font-bold transition ${tab === t[0] ? "bg-white text-brand-800 shadow-sm" : "text-slate-600 hover:text-slate-900"}">${ic(t[1])}<span>${t[2]}</span><span class="rounded-full px-1.5 py-0.5 text-[10px] num ${tab === t[0] ? "bg-brand-50 text-brand-700" : "bg-slate-200/70 text-slate-600"}">${t[3]}</span></button>`).join("")}
+    </div>
+    ${body}`;
+}
+const cmRefresh = () => { if (CM.m && CM.m.body && document.body.contains(CM.m.root)) CM.m.body.innerHTML = catalogMgrHTML(); };
+on("catalogMgr", initialTab => {
+  CM.tab = ["publishers", "subjects", "parts", "grades"].includes(initialTab) ? initialTab : "publishers";
+  CM.q = "";
+  CM.m = UI.open(catalogMgrHTML(), { title: "إدارة قوائم الكتالوج", sub: "أضف أو احذف دور النشر والمواد الدراسية وأجزاء الكتب والصفوف مباشرة بدون فواصل", wide: true });
+});
+on("cmTab", t => { CM.tab = t; CM.q = ""; cmRefresh(); });
+on("cmQ", v => { CM.q = v.trim(); cmRefresh(); });
+on("cmAddItem", async () => {
+  const inp = $("#cmNewItem"); if (!inp) return;
+  const val = cleanCatItem(inp.value);
+  if (val.length < 2 && CM.tab !== "parts") return toast("أدخل الاسم (حرفان على الأقل)", "warning");
+  if (!val) return toast("أدخل الاسم أولاً", "warning");
+  const c = A().catalog || {}, keyMap = { publishers: ["BOOK_PUBLISHERS", "publishers"], subjects: ["BOOK_SUBJECTS", "subjects"], parts: ["BOOK_PARTS", "parts"] }[CM.tab];
+  if (!keyMap) return;
+  const list = (c[keyMap[1]] || []).slice();
+  if (list.includes(val)) return toast(`«${val}» موجود بالفعل في القائمة`, "info");
+  list.push(val);
+  const r = await persistCatalogList(keyMap[0], list, { block: true });
+  if (!r || !r.success) return toast((r && r.message) || "تعذر الحفظ", "danger");
+  c[keyMap[1]] = list;
+  toast(`تمت إضافة «${val}» إلى القائمة`, "success");
+  await Admin.load();
+  cmRefresh();
+});
+on("cmDelItem", async val => {
+  const c = A().catalog || {}, keyMap = { publishers: ["BOOK_PUBLISHERS", "publishers"], subjects: ["BOOK_SUBJECTS", "subjects"], parts: ["BOOK_PARTS", "parts"] }[CM.tab];
+  if (!keyMap) return;
+  const list = (c[keyMap[1]] || []).filter(x => x !== val);
+  if (!list.length && CM.tab !== "parts") return toast("لا يمكن إفراغ القائمة بالكامل", "warning");
+  const r = await persistCatalogList(keyMap[0], list, { block: true });
+  if (!r || !r.success) return toast((r && r.message) || "تعذر الحذف", "danger");
+  c[keyMap[1]] = list;
+  toast(`تم حذف «${val}» من القائمة`, "success");
+  await Admin.load();
+  cmRefresh();
+});
+on("cmAddGrade", async () => {
+  const lbl = cleanCatItem(($("#cmNewGradeLabel") || {}).value);
+  const stg = cleanCatItem(($("#cmNewGradeStage") || {}).value) || "المرحلة الابتدائية";
+  let code = String(($("#cmNewGradeCode") || {}).value || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+  if (lbl.length < 2) return toast("أدخل اسم الصف الدراسي الجديد", "warning");
+  const c = A().catalog || {}, grades = (c.grades || []).slice();
+  if (grades.some(g => g.label === lbl)) return toast(`الصف «${lbl}» موجود بالفعل`, "info");
+  const used = new Set(grades.map(g => String(g.code).toUpperCase()));
+  if (code && used.has(code)) return toast(`بادئة الكود (${code}) مستخدمة لصف آخر`, "warning");
+  if (!code) {
+    const pre = /أطفال|تمهيد|تأسيس|كي جي/i.test(stg + " " + lbl) ? "KG" : /ابتدائ/i.test(stg + " " + lbl) ? "P" : /إعداد/i.test(stg + " " + lbl) ? "M" : /ثانو/i.test(stg + " " + lbl) ? "S" : "G";
+    let gn = 1; while (used.has(pre + gn)) gn++; code = pre + gn;
+  }
+  grades.push({ code, label: lbl, stage: stg });
+  const custom = grades.filter(g => !BASE_GRADES.includes(g.label));
+  const r = await persistCatalogList("BOOK_GRADES", custom, { block: true });
+  if (!r || !r.success) return toast((r && r.message) || "تعذر حفظ الصف الجديد", "danger");
+  c.grades = grades;
+  toast(`تمت إضافة الصف «${lbl}» (${code})`, "success");
+  await Admin.load();
+  cmRefresh();
+});
+on("cmDelGrade", async lbl => {
+  const c = A().catalog || {}, grades = (c.grades || []).filter(g => g.label !== lbl);
+  const custom = grades.filter(g => !BASE_GRADES.includes(g.label));
+  const r = await persistCatalogList("BOOK_GRADES", custom, { block: true });
+  if (!r || !r.success) return toast((r && r.message) || "تعذر حذف الصف", "danger");
+  c.grades = grades;
+  toast(`تم حذف الصف «${lbl}»`, "success");
+  await Admin.load();
+  cmRefresh();
+});
+
+// ---------------- نافذة تسجيل كتاب / سلسلة متكاملة بقوائم منسدلة تفاعلية مبدعة ----------------
 async function openBookModal(id, cloneFromId) {
   const src = id ? A().books.find(b => b.Book_ID === id) : (cloneFromId ? A().books.find(b => b.Book_ID === cloneFromId) : null);
   const x = id ? (src || {}) : (src ? Object.assign({}, src, { Book_ID: "", Grade: "" }) : {});
-  const c = A().catalog || {}, grades = c.grades || [];
+  const c = A().catalog || {};
+  const grades = (c.grades || []).slice();
+  const publishers = (c.publishers || []).slice();
+  const subjects = (c.subjects || []).slice();
+  const parts = (c.parts || []).slice();
   const stages = [...new Set(["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"].concat(grades.map(g => g.stage).filter(Boolean)))];
-  const extra = { grades: [], newPublisher: "", newSubject: "", newBookPart: "", newGradeLabel: "", newGradeStage: "المرحلة الابتدائية", newGradeCode: "" };
+  const extra = { grades: [], newPublisher: "", newSubject: "", newBookPart: "", newGradeLabel: "", newGradeStage: "المرحلة الابتدائية", newGradeCode: "", addedPubs: [], addedSubs: [], addedParts: [], addedGrades: [] };
   let wired = false;
+
+  // بناء قائمة منسدلة ذكية قابلة للبحث والإضافة الفورية بضغطة واحدة (بدون فواصل)
+  const buildSmartDropdown = (name, label, iconName, currentVal, placeholder, emptyOptionLabel) => {
+    const opts = [["" , emptyOptionLabel || placeholder]].concat(
+      (name === "publisher" ? publishers : name === "subject" ? subjects : parts).map(t => [t, t]),
+      [["__NEW__", "+ إضافة جديد"]]
+    );
+    return `
+      <div class="relative" data-smart-dd="${name}">
+        <label class="label">${esc(label)}</label>
+        <select name="${name}" class="sr-only" tabindex="-1">${opts.map(o => `<option value="${esc(o[0])}" ${String(o[0]) === String(currentVal) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>
+        <button type="button" data-dd-trigger="${name}" class="w-full flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-white px-3.5 py-2.5 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+          <span class="flex items-center gap-2.5 min-w-0 flex-1" data-dd-label="${name}"></span>
+          <span class="text-slate-400 shrink-0">${ic("chevron-down")}</span>
+        </button>
+        <div data-dd-panel="${name}" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
+          <div class="flex items-center gap-1.5 mb-2.5">
+            <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="${name}" class="input !h-9 !text-xs" placeholder="ابحث في القائمة أو اكتب اسماً جديداً لإضافته فوراً…"></div>
+            <button type="button" data-dd-quickadd="${name}" class="btn btn-primary btn-xs !h-9 shrink-0">${ic("plus")} إضافة جديد</button>
+          </div>
+          <div data-dd-newprompt="${name}" class="hidden mb-2"></div>
+          <div data-dd-list="${name}" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-52 overflow-y-auto p-0.5"></div>
+        </div>
+      </div>`;
+  };
+
   const fields = [
-    { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-xl bg-slate-50 px-4 py-3 text-sm">${id ? `الكود: <b class="num">${esc(x.Book_ID)}</b>` : "يُولَّد الكود تلقائياً لكل صف (مثل P1-012) دون تكرار."}</div>` }
+    { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-2xl bg-gradient-to-l from-brand-50/90 to-slate-50 ring-1 ring-brand-100 px-4 py-3.5 text-sm"></div>` }
   ];
   if (!id) {
-    fields.push({ name: "regMode", label: "نظام الإضافة", type: "seg", value: "single", options: [["single", "صف دراسي واحد (أو صف جديد)"], ["series", "سلسلة متكاملة لعدة صفوف"]] });
+    fields.push({ name: "regMode", label: "نظام الإضافة", type: "seg", value: "single", options: [["single", "كتاب لصف دراسي واحد"], ["series", "سلسلة متكاملة لعدة صفوف"]] });
   }
   fields.push(
-    { name: "grade", label: "الصف الدراسي", type: "select", value: x.Grade || "", cols: 1, options: [["", "— اختر الصف —"]].concat(grades.map(g => [g.label, g.label + " · " + g.stage]), [["__NEW__", "+ إضافة صف دراسي جديد…"]]) },
-    { name: "schoolTypes", label: "نوع المدرسة", type: "select", value: x.School_Types || "حكومي", cols: 1, required: true, options: typeCombos(c.schoolTypes || []) },
-    { name: "_gradeExtra", type: "html", html: `
-      <div id="newGradeWrap" class="hidden rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div><label class="label">اسم الصف الدراسي الجديد</label><input data-x="newGradeLabel" class="input" placeholder="مثال: تمهيدي أو 4 ثانوي"></div>
-        <div><label class="label">المرحلة الدراسية</label><select data-x="newGradeStage" class="input">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select></div>
-        <div><label class="label">بادئة الكود (اختياري)</label><input data-x="newGradeCode" class="input num" placeholder="تلقائي (مثل P7 أو KG0)"></div>
+    { name: "_gradePicker", type: "html", html: `
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+        <div id="singleGradeCol" class="${!id ? "" : ""}">
+          <div class="relative" data-smart-dd="grade">
+            <label class="label">الصف الدراسي</label>
+            <select name="grade" class="sr-only" tabindex="-1">${[["", "— اختر الصف —"]].concat(grades.map(g => [g.label, g.label + " · " + g.stage]), [["__NEW__", "+ إضافة صف دراسي جديد"]]).map(o => `<option value="${esc(o[0])}" ${String(o[0]) === String(x.Grade || "") ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>
+            <button type="button" data-dd-trigger="grade" class="w-full flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-white px-3.5 py-2.5 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+              <span class="flex items-center gap-2 min-w-0 flex-1" data-dd-label="grade"></span>
+              <span class="text-slate-400 shrink-0">${ic("chevron-down")}</span>
+            </button>
+            <div data-dd-panel="grade" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
+              <div class="flex items-center justify-between gap-2 mb-2">
+                <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="grade" class="input !h-9 !text-xs" placeholder="ابحث عن الصف أو اكتب صفاً جديداً…"></div>
+                <button type="button" data-toggle-newgrade class="btn btn-soft btn-xs !h-9 shrink-0">${ic("plus")} صف جديد</button>
+              </div>
+              <div id="inlineNewGradeBox" class="hidden rounded-xl bg-brand-50/70 ring-1 ring-brand-200 p-2.5 mb-2.5 space-y-2">
+                <div class="text-[11.5px] font-bold text-brand-900">إضافة صف دراسي جديد للقائمة:</div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <input data-x="newGradeLabel" class="input !h-9 !text-xs bg-white" placeholder="اسم الصف (مثل: تمهيدي)">
+                  <select data-x="newGradeStage" class="input !h-9 !text-xs bg-white">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select>
+                  <input data-x="newGradeCode" class="input !h-9 !text-xs bg-white num" placeholder="الكود (تلقائي)">
+                </div>
+                <button type="button" data-confirm-newgrade class="btn btn-primary btn-xs w-full">${ic("check")} اعتماد الصف واختياره</button>
+              </div>
+              <div data-dd-list="grade" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-0.5"></div>
+            </div>
+          </div>
+          ${!id ? `<div class="mt-2 flex flex-wrap items-center gap-1">
+            <span class="text-[11px] text-slate-400 ml-1">أو سلسلة سريعة:</span>
+            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الابتدائية">الابتدائي 1–6</button>
+            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الإعدادية">الإعدادي 1–3</button>
+            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الثانوية">الثانوي 1–3</button>
+            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="رياض الأطفال">رياض الأطفال</button>
+          </div>` : ""}
+        </div>
+        <div>
+          <label class="label" for="f_schoolTypes">نوع المدرسة</label>
+          <select id="f_schoolTypes" name="schoolTypes" class="input">${typeCombos(c.schoolTypes || []).map(op => `<option value="${esc(op[0])}" ${String(op[0]) === String(x.School_Types || "حكومي") ? "selected" : ""}>${esc(op[1])}</option>`).join("")}</select>
+        </div>
       </div>
-      <div id="seriesWrap" class="hidden rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
-          <span class="font-bold text-[13px] text-slate-800">${ic("library-big", "text-brand-600")} اختر صفوف السلسلة (يُكوَّد كتاب مستقل لكل صف بنفس البيانات):</span>
+      <div id="seriesWrap" class="hidden mt-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+          <div>
+            <span class="font-bold text-[13.5px] text-slate-800">${ic("library-big", "text-brand-600")} حدّد صفوف السلسلة الدراسية:</span>
+            <span id="seriesCountBadge" class="mr-1.5 pill pill-brand !text-[11px]">0 صفوف مختارة</span>
+          </div>
           <div class="flex flex-wrap gap-1">
             <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الابتدائية">الابتدائي (1–6)</button>
             <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الإعدادية">الإعدادي (1–3)</button>
@@ -421,17 +657,22 @@ async function openBookModal(id, cloneFromId) {
             <button type="button" class="btn btn-ghost btn-xs text-rose-600" data-series-stage="NONE">مسح</button>
           </div>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5">${grades.map(g => `<label class="flex items-center gap-2 rounded-xl bg-white ring-1 ring-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 cursor-pointer hover:ring-brand-400"><input type="checkbox" data-series-g="${esc(g.label)}" data-series-st="${esc(g.stage)}" class="w-4 h-4 accent-brand-700"><span>${esc(g.label)} <span class="text-[10.5px] text-slate-400 num">(${esc(g.code)})</span></span></label>`).join("")}</div>
+        <div id="seriesGradesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5"></div>
       </div>` },
-    { name: "publisher", label: "دار النشر", type: "select", value: x.Publisher || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.publishers || []).map(t => [t, t]), [["__NEW__", "+ إضافة دار نشر جديدة…"]]) },
-    { name: "subject", label: "المادة", type: "select", value: x.Subject || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.subjects || []).map(t => [t, t]), [["__NEW__", "+ إضافة مادة جديدة…"]]) },
-    { name: "_pubSubExtra", type: "html", html: `<div id="newPubSubWrap" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5">
-      <div id="newPubBox" class="hidden"><label class="label">اسم دار النشر الجديدة</label><input data-x="newPublisher" class="input" placeholder="مثال: الأضواء"></div>
-      <div id="newSubBox" class="hidden"><label class="label">اسم المادة الجديدة</label><input data-x="newSubject" class="input" placeholder="مثال: مهارات مهنية"></div>
-    </div>` },
-    { name: "bookPart", label: "جزء الكتاب", type: "select", value: x.Book_Part || "", cols: 1, options: [["", "كتاب واحد"]].concat((c.parts || []).map(t => [t, t]), [["__NEW__", "+ إضافة جزء جديد…"]]) },
-    { name: "supplierId", label: "المكتبة (الرئيسية)", type: "select", value: (A().suppliers[0] || {}).Supplier_ID || "", cols: 1, options: A().suppliers.slice(0, 1).map(s => [s.Supplier_ID, s.Supplier_Name]), hint: "كل الكتب تتبع المكتبة الرئيسية المسجلة" },
-    { name: "_partExtra", type: "html", html: `<div id="newPartWrap" class="hidden rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5"><label class="label">اسم جزء الكتاب الجديد</label><input data-x="newBookPart" class="input" placeholder="مثال: مراجعة نهائية أو ملحق امتحانات"></div>` },
+    { name: "_pubSubRow", type: "html", html: `
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        ${buildSmartDropdown("publisher", "دار النشر", "store", x.Publisher || "", "— اختر دار النشر أو أضف جديدة —")}
+        ${buildSmartDropdown("subject", "المادة الدراسية", "book-open", x.Subject || "", "— اختر المادة أو أضف جديدة —")}
+      </div>` },
+    { name: "_partSupRow", type: "html", html: `
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        ${buildSmartDropdown("bookPart", "جزء الكتاب", "library", x.Book_Part || "", "كتاب واحد (بدون جزء فرعي)", "كتاب واحد (بدون جزء فرعي)")}
+        <div>
+          <label class="label" for="f_supplierId">المكتبة (الرئيسية)</label>
+          <select id="f_supplierId" name="supplierId" class="input">${A().suppliers.slice(0, 1).map(s => `<option value="${esc(s.Supplier_ID)}">${esc(s.Supplier_Name)}</option>`).join("")}</select>
+          <p class="hint">كل الكتب تتبع المكتبة الرئيسية المسجلة</p>
+        </div>
+      </div>` },
     { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
     { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
     { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
@@ -440,94 +681,476 @@ async function openBookModal(id, cloneFromId) {
     { name: "_pv", type: "html", html: `<div id="pricePv" class="rounded-2xl bg-brand-50 p-4"></div>` }
   );
 
+  // قراءة كل قيم النموذج شاملة الحقول المخصصة داخل كتل HTML
+  const readForm = form => {
+    const out = {};
+    ["regMode", "grade", "schoolTypes", "publisher", "subject", "bookPart", "supplierId", "bookStatus", "coverPrice", "supplierDiscountPct", "volumeDiscountSharePct", "empDiscountPct"].forEach(k => {
+      const el = form.elements[k]; if (el) out[k] = el.value;
+    });
+    return out;
+  };
+
+  // استخراج الصفوف المختارة بشكل موثوق سواء من السلسلة أو من القائمة المنسدلة للصف الفردي
+  const resolveGrades = form => {
+    const f = readForm(form);
+    const checked = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG).filter(Boolean);
+    if (checked.length) extra.grades = checked;
+    const isSeries = !id && f.regMode === "series";
+    if (isSeries) {
+      if (extra.grades.length) return extra.grades.slice();
+      const singleG = f.grade === "__NEW__" ? cleanCatItem(extra.newGradeLabel) : cleanCatItem(f.grade);
+      return singleG ? [singleG] : [];
+    }
+    const singleG = f.grade === "__NEW__" ? cleanCatItem(extra.newGradeLabel) : cleanCatItem(f.grade);
+    if (singleG) return [singleG];
+    return extra.grades.length ? extra.grades.slice(0, 1) : [];
+  };
+
+  const setSelectValue = (form, name, val, label) => {
+    const sel = form.elements[name];
+    if (!sel) return;
+    if (val && !Array.from(sel.options).some(o => o.value === val)) {
+      const op = document.createElement("option");
+      op.value = val; op.textContent = label || val;
+      sel.appendChild(op);
+    }
+    sel.value = val;
+  };
+
+  const renderSeriesGrid = form => {
+    const grid = form.querySelector("#seriesGradesGrid");
+    if (!grid) return;
+    const sim = A().books.slice();
+    grid.innerHTML = grades.map(g => {
+      const checked = extra.grades.includes(g.label);
+      const nextCode = nextCodePreview(g.code, sim);
+      return `<label class="flex items-center justify-between gap-1.5 rounded-xl px-2.5 py-2 text-xs font-semibold cursor-pointer transition ${checked ? "bg-brand-600 text-white ring-2 ring-brand-600 shadow-sm" : "bg-white text-slate-700 ring-1 ring-slate-200 hover:ring-brand-400"}">
+        <span class="flex items-center gap-1.5 min-w-0"><input type="checkbox" data-series-g="${esc(g.label)}" data-series-st="${esc(g.stage)}" class="w-4 h-4 accent-brand-700 shrink-0" ${checked ? "checked" : ""}><span class="truncate">${esc(g.label)}</span></span>
+        <span class="text-[10px] num px-1.5 py-0.5 rounded-md ${checked ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}">${esc(nextCode)}</span>
+      </label>`;
+    }).join("");
+    const badge = form.querySelector("#seriesCountBadge");
+    if (badge) {
+      badge.textContent = extra.grades.length ? `${extra.grades.length} صفوف مختارة` : "اختر صفاً أو مرحلة";
+      badge.className = `mr-1.5 pill !text-[11px] ${extra.grades.length ? "pill-green" : "pill-amber"}`;
+    }
+  };
+
+  const renderSmartDropdown = (form, name) => {
+    const f = readForm(form);
+    const val = f[name] === "__NEW__" ? cleanCatItem(name === "publisher" ? extra.newPublisher : name === "subject" ? extra.newSubject : name === "bookPart" ? extra.newBookPart : extra.newGradeLabel) : (f[name] || "");
+    const lblEl = form.querySelector(`[data-dd-label="${name}"]`);
+    const qInput = form.querySelector(`[data-dd-search="${name}"]`);
+    const q = qInput ? cleanCatItem(qInput.value) : "";
+    const ql = q.toLowerCase();
+    const listEl = form.querySelector(`[data-dd-list="${name}"]`);
+    const promptEl = form.querySelector(`[data-dd-newprompt="${name}"]`);
+
+    if (name === "grade") {
+      const gObj = grades.find(g => g.label === val);
+      if (lblEl) {
+        lblEl.innerHTML = val
+          ? `<span class="w-7 h-7 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-bold num shrink-0">${esc(gObj ? gObj.code : "جديد")}</span><span class="font-bold text-slate-900 truncate">${esc(val)}</span><span class="text-xs text-slate-400 truncate">${esc(gObj ? gObj.stage : extra.newGradeStage)}</span>`
+          : `<span class="text-slate-400">${ic("graduation-cap")} — اختر الصف الدراسي من القائمة أو أضف جديداً —</span>`;
+      }
+      if (listEl) {
+        const filtered = grades.filter(g => !ql || (g.label + " " + g.stage + " " + g.code).toLowerCase().includes(ql));
+        listEl.innerHTML = filtered.map(g => {
+          const active = g.label === val;
+          return `<button type="button" data-dd-pick="grade" data-val="${esc(g.label)}" class="flex items-center justify-between gap-1.5 rounded-xl px-2.5 py-2 text-right text-xs font-semibold transition ${active ? "bg-brand-600 text-white shadow-sm" : "bg-slate-50 text-slate-700 hover:bg-brand-50 hover:text-brand-900"}">
+            <span class="truncate">${esc(g.label)}</span>
+            <span class="text-[10px] num px-1.5 py-0.5 rounded ${active ? "bg-white/20 text-white" : "bg-white text-slate-500"}">${esc(g.code)}</span>
+          </button>`;
+        }).join("") || `<div class="col-span-3 text-center py-3 text-xs text-slate-400">لا يوجد صف مطابق — اضغط «+ صف جديد» لإضافته</div>`;
+      }
+      return;
+    }
+
+    const items = name === "publisher" ? publishers : name === "subject" ? subjects : parts;
+    const bookField = name === "publisher" ? "Publisher" : name === "subject" ? "Subject" : "Book_Part";
+    const iconName = name === "publisher" ? "store" : name === "subject" ? "book-open" : "library";
+    const emptyText = name === "publisher" ? "— اختر دار النشر أو أضف جديدة —" : name === "subject" ? "— اختر المادة أو أضف جديدة —" : "كتاب واحد (بدون جزء فرعي)";
+
+    if (lblEl) {
+      if (val) {
+        const lg = name === "publisher" ? logoFor(A().pubLogos, val, f.subject || "") : "";
+        const isNew = (name === "publisher" && extra.addedPubs.includes(val)) || (name === "subject" && extra.addedSubs.includes(val)) || (name === "bookPart" && extra.addedParts.includes(val));
+        lblEl.innerHTML = `${name === "publisher" ? `<span class="w-7 h-7 rounded-lg ring-1 ring-slate-200 bg-white flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain" alt="">` : ic("store", "text-brand-600")}</span>` : `<span class="w-7 h-7 rounded-lg bg-brand-50 text-brand-600 flex items-center justify-center shrink-0">${ic(iconName)}</span>`}
+          <span class="font-bold text-slate-900 truncate">${esc(val)}</span>
+          ${isNew ? `<span class="pill pill-green !text-[10px] !px-2">جديد</span>` : ""}`;
+      } else {
+        lblEl.innerHTML = `<span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">${ic(iconName)}</span><span class="${name === "bookPart" ? "font-semibold text-slate-700" : "text-slate-400"} truncate">${esc(emptyText)}</span>`;
+      }
+    }
+
+    if (promptEl) {
+      if (q && !items.some(x => x.toLowerCase() === ql)) {
+        const kindAr = name === "publisher" ? "كدار نشر جديدة" : name === "subject" ? "كمادة دراسية جديدة" : "كجزء كتاب جديد";
+        promptEl.classList.remove("hidden");
+        promptEl.innerHTML = `<button type="button" data-dd-create="${name}" data-val="${esc(q)}" class="w-full flex items-center justify-between gap-2 rounded-xl bg-brand-600 text-white px-3 py-2 text-xs font-bold shadow-sm hover:bg-brand-700 transition">
+          <span class="flex items-center gap-1.5">${ic("sparkles")} إضافة «${esc(q)}» ${kindAr} واعتمادها فوراً</span>
+          <span>اضغط للاختيار ←</span>
+        </button>`;
+      } else {
+        promptEl.classList.add("hidden");
+        promptEl.innerHTML = "";
+      }
+    }
+
+    if (listEl) {
+      const filtered = items.filter(x => !ql || x.toLowerCase().includes(ql));
+      const headOpt = name === "bookPart" && !ql ? `<button type="button" data-dd-pick="bookPart" data-val="" class="col-span-2 sm:col-span-3 flex items-center justify-between rounded-xl px-3 py-2 text-xs font-bold transition ${!val ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}"><span>كتاب واحد (كامل بدون جزء فرعي)</span>${!val ? ic("check") : ""}</button>` : "";
+      listEl.innerHTML = headOpt + (filtered.map(item => {
+        const active = item === val;
+        const cnt = A().books.filter(b => b[bookField] === item && b.Book_Status !== "Discontinued").length;
+        const lg = name === "publisher" ? logoFor(A().pubLogos, item, f.subject || "") : "";
+        return `<button type="button" data-dd-pick="${name}" data-val="${esc(item)}" class="flex items-center justify-between gap-1.5 rounded-xl px-2.5 py-2 text-right text-xs font-semibold transition ${active ? "bg-brand-600 text-white shadow-sm" : "bg-slate-50 text-slate-700 hover:bg-brand-50 hover:text-brand-900"}">
+          <span class="flex items-center gap-1.5 min-w-0">
+            ${name === "publisher" ? `<span class="w-5 h-5 rounded bg-white flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain" alt="">` : ic("store", "text-slate-400 !w-3.5 !h-3.5")}</span>` : ""}
+            <span class="truncate">${esc(item)}</span>
+          </span>
+          ${cnt ? `<span class="text-[10px] num px-1.5 py-0.5 rounded shrink-0 ${active ? "bg-white/20 text-white" : "bg-white text-slate-400"}">${cnt}</span>` : ""}
+        </button>`;
+      }).join("") || `<div class="col-span-3 text-center py-3 text-xs text-slate-400">اكتب الاسم أعلاه واضغط «+ إضافة جديد»</div>`);
+    }
+  };
+
+  const addAndPickItem = (form, name, rawVal) => {
+    const val = cleanCatItem(rawVal);
+    if (!val || (name !== "bookPart" && val.length < 2)) {
+      toast(name === "publisher" ? "أدخل اسم دار النشر (حرفان على الأقل)" : name === "subject" ? "أدخل اسم المادة (حرفان على الأقل)" : "أدخل اسم جزء الكتاب", "warning");
+      return;
+    }
+    const list = name === "publisher" ? publishers : name === "subject" ? subjects : parts;
+    if (!list.includes(val)) {
+      list.unshift(val);
+      if (name === "publisher") { extra.newPublisher = val; extra.addedPubs.push(val); if (A().catalog && A().catalog.publishers && !A().catalog.publishers.includes(val)) A().catalog.publishers.push(val); }
+      if (name === "subject") { extra.newSubject = val; extra.addedSubs.push(val); if (A().catalog && A().catalog.subjects && !A().catalog.subjects.includes(val)) A().catalog.subjects.push(val); }
+      if (name === "bookPart") { extra.newBookPart = val; extra.addedParts.push(val); if (A().catalog && A().catalog.parts && !A().catalog.parts.includes(val)) A().catalog.parts.push(val); }
+    }
+    setSelectValue(form, name, val, val);
+    const qInput = form.querySelector(`[data-dd-search="${name}"]`);
+    if (qInput) qInput.value = "";
+    const panel = form.querySelector(`[data-dd-panel="${name}"]`);
+    if (panel) panel.classList.add("hidden");
+    renderSmartDropdown(form, name);
+    form.dispatchEvent(new Event("input"));
+  };
+
+  const switchMode = (form, mode) => {
+    const seg = form.querySelector('[data-seg="regMode"]');
+    if (!seg || !form.elements.regMode) return;
+    form.elements.regMode.value = mode;
+    $$("button", seg).forEach(b => b.setAttribute("aria-pressed", b.dataset.v === mode));
+  };
+
   const v = await UI.form({
     title: id ? "تعديل كتاب" : (cloneFromId ? "إضافة نفس الكتاب لصف جديد أو سلسلة" : "تسجيل كتاب أو سلسلة جديدة"),
-    sub: id ? x.Book_Name : (cloneFromId && src ? `نسخ من: ${src.Book_Name} (${src.Book_ID}) — اختر الصف الجديد أو السلسلة` : "يمكنك إضافة دار نشر أو مادة أو صف جديد، أو تسجيل سلسلة كاملة لعدة صفوف دفعة واحدة"),
+    sub: id ? x.Book_Name : (cloneFromId && src ? `نسخ من: ${src.Book_Name} (${src.Book_ID}) — اختر الصف الجديد أو السلسلة` : "اختر من القوائم المنسدلة أو أضف دار نشر / مادة / صفاً جديداً بضغطة واحدة، أو سجّل سلسلة كاملة لعدة صفوف"),
     wide: true, icon: "check", fields,
-    onChange: (f, form) => {
+    onChange: (_, form) => {
       if (!wired) {
         wired = true;
+        renderSeriesGrid(form);
+
+        // تفعيل القوائم المنسدلة التفاعلية (دار النشر · المادة · الجزء · الصف)
+        form.addEventListener("click", e => {
+          const trig = e.target.closest("[data-dd-trigger]");
+          if (trig) {
+            const name = trig.dataset.ddTrigger;
+            const panel = form.querySelector(`[data-dd-panel="${name}"]`);
+            const wasOpen = panel && !panel.classList.contains("hidden");
+            $$("[data-dd-panel]", form).forEach(p => p.classList.add("hidden"));
+            if (panel && !wasOpen) {
+              panel.classList.remove("hidden");
+              renderSmartDropdown(form, name);
+              const sInp = panel.querySelector(`[data-dd-search="${name}"]`);
+              if (sInp) setTimeout(() => sInp.focus(), 20);
+            }
+            return;
+          }
+          const pick = e.target.closest("[data-dd-pick]");
+          if (pick) {
+            const name = pick.dataset.ddPick, val = pick.dataset.val;
+            setSelectValue(form, name, val, val);
+            if (name === "grade" && val && !extra.grades.length) extra.grades = [val];
+            const panel = form.querySelector(`[data-dd-panel="${name}"]`);
+            if (panel) panel.classList.add("hidden");
+            ["grade", "publisher", "subject", "bookPart"].forEach(k => renderSmartDropdown(form, k));
+            form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const cr = e.target.closest("[data-dd-create]");
+          if (cr) {
+            addAndPickItem(form, cr.dataset.ddCreate, cr.dataset.val);
+            return;
+          }
+          const qa = e.target.closest("[data-dd-quickadd]");
+          if (qa) {
+            const name = qa.dataset.ddQuickadd;
+            const sInp = form.querySelector(`[data-dd-search="${name}"]`);
+            if (sInp && cleanCatItem(sInp.value)) {
+              addAndPickItem(form, name, sInp.value);
+            } else if (sInp) {
+              sInp.focus();
+              toast("اكتب الاسم الجديد في خانة البحث ثم اضغط «+ إضافة جديد»", "info");
+            }
+            return;
+          }
+          if (e.target.closest("[data-toggle-newgrade]")) {
+            const box = form.querySelector("#inlineNewGradeBox");
+            if (box) {
+              box.classList.toggle("hidden");
+              const inp = box.querySelector('[data-x="newGradeLabel"]');
+              if (inp && !box.classList.contains("hidden")) inp.focus();
+            }
+            return;
+          }
+          if (e.target.closest("[data-confirm-newgrade]")) {
+            const lbl = cleanCatItem(extra.newGradeLabel);
+            const stg = cleanCatItem(extra.newGradeStage) || "المرحلة الابتدائية";
+            let code = String(extra.newGradeCode || "").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+            if (lbl.length < 2) { toast("أدخل اسم الصف الدراسي الجديد", "warning"); return; }
+            let gObj = grades.find(g => g.label === lbl);
+            if (!gObj) {
+              const used = new Set(grades.map(g => String(g.code).toUpperCase()));
+              if (code && used.has(code)) { toast(`بادئة الكود (${code}) مستخدمة لصف آخر`, "warning"); return; }
+              if (!code) {
+                const pre = /أطفال|تمهيد|تأسيس|كي جي/i.test(stg + " " + lbl) ? "KG" : /ابتدائ/i.test(stg + " " + lbl) ? "P" : /إعداد/i.test(stg + " " + lbl) ? "M" : /ثانو/i.test(stg + " " + lbl) ? "S" : "G";
+                let gn = 1; while (used.has(pre + gn)) gn++; code = pre + gn;
+              }
+              gObj = { code, label: lbl, stage: stg };
+              grades.push(gObj);
+              extra.addedGrades.push(gObj);
+              if (A().catalog && A().catalog.grades && !A().catalog.grades.some(g => g.label === lbl)) A().catalog.grades.push(gObj);
+            }
+            extra.newGradeCode = gObj.code;
+            setSelectValue(form, "grade", gObj.label, gObj.label + " · " + gObj.stage);
+            if (!extra.grades.includes(gObj.label)) extra.grades.push(gObj.label);
+            renderSeriesGrid(form);
+            const box = form.querySelector("#inlineNewGradeBox"), panel = form.querySelector('[data-dd-panel="grade"]');
+            if (box) box.classList.add("hidden");
+            if (panel) panel.classList.add("hidden");
+            renderSmartDropdown(form, "grade");
+            form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const qs = e.target.closest("[data-quick-series]");
+          if (qs) {
+            const st = qs.dataset.quickSeries;
+            switchMode(form, "series");
+            extra.grades = grades.filter(g => g.stage === st).map(g => g.label);
+            if (extra.grades[0]) setSelectValue(form, "grade", extra.grades[0], extra.grades[0]);
+            renderSeriesGrid(form);
+            form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const stBtn = e.target.closest("[data-series-stage]");
+          if (stBtn) {
+            const st = stBtn.dataset.seriesStage;
+            extra.grades = st === "ALL" ? grades.map(g => g.label) : st === "NONE" ? [] : grades.filter(g => g.stage === st).map(g => g.label);
+            if (extra.grades[0]) setSelectValue(form, "grade", extra.grades[0], extra.grades[0]);
+            renderSeriesGrid(form);
+            form.dispatchEvent(new Event("input"));
+          }
+        });
+
+        $$("[data-dd-search]", form).forEach(sInp => {
+          sInp.addEventListener("input", e => {
+            e.stopPropagation();
+            const name = sInp.dataset.ddSearch;
+            if (name === "grade") {
+              const v = cleanCatItem(sInp.value);
+              if (v) extra.newGradeLabel = v;
+            }
+            renderSmartDropdown(form, name);
+          });
+          sInp.addEventListener("keydown", e => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.stopPropagation();
+              const name = sInp.dataset.ddSearch, v = cleanCatItem(sInp.value);
+              if (v && name !== "grade") addAndPickItem(form, name, v);
+            }
+          });
+        });
+
         $$("[data-x]", form).forEach(inp => inp.addEventListener("input", () => { extra[inp.dataset.x] = inp.value; form.dispatchEvent(new Event("input")); }));
-        $$("[data-series-g]", form).forEach(cb => cb.addEventListener("change", () => {
-          extra.grades = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG);
-          form.dispatchEvent(new Event("input"));
-        }));
-        $$("[data-series-stage]", form).forEach(btn => btn.addEventListener("click", () => {
-          const st = btn.dataset.seriesStage;
-          $$("[data-series-g]", form).forEach(cb => { cb.checked = st === "ALL" ? true : st === "NONE" ? false : cb.dataset.seriesSt === st; });
-          extra.grades = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG);
-          form.dispatchEvent(new Event("input"));
-        }));
+        form.addEventListener("change", e => {
+          if (e.target && e.target.matches("[data-series-g]")) {
+            extra.grades = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG).filter(Boolean);
+            if (extra.grades[0]) setSelectValue(form, "grade", extra.grades[0], extra.grades[0]);
+            renderSeriesGrid(form);
+            form.dispatchEvent(new Event("input"));
+          }
+        });
       }
+
+      const f = readForm(form);
       const isSeries = !id && f.regMode === "series";
-      const gSelWrap = form.elements.grade ? form.elements.grade.closest("div") : null;
-      if (gSelWrap) gSelWrap.classList.toggle("hidden", isSeries);
-      const ngWrap = form.querySelector("#newGradeWrap"), srWrap = form.querySelector("#seriesWrap");
-      if (ngWrap) ngWrap.classList.toggle("hidden", isSeries || f.grade !== "__NEW__");
+      // عند التحويل لوضع السلسلة، إذا كان هناك صف مختار مسبقاً ولم تُحدَّد صفوف السلسلة بعد، نحدده تلقائياً
+      if (isSeries && !extra.grades.length && f.grade && f.grade !== "__NEW__") {
+        extra.grades = [f.grade];
+        renderSeriesGrid(form);
+      }
+      const singleCol = form.querySelector("#singleGradeCol"), srWrap = form.querySelector("#seriesWrap");
+      if (singleCol) singleCol.classList.toggle("hidden", isSeries);
       if (srWrap) srWrap.classList.toggle("hidden", !isSeries);
-      const pubNew = f.publisher === "__NEW__", subNew = f.subject === "__NEW__", partNew = f.bookPart === "__NEW__";
-      const psWrap = form.querySelector("#newPubSubWrap"), pbBox = form.querySelector("#newPubBox"), sbBox = form.querySelector("#newSubBox"), ptWrap = form.querySelector("#newPartWrap");
-      if (psWrap) psWrap.classList.toggle("hidden", !pubNew && !subNew);
-      if (pbBox) pbBox.classList.toggle("hidden", !pubNew);
-      if (sbBox) sbBox.classList.toggle("hidden", !subNew);
-      if (ptWrap) ptWrap.classList.toggle("hidden", !partNew);
+
+      ["grade", "publisher", "subject", "bookPart"].forEach(k => renderSmartDropdown(form, k));
 
       const p = bookPrice(f), el = form.querySelector("#pricePv"), cpv = form.querySelector("#bookCodePv");
-      el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
+      if (el) el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
+
       if (cpv) {
-        const pub = (pubNew ? extra.newPublisher : f.publisher || "").trim();
-        const sub = (subNew ? extra.newSubject : f.subject || "").trim();
-        const part = (partNew ? extra.newBookPart : f.bookPart || "").trim();
+        const pub = cleanCatItem(f.publisher === "__NEW__" ? extra.newPublisher : f.publisher);
+        const sub = cleanCatItem(f.subject === "__NEW__" ? extra.newSubject : f.subject);
+        const part = cleanCatItem(f.bookPart === "__NEW__" ? extra.newBookPart : f.bookPart);
+        const autoName = previewBookName(pub, sub, part, f.schoolTypes);
+        const lg = pub ? logoFor(A().pubLogos, pub, sub) : "";
         const cTypes = String(f.schoolTypes || "").split(/[,،+]/).map(s => s.trim()).filter(Boolean);
         const findDup = gLabel => (gLabel && pub && sub) ? A().books.find(b => b.Book_ID !== id && b.Book_Status !== "Discontinued" && b.Grade === gLabel && b.Publisher === pub && b.Subject === sub && (b.Book_Part || "") === part && cTypes.some(t => String(b.School_Types || "").split(/[,،+]/).map(s => s.trim()).includes(t))) : null;
+        const nameBar = `<div class="flex items-center gap-3 mb-2 pb-2 border-b border-brand-100/80">
+          <span class="w-10 h-10 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain p-0.5" alt="">` : ic("book-open", "text-brand-600")}</span>
+          <div class="min-w-0 flex-1">
+            <div class="text-[11px] text-slate-400 font-semibold">اسم الكتاب التلقائي في الكتالوج</div>
+            <div class="font-bold text-slate-900 text-[15px] truncate">${autoName ? esc(autoName) : `<span class="text-slate-400 font-normal text-xs">اختر دار النشر والمادة لتوليد اسم الكتاب تلقائياً…</span>`}</div>
+          </div>
+        </div>`;
+
+        const targetGrades = resolveGrades(form);
+        extra.formVals = f;
+        extra.finalGrades = targetGrades;
         if (isSeries) {
-          if (!extra.grades.length) cpv.innerHTML = `<span class="text-slate-600">اختر صفوف السلسلة من الأزرار أعلاه (مثلاً: <b>الابتدائي 1–6</b>) ليتم توليد كود لكل صف تلقائياً.</span>`;
-          else {
+          if (!targetGrades.length) {
+            cpv.innerHTML = nameBar + `<div class="text-xs text-amber-700 font-semibold">${ic("info")} اختر صفوف السلسلة من الأزرار السريعة أعلاه (مثل: <b>الابتدائي 1–6</b>) ليتم توليد كود لكل صف تلقائياً.</div>`;
+          } else {
             const sim = A().books.slice();
-            const chips = extra.grades.map(gl => {
+            const chips = targetGrades.map(gl => {
               const dup = findDup(gl);
               if (dup) return `<span class="inline-flex items-center gap-1 rounded-lg bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-semibold">${esc(gl)}: مسجّل (${esc(dup.Book_ID)}) — سيُتخطى</span>`;
               const gObj = grades.find(g => g.label === gl);
-              const code = gObj ? nextCodePreview(gObj.code, sim) : "—";
+              const code = gObj ? nextCodePreview(gObj.code, sim) : "جديد";
               sim.push({ Book_ID: code });
               return `<span class="inline-flex items-center gap-1 rounded-lg bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-semibold">${esc(gl)} ← <b class="num">${esc(code)}</b></span>`;
             });
-            cpv.innerHTML = `<div class="text-xs font-semibold text-slate-700 mb-1.5">أكواد السلسلة التي ستُسجَّل:</div><div class="flex flex-wrap gap-1.5">${chips.join("")}</div>`;
+            cpv.innerHTML = nameBar + `<div class="text-xs font-semibold text-slate-700 mb-1.5">أكواد السلسلة التي ستُسجَّل (${targetGrades.length} صفوف):</div><div class="flex flex-wrap gap-1.5">${chips.join("")}</div>`;
           }
         } else {
-          const gLabel = f.grade === "__NEW__" ? extra.newGradeLabel.trim() : f.grade;
+          const gLabel = targetGrades[0] || "";
           const dup = findDup(gLabel);
-          if (dup) cpv.innerHTML = `<span class="text-rose-600 font-semibold">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(gLabel)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</span>`;
-          else if (id) cpv.innerHTML = `الكود: <b class="num">${esc(x.Book_ID)}</b>`;
-          else if (f.grade === "__NEW__" && gLabel) cpv.innerHTML = `<span class="text-brand-800 font-semibold">صف جديد «${esc(gLabel)}» (${esc(extra.newGradeStage)}) ← يُولَّد الكود تلقائياً عند الحفظ.</span>`;
-          else {
+          if (dup) cpv.innerHTML = nameBar + `<div class="text-rose-600 font-semibold text-xs">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(gLabel)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</div>`;
+          else if (id) cpv.innerHTML = nameBar + `<div class="text-xs">الكود الحالي: <b class="num text-brand-800">${esc(x.Book_ID)}</b> · الصف: <b>${esc(gLabel)}</b></div>`;
+          else if (gLabel) {
             const gObj = grades.find(g => g.label === gLabel);
-            cpv.innerHTML = gObj ? `الكود التلقائي التالي للصف (${esc(gObj.label)}): <b class="num text-brand-800">${esc(nextCodePreview(gObj.code, A().books))}</b>` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار.";
+            cpv.innerHTML = nameBar + `<div class="text-xs">الصف: <b>${esc(gLabel)}</b> ← الكود التلقائي التالي: <b class="num text-brand-800">${esc(gObj ? nextCodePreview(gObj.code, A().books) : "تلقائي")}</b></div>`;
+          } else {
+            cpv.innerHTML = nameBar + `<div class="text-xs text-slate-500">اختر الصف الدراسي أو اضغط على سلسلة سريعة (مثل: <b>الابتدائي 1–6</b>) لتوليد الأكواد تلقائياً دون تكرار.</div>`;
           }
         }
       }
     },
-    validate: v => {
-      const isSeries = !id && v.regMode === "series";
-      if (isSeries && !extra.grades.length) { toast("اختر صفاً واحداً على الأقل من صفوف السلسلة", "warning"); return false; }
-      if (!isSeries && !v.grade) { toast("اختر الصف الدراسي", "warning"); return false; }
-      if (!isSeries && v.grade === "__NEW__" && extra.newGradeLabel.trim().length < 2) { toast("أدخل اسم الصف الدراسي الجديد", "warning"); return false; }
-      if (v.publisher === "__NEW__" && extra.newPublisher.trim().length < 2) { toast("أدخل اسم دار النشر الجديدة", "warning"); return false; }
-      if (v.subject === "__NEW__" && extra.newSubject.trim().length < 2) { toast("أدخل اسم المادة الجديدة", "warning"); return false; }
-      if (v.bookPart === "__NEW__" && !extra.newBookPart.trim()) { toast("أدخل اسم جزء الكتاب الجديد", "warning"); return false; }
+    validate: (_, form) => {
+      const f = readForm(form);
+      const targetGrades = resolveGrades(form);
+      extra.formVals = f;
+      extra.finalGrades = targetGrades;
+      const pub = cleanCatItem(f.publisher === "__NEW__" ? extra.newPublisher : f.publisher);
+      const sub = cleanCatItem(f.subject === "__NEW__" ? extra.newSubject : f.subject);
+      if (!targetGrades.length) { toast("اختر الصف الدراسي (أو حدّد صفوف السلسلة)", "warning"); return false; }
+      if (pub.length < 2) { toast("اختر دار النشر من القائمة المنسدلة أو أضف دار نشر جديدة", "warning"); return false; }
+      if (sub.length < 2) { toast("اختر المادة الدراسية من القائمة المنسدلة أو أضف مادة جديدة", "warning"); return false; }
       return true;
     }
   });
   if (!v) return;
-  const isSeries = !id && v.regMode === "series";
-  delete v._pv; delete v._gradeExtra; delete v._pubSubExtra; delete v._partExtra; delete v.regMode;
-  v.bookId = id || "";
-  if (isSeries) { v.grades = extra.grades; v.grade = ""; }
-  if (v.grade === "__NEW__") { v.newGradeLabel = extra.newGradeLabel.trim(); v.newGradeStage = extra.newGradeStage; v.newGradeCode = extra.newGradeCode.trim(); }
-  if (v.publisher === "__NEW__") v.newPublisher = extra.newPublisher.trim();
-  if (v.subject === "__NEW__") v.newSubject = extra.newSubject.trim();
-  if (v.bookPart === "__NEW__") v.newBookPart = extra.newBookPart.trim();
-  await act("SAVE_BOOK", v);
+
+  // استخراج القيم النهائية المعتمدة من النموذج
+  const fv = Object.assign({}, extra.formVals || {}, v);
+  const pub = cleanCatItem(fv.publisher === "__NEW__" ? extra.newPublisher : fv.publisher);
+  const sub = cleanCatItem(fv.subject === "__NEW__" ? extra.newSubject : fv.subject);
+  const part = cleanCatItem(fv.bookPart === "__NEW__" ? extra.newBookPart : fv.bookPart);
+  const isSeries = !id && fv.regMode === "series";
+  const singleG = fv.grade === "__NEW__" ? cleanCatItem(extra.newGradeLabel) : cleanCatItem(fv.grade);
+  const targetGrades = (extra.finalGrades && extra.finalGrades.length)
+    ? extra.finalGrades.slice()
+    : (isSeries ? (extra.grades.length ? extra.grades.slice() : (singleG ? [singleG] : [])) : (singleG ? [singleG] : extra.grades.slice(0, 1)));
+
+  // إذا أُضيفت دار نشر أو مادة أو جزء جديد، نحفظها في إعدادات الكتالوج أولاً لضمان التوافق التام مع كل نسخ الخادم
+  if (extra.addedPubs.includes(pub) && can("SAVE_SETTING")) await call("SAVE_SETTING", { key: "BOOK_PUBLISHERS", value: publishers.join("،") });
+  if (extra.addedSubs.includes(sub) && can("SAVE_SETTING")) await call("SAVE_SETTING", { key: "BOOK_SUBJECTS", value: subjects.join("،") });
+  if (extra.addedParts.includes(part) && can("SAVE_SETTING")) await call("SAVE_SETTING", { key: "BOOK_PARTS", value: parts.join("،") });
+  if (extra.addedGrades.length && can("SAVE_SETTING")) {
+    const customG = grades.filter(g => !BASE_GRADES.includes(g.label));
+    await call("SAVE_SETTING", { key: "BOOK_GRADES", value: JSON.stringify(customG) });
+  }
+
+  const payload = {
+    bookId: id || "",
+    grade: targetGrades[0] || "",
+    grades: targetGrades,
+    schoolTypes: fv.schoolTypes || "حكومي",
+    publisher: pub,
+    subject: sub,
+    bookPart: part,
+    supplierId: fv.supplierId || (A().suppliers[0] || {}).Supplier_ID || "",
+    bookStatus: fv.bookStatus || "Available",
+    coverPrice: fv.coverPrice,
+    supplierDiscountPct: fv.supplierDiscountPct,
+    volumeDiscountSharePct: fv.volumeDiscountSharePct,
+    empDiscountPct: fv.empDiscountPct
+  };
+  if (extra.addedPubs.includes(pub)) payload.newPublisher = pub;
+  if (extra.addedSubs.includes(sub)) payload.newSubject = sub;
+  if (extra.addedParts.includes(part)) payload.newBookPart = part;
+  const addedGObj = extra.addedGrades.find(g => targetGrades.includes(g.label));
+  if (addedGObj) {
+    payload.newGradeLabel = addedGObj.label;
+    payload.newGradeStage = addedGObj.stage;
+    payload.newGradeCode = addedGObj.code;
+  }
+
+  // تنفيذ الحفظ مع دعم كامل للسلاسل المتعددة والصفوف المخصصة سواء على منطق الخادم الحديث أو الأقدم
+  const saveSingleFallback = async gl => {
+    const r1 = await call("SAVE_BOOK", Object.assign({}, payload, { grade: gl, grades: [gl] }), { block: true });
+    if (r1 && r1.success) return r1;
+    // إذا كان الخادم على نسخة أقدم لا تعرف الصف المخصص الجديد، نسجله عبر BULK_IMPORT_BOOKS بنفس الكود والتسعير
+    if (r1 && /اختر الصف الدراسي/.test(r1.message || "") && can("BULK_IMPORT_BOOKS")) {
+      const gObj = grades.find(g => g.label === gl) || { code: "G1", label: gl, stage: extra.newGradeStage || "المرحلة الابتدائية" };
+      const code = id || nextCodePreview(gObj.code, A().books);
+      const rImp = await call("BULK_IMPORT_BOOKS", { booksArray: [{
+        Book_ID: code, Book_Name: previewBookName(pub, sub, part, payload.schoolTypes), Stage: gObj.stage, Grade: gObj.label,
+        Subject: sub, Publisher: pub, Supplier_ID: payload.supplierId, School_Types: payload.schoolTypes, Book_Part: part,
+        Cover_Price: payload.coverPrice, Supplier_Discount_Pct: payload.supplierDiscountPct,
+        Volume_Discount_Share_Pct: payload.volumeDiscountSharePct, Emp_Discount_Pct: payload.empDiscountPct
+      }] }, { block: true });
+      if (rImp && rImp.success) return { success: true, message: `تم حفظ الكتاب ${code} (${gObj.label}).`, book: { Book_ID: code, Grade: gObj.label } };
+    }
+    return r1;
+  };
+
+  let r = await call("SAVE_BOOK", payload, { block: true });
+  if (r && !r.success && /اختر الصف الدراسي/.test(r.message || "") && targetGrades.length === 1) {
+    r = await saveSingleFallback(targetGrades[0]);
+  }
+  if (r && r.success && targetGrades.length > 1 && !Array.isArray(r.books)) {
+    const created = [r.book ? `${targetGrades[0]} (${r.book.Book_ID})` : targetGrades[0]];
+    if (r.book) A().books.push(r.book);
+    const errs = [];
+    for (const gl of targetGrades.slice(1)) {
+      const rNext = await saveSingleFallback(gl);
+      if (rNext && rNext.success) {
+        if (rNext.book) A().books.push(rNext.book);
+        created.push(rNext.book ? `${gl} (${rNext.book.Book_ID})` : gl);
+      } else if (rNext && rNext.message) errs.push(`${gl}: ${rNext.message}`);
+    }
+    toast(`تم تسجيل سلسلة (${previewBookName(pub, sub, part, payload.schoolTypes)}) لعدد ${created.length} صفوف: ${created.join("، ")}`, "success");
+    if (errs.length) toast(errs.join(" · "), "warning");
+    await reloadData();
+    return;
+  }
+  toast((r && r.message) || (r && r.success ? "تم الحفظ بنجاح" : "حدث خطأ"), r && r.success ? "success" : "danger");
+  if (r && r.success) await reloadData();
 }
 on("bookForm", id => openBookModal(id, null));
 on("bookClone", id => openBookModal(null, id));
@@ -640,13 +1263,65 @@ Router.add("/a/phases", view => {
 });
 on("phaseForm", async id => {
   const p = id ? A().phases.find(x => x.Phase_ID === id) : {};
-  const v = await UI.form({ title: id ? "تعديل مرحلة" : "مرحلة جديدة", sub: id || "", fields: [
-    { name: "phaseName", label: "اسم المرحلة", value: p.Phase_Name || "", required: true, placeholder: "مثال: الترم الأول 2026/2027" },
-    { name: "startDate", label: "بداية الحجز", type: "date", value: day(p.Start_DateTime), cols: 1, required: true },
-    { name: "endDate", label: "نهاية الحجز", type: "date", value: day(p.End_DateTime), cols: 1, required: true },
-    { name: "deliveryStartDate", label: "بداية التسليم", type: "date", value: day(p.Delivery_Start_Date), cols: 1, hint: "أساس جدول الأقساط" },
-    { name: "allowedGrades", label: "الصفوف المتاحة", value: p.Allowed_Grades || "ALL", cols: 1, hint: "ALL أو أسماء مفصولة بفاصلة" }] });
-  if (v) await act("SAVE_PHASE", Object.assign({ phaseId: id || "" }, v));
+  const grades = (A().catalog || {}).grades || [];
+  const rawG = String(p.Allowed_Grades || "ALL").trim();
+  const isAll = !rawG || rawG.toUpperCase() === "ALL";
+  let picked = isAll ? [] : rawG.split(/[,،]/).map(s => s.trim()).filter(Boolean);
+  let wiredP = false;
+  const v = await UI.form({
+    title: id ? "تعديل مرحلة" : "مرحلة جديدة", sub: id || "", wide: true,
+    fields: [
+      { name: "phaseName", label: "اسم المرحلة", value: p.Phase_Name || "", required: true, placeholder: "مثال: الترم الأول 2026/2027" },
+      { name: "startDate", label: "بداية الحجز", type: "date", value: day(p.Start_DateTime), cols: 1, required: true },
+      { name: "endDate", label: "نهاية الحجز", type: "date", value: day(p.End_DateTime), cols: 1, required: true },
+      { name: "deliveryStartDate", label: "بداية التسليم", type: "date", value: day(p.Delivery_Start_Date), cols: 1, hint: "أساس جدول الأقساط" },
+      { name: "gradeScope", label: "نطاق الصفوف المتاحة", type: "seg", value: isAll ? "ALL" : "CUSTOM", cols: 1, options: [["ALL", "كل الصفوف الدراسية"], ["CUSTOM", "تحديد صفوف معينة"]] },
+      { name: "_phaseGrades", type: "html", html: `
+        <input type="hidden" name="allowedGrades" value="${esc(isAll ? "ALL" : picked.join("،"))}">
+        <div id="phGradesBox" class="${isAll ? "hidden" : ""} rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <span class="font-bold text-xs text-slate-800">${ic("graduation-cap", "text-brand-600")} اختر الصفوف المسموح لها بالحجز في هذه المرحلة:</span>
+            <div class="flex flex-wrap gap-1">
+              <button type="button" class="btn btn-soft btn-xs" data-ph-stage="المرحلة الابتدائية">الابتدائي</button>
+              <button type="button" class="btn btn-soft btn-xs" data-ph-stage="المرحلة الإعدادية">الإعدادي</button>
+              <button type="button" class="btn btn-soft btn-xs" data-ph-stage="المرحلة الثانوية">الثانوي</button>
+              <button type="button" class="btn btn-soft btn-xs" data-ph-stage="رياض الأطفال">رياض الأطفال</button>
+              <button type="button" class="btn btn-ghost btn-xs text-rose-600" data-ph-stage="NONE">مسح</button>
+            </div>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5">${grades.map(g => `<label class="flex items-center gap-2 rounded-xl bg-white ring-1 ring-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 cursor-pointer hover:ring-brand-400"><input type="checkbox" data-ph-g="${esc(g.label)}" data-ph-st="${esc(g.stage)}" class="w-4 h-4 accent-brand-700" ${picked.includes(g.label) ? "checked" : ""}><span>${esc(g.label)}</span></label>`).join("")}</div>
+        </div>` }
+    ],
+    onChange: (f, form) => {
+      if (!wiredP) {
+        wiredP = true;
+        form.addEventListener("change", e => {
+          if (e.target && e.target.matches("[data-ph-g]")) {
+            picked = $$("[data-ph-g]:checked", form).map(el => el.dataset.phG);
+            if (form.elements.allowedGrades) form.elements.allowedGrades.value = f.gradeScope === "ALL" ? "ALL" : picked.join("،");
+          }
+        });
+        $$("[data-ph-stage]", form).forEach(btn => btn.addEventListener("click", () => {
+          const st = btn.dataset.phStage;
+          $$("[data-ph-g]", form).forEach(cb => { cb.checked = st === "NONE" ? false : (cb.checked || cb.dataset.phSt === st); });
+          picked = $$("[data-ph-g]:checked", form).map(el => el.dataset.phG);
+          if (form.elements.allowedGrades) form.elements.allowedGrades.value = picked.join("،");
+        }));
+      }
+      const box = form.querySelector("#phGradesBox");
+      if (box) box.classList.toggle("hidden", f.gradeScope === "ALL");
+      if (form.elements.allowedGrades) form.elements.allowedGrades.value = f.gradeScope === "ALL" ? "ALL" : (picked.length ? picked.join("،") : "ALL");
+    },
+    validate: (f) => {
+      if (f.gradeScope === "CUSTOM" && !picked.length) { toast("اختر صفاً واحداً على الأقل أو اختر «كل الصفوف الدراسية»", "warning"); return false; }
+      return true;
+    }
+  });
+  if (v) {
+    v.allowedGrades = v.gradeScope === "ALL" ? "ALL" : (picked.length ? picked.join("،") : "ALL");
+    delete v.gradeScope; delete v._phaseGrades;
+    await act("SAVE_PHASE", Object.assign({ phaseId: id || "" }, v));
+  }
 });
 on("phaseDel", id => {
   const p = A().phases.find(x => x.Phase_ID === id) || {};
@@ -712,14 +1387,29 @@ on("importEmps", async () => {
 on("reserveFor", () => ACTIONS.resNew());
 
 // ============================================================ الإعدادات
+const CATALOG_SETTING_TABS = { BOOK_PUBLISHERS: "publishers", BOOK_SUBJECTS: "subjects", BOOK_PARTS: "parts", BOOK_GRADES: "grades" };
 Router.add("/a/settings", view => {
   const d = A();
-  view.innerHTML = UI.pageHead("الإعدادات", APP.user.role === "Admin" ? "قواعد المبادرة العامة" : "للاطلاع فقط — التعديل للمدير")
+  view.innerHTML = UI.pageHead("الإعدادات", APP.user.role === "Admin" ? "قواعد المبادرة العامة" : "للاطلاع فقط — التعديل للمدير",
+    can("SAVE_BOOK") ? `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("sliders-horizontal")} إدارة قوائم الكتالوج</button>` : "")
     + permsSection()
-    + `<section class="card divide-y divide-slate-100">${d.settings.filter(s => s.Setting_Key !== "ROLE_PERMISSIONS").map(s => `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
-      <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(s.Description || s.Setting_Key)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
-      <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
-      ${can("SAVE_SETTING") ? `<button class="btn btn-outline btn-xs" data-act="editSetting" data-id="${esc(s.Setting_Key)}">${ic("pencil")} تعديل</button>` : ""}</div>`).join("")}</section>`;
+    + `<section class="card divide-y divide-slate-100">${d.settings.filter(s => s.Setting_Key !== "ROLE_PERMISSIONS").map(s => {
+      const catTab = CATALOG_SETTING_TABS[s.Setting_Key];
+      const cleanDesc = String(s.Description || s.Setting_Key).replace(/\s*\(مفصولة بفاصلة\)/g, "");
+      if (catTab) {
+        const items = s.Setting_Key === "BOOK_GRADES"
+          ? ((d.catalog || {}).grades || []).map(g => g.label)
+          : String(s.Setting_Value || "").split(/[,،]/).map(x => x.trim()).filter(Boolean);
+        return `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
+          <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(cleanDesc)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
+          <div class="flex flex-wrap items-center gap-1 max-w-xl">${items.slice(0, 8).map(it => `<span class="pill pill-gray !text-xs">${esc(it)}</span>`).join("")}${items.length > 8 ? `<span class="pill pill-brand !text-xs num">+${items.length - 8} أخرى</span>` : ""}</div>
+          ${(can("SAVE_SETTING") || can("SAVE_BOOK")) ? `<button class="btn btn-outline btn-xs" data-act="catalogMgr" data-id="${catTab}">${ic("sliders-horizontal")} إدارة القائمة (${items.length})</button>` : ""}</div>`;
+      }
+      return `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
+        <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(cleanDesc)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
+        <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
+        ${can("SAVE_SETTING") ? `<button class="btn btn-outline btn-xs" data-act="editSetting" data-id="${esc(s.Setting_Key)}">${ic("pencil")} تعديل</button>` : ""}</div>`;
+    }).join("")}</section>`;
 });
 // ---------------- مصفوفة الصلاحيات (المدير يحدد ما يفعله كل دور)
 // [الدور، الاسم، اختصار للموبايل، باقي الاسم للشاشات الأكبر]
@@ -753,6 +1443,7 @@ on("permSave", async () => {
 });
 
 on("editSetting", async key => {
+  if (CATALOG_SETTING_TABS[key]) { ACTIONS.catalogMgr(CATALOG_SETTING_TABS[key]); return; }
   const s = A().settings.find(x => x.Setting_Key === key);
   const v = await UI.form({ title: s.Description || key, sub: key, fields: [{ name: "value", label: "القيمة", value: s.Setting_Value, required: true }] });
   if (v) await act("SAVE_SETTING", { key, value: v.value });

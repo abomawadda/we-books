@@ -398,6 +398,19 @@ assert.strictEqual(partialSeries.skipped.length, 6); passed++;
 fail(api('DELETE_BOOK', { bookId: 'BK-101' }, coord), 'cannot delete book linked to reservations/inventory', /لارتباطه/);
 ok(api('DELETE_BOOK', { bookId: 'KG0-001' }, coord), 'delete unused registered book');
 assert.ok(!rows(S.BOOKS).some(b => b.Book_ID === 'KG0-001'), 'deleted book removed from 05_Books'); passed++;
+// تحديث قوائم الكتالوج مباشرة (دور النشر، المواد، الأجزاء، الصفوف) بدون الحاجة للفصلات
+const catRes = ok(api('SAVE_BOOK', {
+  catalogUpdate: true,
+  publishers: ['المعاصر', 'سلاح التلميذ', 'الأضواء', 'كيان'],
+  subjects: ['عربي', 'إنجليزي', 'برمجة'],
+  parts: ['شرح', 'مراجعة نهائية', 'بنك أسئلة'],
+  customGrades: [{ label: 'تمهيدي متقدم', stage: 'رياض الأطفال', code: 'KGA' }]
+}, coord), 'catalogUpdate via SAVE_BOOK');
+assert.ok(catRes.bookLists.publishers.includes('كيان'), 'new publisher saved in catalog lists');
+assert.ok(catRes.bookLists.subjects.includes('برمجة'), 'new subject saved in catalog lists');
+assert.ok(catRes.bookLists.parts.includes('بنك أسئلة'), 'new part saved in catalog lists');
+assert.ok(catRes.bookLists.grades.some(g => g.label === 'تمهيدي متقدم' && g.code === 'KGA'), 'new custom grade saved in catalog lists'); passed++;
 
 console.log('\nALL PASSED:', passed, 'checks');
+
 

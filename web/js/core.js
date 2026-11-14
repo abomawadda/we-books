@@ -311,8 +311,13 @@ const UI = {
         $$("button", seg).forEach(x => x.setAttribute("aria-pressed", x === b)); form.elements[seg.dataset.seg].value = b.dataset.v;
         if (o.onChange) o.onChange(collect(), form);
       }));
-      const collect = () => { const v = {}; o.fields.forEach(fd => { const el = form.elements[fd.name]; if (el) v[fd.name] = fd.type === "check" ? el.checked : el.value; }); return v; };
-      if (o.onChange) { form.addEventListener("input", () => o.onChange(collect(), form)); o.onChange(collect(), form); }
+      const collect = () => {
+        const v = {};
+        Array.from(form.elements || []).forEach(el => { if (el.name && !el.hasAttribute("data-series-g")) v[el.name] = el.type === "checkbox" ? el.checked : el.value; });
+        o.fields.forEach(fd => { const el = form.elements[fd.name]; if (el) v[fd.name] = fd.type === "check" ? el.checked : el.value; });
+        return v;
+      };
+      if (o.onChange) { const fire = () => o.onChange(collect(), form); form.addEventListener("input", fire); form.addEventListener("change", fire); fire(); }
       const submit = () => {
         const v = collect();
         const miss = o.fields.find(fd => fd.required && String(v[fd.name] || "").trim() === "");

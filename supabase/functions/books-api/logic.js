@@ -1225,10 +1225,10 @@ const OperationsEngine = {
       const key = Util.str(payload.key);
       let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
       // إعدادات أُضيفت بعد التشغيل: تُنشأ عند أول حفظ
-      const LATE = { PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"] };
+      const LATE = { PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
       if (!row && LATE[key]) { row = { Setting_Key: key, Setting_Value: "", Data_Type: LATE[key][0], Description: LATE[key][1] }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       Util.require(row, "إعداد غير معروف: " + key);
-      if (key === "PICKUP_SCHEDULE" && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة المواعيد غير صحيحة."); } }
+      if ((key === "PICKUP_SCHEDULE" || key === "BOOK_GRADES") && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة البيانات غير صحيحة."); } }
       DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", key, { Setting_Value: payload.value, Updated_At: Util.now(), Updated_By: Util.actor(session) });
       DB_Engine.logAudit(session.userId, session.role, "Settings", "SAVE_SETTING", key, { v: row.Setting_Value }, { v: payload.value });
       return { success: true, message: "تم حفظ الإعداد." };
@@ -1377,18 +1377,42 @@ const OperationsEngine = {
       const S = this.S();
       const lists = this.catalogLists_();
       const books = DB_Engine.getAllRecords(S.BOOKS);
+      const cleanName = v => Util.str(v).replace(/[,،|]/g, " ").replace(/\s+/g, " ").trim();
+
+      // تحديث قوائم الكتالوج مباشرة (دار نشر / مادة / جزء / صف دراسي) دون الحاجة لتسجيل كتاب في نفس اللحظة
+      if (payload.catalogUpdate) {
+        if (Array.isArray(payload.publishers)) {
+          const pubs = payload.publishers.map(cleanName).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+          Util.require(pubs.length > 0, "لا يمكن تفريغ قائمة دور النشر بالكامل.");
+          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", pubs.join("،"), "STRING", "قائمة دور النشر في الكتالوج");
+        }
+        if (Array.isArray(payload.subjects)) {
+          const subs = payload.subjects.map(cleanName).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+          Util.require(subs.length > 0, "لا يمكن تفريغ قائمة المواد الدراسية بالكامل.");
+          this.upsertSettingRow_(session, "BOOK_SUBJECTS", subs.join("،"), "STRING", "قائمة المواد الدراسية في الكتالوج");
+        }
+        if (Array.isArray(payload.parts)) {
+          const pts = payload.parts.map(cleanName).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
+          this.upsertSettingRow_(session, "BOOK_PARTS", pts.join("،"), "STRING", "قائمة أجزاء الكتاب في الكتالوج");
+        }
+        if (Array.isArray(payload.customGrades)) {
+          this.upsertSettingRow_(session, "BOOK_GRADES", JSON.stringify(payload.customGrades), "JSON", "صفوف دراسية إضافية [{code,label,stage}]");
+        }
+        const cat = this.catalogLists_();
+        return { success: true, message: "تم تحديث قوائم الكتالوج بنجاح.", catalog: cat, bookLists: cat };
+      }
+
       const reqId = Util.str(payload.bookId);
       const existing = reqId ? books.find(b => Util.str(b.Book_ID).toUpperCase() === reqId.toUpperCase()) : null;
       if (reqId) Util.require(existing, "الكتاب المطلوب تعديله غير موجود (" + reqId + ").");
 
       // إضافة دار نشر أو مادة أو جزء أو صف دراسي جديد مباشرة أثناء تسجيل الكتاب
-      const cleanName = v => Util.str(v).replace(/[,،|]/g, " ").replace(/\s+/g, " ").trim();
       const newPub = cleanName(payload.newPublisher);
       if (newPub || payload.publisher === "__NEW__") {
         Util.require(newPub.length >= 2, "أدخل اسم دار النشر الجديدة (حرفان على الأقل).");
         if (lists.publishers.indexOf(newPub) === -1) {
           lists.publishers.push(newPub);
-          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", lists.publishers.join("،"), "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)");
+          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", lists.publishers.join("،"), "STRING", "قائمة دور النشر في الكتالوج");
         }
       }
       const newSub = cleanName(payload.newSubject);
@@ -1396,7 +1420,7 @@ const OperationsEngine = {
         Util.require(newSub.length >= 2, "أدخل اسم المادة الجديدة (حرفان على الأقل).");
         if (lists.subjects.indexOf(newSub) === -1) {
           lists.subjects.push(newSub);
-          this.upsertSettingRow_(session, "BOOK_SUBJECTS", lists.subjects.join("،"), "STRING", "قائمة المواد في نموذج الكتاب (مفصولة بفاصلة)");
+          this.upsertSettingRow_(session, "BOOK_SUBJECTS", lists.subjects.join("،"), "STRING", "قائمة المواد الدراسية في الكتالوج");
         }
       }
       const newPart = cleanName(payload.newBookPart);
@@ -1404,7 +1428,7 @@ const OperationsEngine = {
         Util.require(newPart.length >= 1, "أدخل اسم جزء الكتاب الجديد.");
         if (lists.parts.indexOf(newPart) === -1) {
           lists.parts.push(newPart);
-          this.upsertSettingRow_(session, "BOOK_PARTS", lists.parts.join("،"), "STRING", "أجزاء الكتاب: شرح، أسئلة، تدريبات... (مفصولة بفاصلة)");
+          this.upsertSettingRow_(session, "BOOK_PARTS", lists.parts.join("،"), "STRING", "قائمة أجزاء الكتاب في الكتالوج");
         }
       }
       let addedGrade = null;
