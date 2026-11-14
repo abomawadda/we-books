@@ -28,7 +28,9 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   });
   const shot = n => p.screenshot({ path: path.join(OUT, PFX + '-' + n + '.png') });
   const go = async h => { await p.evaluate(x => location.hash = x, h); await p.waitForTimeout(500); };
-  await p.goto('https://app.test/'); await p.waitForTimeout(700); await shot('login');
+  await p.goto('https://app.test/'); await p.waitForTimeout(700);
+  const sg = await p.$('#spGo'); if (sg) { await sg.click({ force: true }); await p.waitForTimeout(500); }
+  await shot('login');
   await p.fill('#lgEmp', '1001'); await p.fill('#lgNat', '4512'); await p.fill('#lgMob', '01012345678'); await p.click('#fEmp button.btn-gold'); await p.waitForTimeout(900);
   await shot('home0');
   await go('#/e/books'); await shot('books0');

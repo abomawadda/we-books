@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/help.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/help.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -89,6 +89,9 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   expectNoErrorToasts('reservation');
   await closeAll();
   for (const r of ['/e/orders', '/e/pay', '/e/me', '/e/home']) { await go(r); check(view().length > 50, 'employee page ' + r); }
+  await go('/e/orders'); check(/وفّرت السنة دي/.test(view()), 'savings card');
+  await go('/e/me'); await click('[data-act="bigText"]'); check(d.documentElement.style.zoom === '1.15', 'big text on');
+  await click('[data-act="bigText"]'); check(!d.documentElement.style.zoom, 'big text off');
   w.eval('wzClear')(); await go('/e/wiz'); check(/لمين هتحجز/.test(view()) || /الحجز مغلق/.test(view()), 'booking wizard renders');
   await click('[data-act="userMenu"]'); await click('[data-act="logout"]', dialog()); await settle();
   check(d.getElementById('fEmp'), 'logged out');
