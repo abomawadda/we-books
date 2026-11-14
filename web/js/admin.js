@@ -101,7 +101,7 @@ const bookMeta = (b, id) => { const x = b[id] || {}, nm = String(x.Book_Name || 
 const bookSub = (b, id, extra) => `<div class="text-[11.5px] text-slate-500 truncate"><span class="num text-brand-700 font-semibold">${esc(id)}</span>${bookMeta(b, id) ? " · " + esc(bookMeta(b, id)) : ""}${extra || ""}</div>`;
 const noPhase = view => { if (APP.phaseId) return false; view.innerHTML = UI.empty("calendar-range", "لا توجد مراحل بعد", "ابدأ بإنشاء أول مرحلة حجز.", can("SAVE_PHASE") ? `<button class="btn btn-primary mt-5" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>` : ""); return true; };
 const lockedBtn = (action, html) => can(action) ? html : "";
-const searchBox = (act, val, ph) => `<div class="input-icon w-full sm:w-72">${ic("search")}<input type="search" class="input input-sm !h-10" placeholder="${esc(ph || "بحث")}" value="${esc(val || "")}" data-input="${act}"></div>`;
+const searchBox = (act, val, ph) => `<div class="input-icon w-full sm:w-72">${ic("search")}<input type="search" class="input input-sm !h-10 text-right" dir="rtl" style="direction:rtl;text-align:right;" placeholder="${esc(ph || "بحث")}" value="${esc(val || "")}" data-input="${act}"></div>`;
 const Q = {};
 /** اسم الموظف كرابط يفتح ملفه */
 const empLink = (id, name) => `<button class="text-right hover:text-brand-700 hover:underline" data-act="empProfile" data-id="${esc(id)}">${esc(name || id)}</button>`;   // نصوص البحث لكل صفحة
@@ -556,7 +556,7 @@ function booksTable() {
         ${canEdit && !BK_UI.inlineMode && !isRowEd ? `<button type="button" class="act-ic act-ic-brand" data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="تعديل السعر والخصم مباشرة بالجدول" aria-label="تعديل السعر بالجدول">${ic("sliders-horizontal")}</button>` : ""}
         ${canEdit ? `<button type="button" class="act-ic act-ic-edit" data-act="bookForm" data-id="${esc(x.Book_ID)}" title="تعديل بيانات الكتاب" aria-label="تعديل">${ic("pencil")}</button>
         <button type="button" class="act-ic act-ic-copy" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="نسخ الكتاب لصف دراسي آخر أو سلسلة بكود جديد" aria-label="نسخ لصف">${ic("copy")}</button>` : ""}
-        ${!hasUse && can("DELETE_BOOK") ? `<button type="button" class="act-ic act-ic-del" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب" aria-label="حذف">${ic("trash-2")}</button>` : ""}
+        ${can("DELETE_BOOK") ? `<button type="button" class="act-ic act-ic-del" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف أو تعطيل الكتاب" aria-label="حذف">${ic("trash-2")}</button>` : ""}
       </div>`;
     } }
   ], list, {
@@ -796,6 +796,7 @@ function bookFilters() {
             <div class="flex items-center justify-between gap-1 pb-1.5 border-b border-slate-100 text-slate-700">
               <span class="font-bold text-xs">${esc(title)} <span class="text-[11px] text-slate-400 font-normal">(${items.length})</span></span>
               <div class="flex items-center gap-1.5 text-[11px]">
+                ${(k === "pub" || k === "sub") ? `<button type="button" class="text-brand-700 hover:text-brand-900 font-bold hover:underline flex items-center gap-0.5 ml-1" data-act="catalogMgr" data-id="${k === "pub" ? "publishers" : "subjects"}" title="تعديل أو حذف ${esc(title)}">${ic("sliders-horizontal", "!w-3 !h-3")} إدارة</button><span class="text-slate-200">|</span>` : ""}
                 <button type="button" class="text-brand-700 font-bold hover:underline" data-act="bkMsAll" data-id="${k}">الكل</button>
                 <span class="text-slate-200">|</span>
                 <button type="button" class="text-rose-600 font-bold hover:underline" data-act="bkMsNone" data-id="${k}">مسح</button>
@@ -803,7 +804,7 @@ function bookFilters() {
             </div>
             ${items.length > 5 ? `
               <div class="relative">
-                <input type="text" class="input !h-8 !text-xs !pr-7 !pl-2 w-full" placeholder="ابحث في الخيارات…" value="${esc(BK_UI.msSearch[k] || "")}" data-input="bkMsSearch" data-id="${k}">
+                <input type="text" dir="rtl" style="direction:rtl;text-align:right;" class="input !h-8 !text-xs !pr-7 !pl-2 w-full text-right" placeholder="ابحث في الخيارات…" value="${esc(BK_UI.msSearch[k] || "")}" data-input="bkMsSearch" data-id="${k}">
                 <span class="absolute right-2 top-2 text-slate-400 pointer-events-none">${ic("search", "!w-3.5 !h-3.5")}</span>
               </div>` : ""}
             <div class="max-h-56 overflow-y-auto space-y-0.5 p-0.5">
@@ -1303,7 +1304,7 @@ function catalogMgrHTML() {
     const items = cfg.list.filter(x => !q || x.toLowerCase().includes(q));
     body = `
       <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200 p-3 mb-4 flex flex-wrap items-center gap-2">
-        <div class="flex-1 min-w-[14rem]"><input id="cmNewItem" class="input !h-10 bg-white" placeholder="${esc(cfg.ph)}"></div>
+        <div class="flex-1 min-w-[14rem]"><input id="cmNewItem" class="input !h-10 bg-white text-right" dir="rtl" style="direction:rtl;text-align:right;" placeholder="${esc(cfg.ph)}"></div>
         <button type="button" class="btn btn-primary !h-10" data-act="cmAddItem">${ic("plus")} إضافة ${esc(cfg.label)}</button>
       </div>
       <div class="flex items-center justify-between gap-2 mb-3">
@@ -1319,7 +1320,10 @@ function catalogMgrHTML() {
               ${tab === "publishers" ? `<span class="w-8 h-8 rounded-lg ring-1 ring-slate-100 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain" alt="">` : ic("store", "text-slate-400 text-xs")}</span>` : ""}
               <div class="min-w-0"><div class="font-bold text-slate-800 text-[13.5px] truncate">${esc(item)}</div><div class="text-[11px] text-slate-400"><span class="num">${cnt}</span> كتاب مسجل</div></div>
             </div>
-            ${!cnt ? `<button type="button" class="icon-btn w-7 h-7 text-rose-500 hover:bg-rose-50 shrink-0" data-act="cmDelItem" data-id="${esc(item)}" title="حذف من القائمة">${ic("x")}</button>` : `<span class="pill pill-gray !text-[10px]">مستخدم</span>`}
+            <div class="flex items-center gap-1 shrink-0">
+              <button type="button" class="icon-btn w-7 h-7 text-brand-600 hover:bg-brand-50" data-act="cmEditItem" data-id="${esc(item)}" title="تعديل الاسم">${ic("pencil")}</button>
+              <button type="button" class="icon-btn w-7 h-7 text-rose-500 hover:bg-rose-50" data-act="cmDelItem" data-id="${esc(item)}" title="حذف من القائمة">${ic("trash-2")}</button>
+            </div>
           </div>`;
         }).join("") || `<div class="col-span-3 text-center py-8 text-sm text-slate-400">لا توجد عناصر مطابقة للبحث</div>`}
       </div>`;
@@ -1334,7 +1338,7 @@ const cmRefresh = () => { if (CM.m && CM.m.body && document.body.contains(CM.m.r
 on("catalogMgr", initialTab => {
   CM.tab = ["publishers", "subjects", "parts", "grades"].includes(initialTab) ? initialTab : "publishers";
   CM.q = "";
-  CM.m = UI.open(catalogMgrHTML(), { title: "إدارة قوائم الكتالوج", sub: "أضف أو احذف دور النشر والمواد الدراسية وأجزاء الكتب والصفوف مباشرة بدون فواصل", wide: true });
+  CM.m = UI.open(catalogMgrHTML(), { title: "إدارة قوائم الكتالوج", sub: "أضف أو عدّل أو احذف دور النشر والمواد الدراسية وأجزاء الكتب والصفوف مباشرة وبمرونة تامة", wide: true });
 });
 on("cmTab", t => { CM.tab = t; CM.q = ""; cmRefresh(); });
 on("cmQ", v => { CM.q = v.trim(); cmRefresh(); });
@@ -1355,17 +1359,89 @@ on("cmAddItem", async () => {
   await Admin.load();
   cmRefresh();
 });
+on("cmEditItem", async item => {
+  const tab = CM.tab;
+  const isPub = tab === "publishers", isSub = tab === "subjects", isPart = tab === "parts";
+  const title = isPub ? "تعديل دار النشر" : (isSub ? "تعديل المادة الدراسية" : "تعديل جزء الكتاب");
+  const sub = isPart ? "سيتم تعديل الاسم في قائمة الأجزاء." : `سيتم تعديل الاسم وتحديث جميع الكتب المسجلة بالكتالوج التابعة لـ «${item}» تلقائياً.`;
+  const newVal = await UI.prompt({ title, sub, value: item, required: true });
+  if (!newVal || newVal.trim() === item) return;
+  const cleanVal = cleanCatItem(newVal);
+  if (cleanVal.length < 2 && !isPart) return toast("الاسم يجب أن يكون حرفين على الأقل", "warning");
+
+  if (isPub) {
+    const r = await act("SAVE_BOOK", { catalogUpdate: true, renamePublisher: { oldName: item, newName: cleanVal } });
+    if (r && r.success) {
+      toast(r.message || `تم تعديل دار النشر إلى «${cleanVal}»`, "success");
+      await Admin.load();
+      cmRefresh();
+    }
+  } else if (isSub) {
+    const r = await act("SAVE_BOOK", { catalogUpdate: true, renameSubject: { oldName: item, newName: cleanVal } });
+    if (r && r.success) {
+      toast(r.message || `تم تعديل المادة إلى «${cleanVal}»`, "success");
+      await Admin.load();
+      cmRefresh();
+    }
+  } else if (isPart) {
+    const c = A().catalog || {};
+    let parts = (c.parts || []).slice();
+    const idx = parts.indexOf(item);
+    if (idx !== -1) parts[idx] = cleanVal;
+    else parts.push(cleanVal);
+    const r = await persistCatalogList("BOOK_PARTS", parts, { block: true });
+    if (r && r.success) {
+      c.parts = parts;
+      toast(`تم تعديل الجزء إلى «${cleanVal}»`, "success");
+      await Admin.load();
+      cmRefresh();
+    }
+  }
+});
 on("cmDelItem", async val => {
-  const c = A().catalog || {}, keyMap = { publishers: ["BOOK_PUBLISHERS", "publishers"], subjects: ["BOOK_SUBJECTS", "subjects"], parts: ["BOOK_PARTS", "parts"] }[CM.tab];
-  if (!keyMap) return;
-  const list = (c[keyMap[1]] || []).filter(x => x !== val);
-  if (!list.length && CM.tab !== "parts") return toast("لا يمكن إفراغ القائمة بالكامل", "warning");
-  const r = await persistCatalogList(keyMap[0], list, { block: true });
-  if (!r || !r.success) return toast((r && r.message) || "تعذر الحذف", "danger");
-  c[keyMap[1]] = list;
-  toast(`تم حذف «${val}» من القائمة`, "success");
-  await Admin.load();
-  cmRefresh();
+  const tab = CM.tab;
+  const isPub = tab === "publishers", isSub = tab === "subjects", isPart = tab === "parts";
+  const d = A();
+  const field = isPub ? "Publisher" : (isSub ? "Subject" : "Book_Part");
+  const cnt = d.books.filter(b => b[field] === val && b.Book_Status !== "Discontinued").length;
+  const kind = isPub ? "دار النشر" : (isSub ? "المادة" : "الجزء");
+
+  const msg = cnt > 0
+    ? `تنبيه: يوجد ${cnt} كتاب مسجل مرتبط بـ ${kind} «${val}».\nحذفها من القائمة سيزيلها من خيارات الإضافة والفلترة بالكتالوج.\nهل تريد بالتأكيد حذف «${val}»؟`
+    : `هل تريد حذف ${kind} «${val}» من القائمة؟`;
+
+  const ok = await UI.confirm({
+    title: `حذف ${kind}`,
+    message: msg,
+    ok: "نعم، حذف",
+    tone: "danger"
+  });
+  if (!ok) return;
+
+  if (isPub) {
+    const r = await act("SAVE_BOOK", { catalogUpdate: true, deletePublisher: { name: val } });
+    if (r && r.success) {
+      toast(r.message || `تم حذف دار النشر «${val}»`, "success");
+      await Admin.load();
+      cmRefresh();
+    }
+  } else if (isSub) {
+    const r = await act("SAVE_BOOK", { catalogUpdate: true, deleteSubject: { name: val } });
+    if (r && r.success) {
+      toast(r.message || `تم حذف المادة «${val}»`, "success");
+      await Admin.load();
+      cmRefresh();
+    }
+  } else {
+    const c = d.catalog || {};
+    const list = (c.parts || []).filter(x => x !== val);
+    const r = await persistCatalogList("BOOK_PARTS", list, { block: true });
+    if (!r || !r.success) return toast((r && r.message) || "تعذر الحذف", "danger");
+    c.parts = list;
+    toast(`تم حذف «${val}» من القائمة`, "success");
+    await Admin.load();
+    cmRefresh();
+  }
 });
 on("cmAddGrade", async () => {
   const lbl = cleanCatItem(($("#cmNewGradeLabel") || {}).value);
@@ -1440,7 +1516,7 @@ async function openBookModal(id, cloneFromId) {
         <div data-dd-chips="${name}" class="flex flex-wrap gap-1 mt-1.5"></div>
         <div data-dd-panel="${name}" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
           <div class="flex items-center gap-1.5 mb-2.5">
-            <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="${name}" class="input !h-9 !text-xs" placeholder="ابحث في القائمة أو اكتب اسماً جديداً لإضافته فوراً…"></div>
+            <div class="input-icon flex-1">${ic("search")}<input type="text" dir="rtl" style="direction:rtl;text-align:right;" data-dd-search="${name}" class="input !h-9 !text-xs text-right" placeholder="ابحث في القائمة أو اكتب اسماً جديداً لإضافته فوراً…"></div>
             <button type="button" data-dd-quickadd="${name}" class="btn btn-primary btn-xs !h-9 shrink-0">${ic("plus")} إضافة جديد</button>
           </div>
           <div data-dd-newprompt="${name}" class="hidden mb-2"></div>
@@ -1516,7 +1592,7 @@ async function openBookModal(id, cloneFromId) {
             <div id="inlineNewGradeBox" class="hidden rounded-xl bg-brand-50/70 ring-1 ring-brand-200 p-3 mt-2 space-y-2">
               <div class="text-[11.5px] font-bold text-brand-900">إضافة صف دراسي جديد للقائمة:</div>
               <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <input data-x="newGradeLabel" class="input !h-9 !text-xs bg-white" placeholder="اسم الصف (مثل: تمهيدي)">
+                <input data-x="newGradeLabel" class="input !h-9 !text-xs bg-white text-right" dir="rtl" style="direction:rtl;text-align:right;" placeholder="اسم الصف (مثل: تمهيدي)">
                 <select data-x="newGradeStage" class="input !h-9 !text-xs bg-white">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select>
                 <input data-x="newGradeCode" class="input !h-9 !text-xs bg-white num" placeholder="الكود (تلقائي)">
               </div>
@@ -1524,7 +1600,7 @@ async function openBookModal(id, cloneFromId) {
             </div>
             <div data-dd-panel="grade" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
               <div class="flex items-center justify-between gap-2 mb-2">
-                <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="grade" class="input !h-9 !text-xs" placeholder="ابحث عن الصف…"></div>
+                <div class="input-icon flex-1">${ic("search")}<input type="text" dir="rtl" style="direction:rtl;text-align:right;" data-dd-search="grade" class="input !h-9 !text-xs text-right" placeholder="ابحث عن الصف…"></div>
               </div>
               <div data-dd-list="grade" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-0.5"></div>
             </div>
@@ -1583,6 +1659,11 @@ async function openBookModal(id, cloneFromId) {
           </div>
         </div>
         <div id="pricePv" class="mt-3 rounded-xl bg-brand-50/80 ring-1 ring-brand-100 p-3"></div>
+        ${id && can("DELETE_BOOK") ? `
+          <div class="mt-4 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <div class="text-xs text-slate-500">حذف أو تعطيل هذا الكتاب من الكتالوج:</div>
+            <button type="button" class="btn btn-outline-danger btn-xs" data-act="modalDelBook" data-id="${esc(id)}">${ic("trash-2")} حذف / تعطيل الكتاب</button>
+          </div>` : ""}
       </div>` }
   ];
 
@@ -1799,6 +1880,14 @@ async function openBookModal(id, cloneFromId) {
           if (qt) {
             setSelectValue(form, "schoolTypes", qt.dataset.quickType, qt.textContent);
             form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const mdel = e.target.closest("[data-act='modalDelBook']");
+          if (mdel) {
+            const bid = mdel.dataset.id;
+            const top = UI._stack[UI._stack.length - 1];
+            if (top) UI.close(top);
+            ACTIONS.bookDel(bid);
             return;
           }
           const qd = e.target.closest("[data-quick-disc]");
@@ -2096,9 +2185,46 @@ async function openBookModal(id, cloneFromId) {
 }
 on("bookForm", id => openBookModal(id, null));
 on("bookClone", id => openBookModal(null, id));
-on("bookDel", id => {
-  const b = A().books.find(x => x.Book_ID === id) || {};
-  return act("DELETE_BOOK", { bookId: id }, { title: "حذف كتاب", message: `سيتم حذف الكتاب «${b.Book_Name || id}» (${id} · ${b.Grade || ""}) نهائياً من الكتالوج.\nالحذف متاح فقط لكتاب بلا حجوزات أو حركات مخزن أو فواتير. متابعة؟`, ok: "حذف", tone: "danger" });
+on("bookDel", async id => {
+  const d = A(), b = d.books.find(x => x.Book_ID === id) || {};
+  const rc = (typeof resCount === "function" ? resCount() : {})[id];
+  const st = (d.stockMap || {})[id];
+  const hasUse = !!(rc || (st && (st.onHand || st.allocated)));
+  if (hasUse) {
+    const confirmDis = await UI.confirm({
+      title: "تعطيل الكتاب",
+      message: `الكتاب «${b.Book_Name || id}» (${id} · ${b.Grade || ""}) مرتبط بسجلات سابقة أو حجوزات بالمبادرة ولا يمكن حذفه نهائياً حفاظاً على التقارير المالية والمخزنية.\n\nهل ترغب في تعطيل الكتاب وتغيير حالته إلى «ملغى / موقوف» (Discontinued) لحجبه عن الحجوزات القادمة؟`,
+      ok: "تعطيل الكتاب",
+      tone: "danger"
+    });
+    if (confirmDis) {
+      const r = await act("SAVE_BOOK", {
+        bookId: id,
+        bookName: b.Book_Name,
+        stage: b.Stage,
+        grade: b.Grade,
+        subject: b.Subject,
+        publisher: b.Publisher,
+        coverPrice: b.Cover_Price,
+        empSellingPrice: b.Emp_Selling_Price,
+        bookStatus: "Discontinued"
+      });
+      if (r && r.success) {
+        toast(`تم تعطيل الكتاب «${b.Book_Name || id}» بنجاح`, "success");
+        await reloadData();
+      }
+    }
+    return;
+  }
+  const r = await act("DELETE_BOOK", { bookId: id }, {
+    title: "حذف كتاب من الكتالوج",
+    message: `سيتم حذف الكتاب «${b.Book_Name || id}» (${id} · ${b.Grade || ""}) نهائياً من الكتالوج.\nهل أنت متأكد من المتابعة؟`,
+    ok: "حذف نهائي",
+    tone: "danger"
+  });
+  if (r && r.success) {
+    await reloadData();
+  }
 });
 on("importBooks", async () => {
   const v = await UI.form({ title: "استيراد الكتالوج", wide: true, intro: "انسخ الصفوف من Excel والصقها هنا. الأعمدة بالترتيب:<br><b>الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، سعر الغلاف، خصم المكتبة %</b>",

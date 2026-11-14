@@ -1459,6 +1459,70 @@ const OperationsEngine = {
 
       // تحديث قوائم الكتالوج مباشرة (دار نشر / مادة / جزء / صف دراسي) دون الحاجة لتسجيل كتاب في نفس اللحظة
       if (payload.catalogUpdate) {
+        if (payload.renamePublisher && payload.renamePublisher.oldName && payload.renamePublisher.newName) {
+          const oldN = cleanName(payload.renamePublisher.oldName);
+          const newN = cleanName(payload.renamePublisher.newName);
+          Util.require(newN.length >= 2, "اسم دار النشر الجديد يجب أن يكون حرفين على الأقل.");
+          let pubs = lists.publishers.slice();
+          const idx = pubs.indexOf(oldN);
+          if (idx !== -1) pubs[idx] = newN;
+          else if (!pubs.includes(newN)) pubs.push(newN);
+          pubs = pubs.filter((x, i, a) => a.indexOf(x) === i);
+          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", pubs.join("،"), "STRING", "قائمة دور النشر في الكتالوج");
+          let bCount = 0;
+          books.forEach(b => {
+            if (Util.str(b.Publisher) === oldN) {
+              const upd = { Publisher: newN };
+              if (b.Book_Name && b.Book_Name.includes(oldN)) upd.Book_Name = b.Book_Name.replace(oldN, newN);
+              DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, upd);
+              bCount++;
+            }
+          });
+          const cat = this.catalogLists_();
+          return { success: true, message: `تم تعديل دار النشر من «${oldN}» إلى «${newN}» وتحديث ${bCount} كتاب مرتبط بها.`, catalog: cat, bookLists: cat };
+        }
+
+        if (payload.renameSubject && payload.renameSubject.oldName && payload.renameSubject.newName) {
+          const oldN = cleanName(payload.renameSubject.oldName);
+          const newN = cleanName(payload.renameSubject.newName);
+          Util.require(newN.length >= 2, "اسم المادة الجديد يجب أن يكون حرفين على الأقل.");
+          let subs = lists.subjects.slice();
+          const idx = subs.indexOf(oldN);
+          if (idx !== -1) subs[idx] = newN;
+          else if (!subs.includes(newN)) subs.push(newN);
+          subs = subs.filter((x, i, a) => a.indexOf(x) === i);
+          this.upsertSettingRow_(session, "BOOK_SUBJECTS", subs.join("،"), "STRING", "قائمة المواد الدراسية في الكتالوج");
+          let bCount = 0;
+          books.forEach(b => {
+            if (Util.str(b.Subject) === oldN) {
+              const upd = { Subject: newN };
+              if (b.Book_Name && b.Book_Name.includes(oldN)) upd.Book_Name = b.Book_Name.replace(oldN, newN);
+              DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, upd);
+              bCount++;
+            }
+          });
+          const cat = this.catalogLists_();
+          return { success: true, message: `تم تعديل المادة من «${oldN}» إلى «${newN}» وتحديث ${bCount} كتاب مرتبط بها.`, catalog: cat, bookLists: cat };
+        }
+
+        if (payload.deletePublisher && payload.deletePublisher.name) {
+          const target = cleanName(payload.deletePublisher.name);
+          const pubs = lists.publishers.filter(p => p !== target);
+          Util.require(pubs.length > 0, "لا يمكن تفريغ قائمة دور النشر بالكامل.");
+          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", pubs.join("،"), "STRING", "قائمة دور النشر في الكتالوج");
+          const cat = this.catalogLists_();
+          return { success: true, message: `تم حذف دار النشر «${target}» من الكتالوج بنجاح.`, catalog: cat, bookLists: cat };
+        }
+
+        if (payload.deleteSubject && payload.deleteSubject.name) {
+          const target = cleanName(payload.deleteSubject.name);
+          const subs = lists.subjects.filter(s => s !== target);
+          Util.require(subs.length > 0, "لا يمكن تفريغ قائمة المواد الدراسية بالكامل.");
+          this.upsertSettingRow_(session, "BOOK_SUBJECTS", subs.join("،"), "STRING", "قائمة المواد الدراسية في الكتالوج");
+          const cat = this.catalogLists_();
+          return { success: true, message: `تم حذف المادة «${target}» من الكتالوج بنجاح.`, catalog: cat, bookLists: cat };
+        }
+
         if (Array.isArray(payload.publishers)) {
           const pubs = payload.publishers.map(cleanName).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i);
           Util.require(pubs.length > 0, "لا يمكن تفريغ قائمة دور النشر بالكامل.");

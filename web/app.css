@@ -66,3 +66,24 @@
 @media (min-width:640px){.sm\:col-span-3{grid-column:span 3/span 3}.sm\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.sm\:grid-cols-\[1\.2fr_1fr_0\.7fr_auto\]{grid-template-columns:1.2fr 1fr 0.7fr auto}}
 @media (min-width:768px){.md\:inline-flex{display:inline-flex}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.md\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}
 @media (min-width:1024px){.lg\:inline-flex{display:inline-flex}.lg\:grid-cols-7{grid-template-columns:repeat(7,minmax(0,1fr))}}
+
+/* اتجاه الكتابة وضبط البحث من اليمين لليسار */
+input, select, textarea, .input, .input-sm {
+  direction: rtl;
+  text-align: right;
+}
+input[dir="ltr"], select[dir="ltr"], textarea[dir="ltr"], .ltr, .num {
+  direction: ltr;
+}
+input[type="number"], input[type="tel"], input[type="url"], input[type="password"] {
+  direction: ltr;
+  text-align: left;
+}
+.input-icon > input {
+  direction: rtl !important;
+  text-align: right !important;
+}
+[data-input="bkMsSearch"], [data-dd-search], [data-input="cmQ"], [data-input="qBooks"] {
+  direction: rtl !important;
+  text-align: right !important;
+}

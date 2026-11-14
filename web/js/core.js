@@ -293,6 +293,33 @@ const UI = {
       m.root.querySelector("[data-ok]").onclick = () => { done = true; res(true); m.close(); };
     });
   },
+  prompt(o) {
+    o = typeof o === "string" ? { label: o } : (o || {});
+    return new Promise(res => {
+      let done = false;
+      const val = o.value === undefined ? "" : o.value;
+      const m = UI.open(`<div>
+        <label class="label font-bold text-slate-800 text-[15px] mb-2">${esc(o.title || o.label || "إدخال نص")}</label>
+        ${o.sub ? `<p class="text-xs text-slate-500 mb-2 leading-relaxed">${esc(o.sub)}</p>` : ""}
+        <input type="${o.type || "text"}" class="input w-full text-right" dir="rtl" style="direction:rtl;text-align:right;" value="${esc(val)}" placeholder="${esc(o.placeholder || "")}">
+      </div>`, {
+        title: o.title,
+        footer: `<div class="flex gap-2"><button data-ok class="btn btn-${o.tone || "primary"} flex-1">${esc(o.ok || "تأكيد")}</button><button data-close class="btn btn-outline flex-1">إلغاء</button></div>`,
+        onClose: () => { if (!done) res(null); }
+      });
+      const inp = m.root.querySelector("input");
+      if (inp) {
+        inp.focus();
+        inp.select();
+        inp.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); m.root.querySelector("[data-ok]").click(); } };
+      }
+      m.root.querySelector("[data-ok]").onclick = () => {
+        const v = inp ? inp.value.trim() : "";
+        if (o.required && !v) { toast("يرجى إدخال قيمة صحيحة", "warning"); return; }
+        done = true; res(v); m.close();
+      };
+    });
+  },
   /** نموذج إدخال: fields = [{name,label,type,value,options:[[v,l]],hint,required,min,max,placeholder,cols}] */
   form(o) {
     return new Promise(res => {

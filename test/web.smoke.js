@@ -215,9 +215,13 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   const actualSubs = [...new Set(adwaBooks.map(b => b.Subject))];
   check(adwaSubOpts.length === actualSubs.length && actualSubs.every(s => adwaSubOpts.includes(s)), 'subject dropdown cascades and shows only subjects published by selected publisher');
 
-  // فحص الاختيار المتعدد (Multi-Select)
+  // فحص الاختيار المتعدد (Multi-Select) واتجاه الكتابة RTL
   await click('[data-act="bkClearF"]'); await settle();
   await click('[data-act="bkMsTrigger"][data-id="pub"]'); await settle();
+  const pubSearchInp = d.querySelector('[data-input="bkMsSearch"][data-id="pub"]');
+  if (pubSearchInp) {
+    check(pubSearchInp.getAttribute('dir') === 'rtl', 'dropdown search input text direction is RTL');
+  }
   await click('[data-act="bkMsToggle"][data-id="pub|الأضواء"]'); await settle();
   await click('[data-act="bkMsToggle"][data-id="pub|سلاح التلميذ"]'); await settle();
   const multiPubF = w.eval('Q.bookF.pub');
@@ -229,6 +233,15 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="bkClearF"]'); await settle();
   const resetPubOpts = Array.from(d.querySelectorAll('select[data-k="pub"] option')).map(o => o.value).filter(Boolean);
   check(resetPubOpts.length === new Set(admBooks.map(b => b.Publisher).filter(Boolean)).size, 'all publishers restored on filter clear');
+
+  // فحص إمكانية حذف وتعديل الكتب ودور النشر والمواد
+  const bookDelBtns = d.querySelectorAll('[data-act="bookDel"]');
+  check(bookDelBtns.length > 0, 'book delete/discontinue action button is available in books table');
+  w.eval('ACTIONS.catalogMgr("publishers")'); await settle();
+  const cmEditBtn = d.querySelector('[data-act="cmEditItem"]');
+  const cmDelBtn = d.querySelector('[data-act="cmDelItem"]');
+  check(cmEditBtn && cmDelBtn, 'catalog manager provides edit and delete action buttons for publishers and subjects');
+  await closeAll();
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');
