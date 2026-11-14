@@ -1211,7 +1211,8 @@ const OperationsEngine = {
       const mobile = AuthEngine.normalizeMobile(p.mobile);
       Util.require(/^01[0125]\d{8}$/.test(mobile), "رقم الموبايل غير صحيح.");
       const org = Util.str(p.org).slice(0, 80);
-      Util.require(p.category === "guest" || org.length >= 2, p.category === "outsource" ? "اكتب اسم الشركة." : "اكتب آخر جهة عمل.");
+      Util.require(p.category === "guest" || org.length >= 2, p.category === "outsource" ? "اختر الشركة." : "اكتب آخر جهة عمل.");
+      if (p.category === "outsource") Util.require(["Tedata", "IBS", "Proserve", "عقود يومية"].indexOf(org) !== -1, "اختر الشركة من القائمة.");
       const emps = DB_Engine.getAllRecords(S.EMPLOYEES);
       const dup = emps.find(e => AuthEngine.normalizeMobile(e.Mobile) === mobile);
       if (dup) {
