@@ -166,6 +166,21 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="catalogMgr"]');
   check(/إدارة قوائم الكتالوج/.test(dialog().textContent), 'catalog manager modal opened');
   await closeAll();
+  // التعديل الفوري للأسعار داخل الجدول (Inline Price Editing)
+  await go('/a/books');
+  await click('[data-act="bkQuickRow"][data-id="P5-001"]');
+  const inlineCov = d.querySelector('[data-bk-inline="P5-001"][data-f="coverPrice"]');
+  check(inlineCov, 'inline price input rendered inside table cell');
+  inlineCov.value = '220'; inlineCov.dispatchEvent(new w.Event('input', { bubbles: true }));
+  await click('[data-act="bkSaveRow"][data-id="P5-001"]'); await settle();
+  expectNoErrorToasts('inline row price save');
+  check(w.eval('APP').adm.books.find(b => b.Book_ID === 'P5-001').Cover_Price === 220, 'inline row price saved');
+  // لوحة الإدخال السريع أعلى الجدول (Quick Entry Bar)
+  await click('[data-act="toggleQuickEntry"]');
+  const qBar = d.getElementById('quickBookPanel');
+  check(qBar, 'quick entry bar opened above table');
+  await click('[data-act="toggleQuickEntry"]');
+
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');

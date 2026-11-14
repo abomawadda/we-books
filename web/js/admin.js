@@ -266,38 +266,452 @@ on("bookRes", id => {
 on("qBookRes", v => { Q.bookRes = v.trim(); rerenderList("bookResList", () => bookResList(Q.bookResId)); });
 on("exportBookRes", id => { const { b } = maps(); exportCSV("حاجزو " + ((b[id] || {}).Book_Name || id), ["الأسبقية", "رقم الموظف", "الاسم", "جهة العمل", "الموبايل", "محجوز", "مخصص", "مُسلَّم"], (Q.bookRes = "", bookResRows(id)).map(({ i, k, emp }) => [k, i.Emp_ID, emp.Full_Name, emp.Department, emp.Mobile, i.Requested_Qty, i.Allocated_Qty, i.Delivered_Qty])); });
 
-function booksTable() {
-  const d = A(), st = d.stockMap || {}, q = (Q.books || "").toLowerCase();
-  const f = Q.bookF || {};
-  const list = d.books.filter(x => (!q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject + x.Publisher).toLowerCase().includes(q))
+// حالة واجهة جدول الكتب الاحترافية: التعديل المباشر بالجدول + لوحة الإدخال السريع + الفلاتر
+const BK_UI = {
+  inlineMode: false,
+  editingRow: null,
+  dirty: {}, // { bookId: { coverPrice, supplierDiscountPct, volumeDiscountSharePct, empDiscountPct, bookStatus } }
+  quickOpen: false,
+  qForm: { mode: "single", stage: "", grade: "4 ابتدائي", publisher: "", subject: "", bookPart: "شرح", schoolTypes: "حكومي", coverPrice: "", supplierDiscountPct: "" }
+};
+
+function filteredBooksList() {
+  const d = A(), q = (Q.books || "").toLowerCase(), f = Q.bookF || {};
+  return d.books.filter(x => (!q || (x.Book_ID + " " + x.Book_Name + " " + x.Grade + " " + x.Stage + " " + x.Subject + " " + x.Publisher + " " + (x.Book_Part || "")).toLowerCase().includes(q))
+    && (!f.stage || x.Stage === f.stage)
     && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type))
     && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st));
-  return UI.table([
-    { t: "الكتاب", v: x => `<div class="flex items-center gap-2.5">${coverThumb(x)}<div class="min-w-0"><button class="text-right font-semibold text-slate-900 hover:text-brand-700 hover:underline" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button><div class="text-[11.5px] text-slate-400"><span class="num">${esc(x.Book_ID)}</span> · ${esc(x.Grade)} · ${esc(x.School_Types || "")}</div></div></div>` },
-    { t: "الحالة", v: x => pill(x.Book_Status) },
-    { t: "الحاجزون", cls: "num", v: x => { const c = resCount()[x.Book_ID]; return c ? `<button class="btn btn-ghost btn-xs" data-act="bookRes" data-id="${esc(x.Book_ID)}">${ic("users")} ${fmt(c.p)} · ${fmt(c.q)} نسخة</button>` : `<span class="text-slate-300">0</span>`; } },
-    { t: "الغلاف", cls: "num", v: x => x.Book_Status === "Pricing" ? `<span class="text-amber-600 font-semibold">جاري التسعير</span>` : fmt(x.Cover_Price) },
-    { t: "خصم المكتبة", cls: "num", v: x => fmt(x.Supplier_Discount_Pct) + "%" },
-    { t: "التكلفة", cls: "num", v: x => fmt(x.Standard_Net_Cost) },
-    { t: "سعر الموظف", cls: "num", v: x => `<b class="text-brand-800">${fmt(x.Emp_Selling_Price)}</b>` },
-    { t: "الهامش", cls: "num", v: x => { const m = r2(n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost)); return `<span class="${m < 0 ? "text-rose-600 font-bold" : "text-emerald-600"}">${fmt(m)}</span>`; } },
-    { t: "المخزن / حر", cls: "num", v: x => `${fmt(st[x.Book_ID] ? st[x.Book_ID].onHand : 0)} / ${fmt(st[x.Book_ID] ? st[x.Book_ID].free : 0)}` },
-    { t: "", actions: true, v: x => {
-      const hasUse = !!(resCount()[x.Book_ID] || (st[x.Book_ID] && st[x.Book_ID].onHand));
-      return `<div class="flex items-center gap-1">${can("SAVE_BOOK") ? `<button class="btn btn-outline btn-xs" data-act="bookForm" data-id="${esc(x.Book_ID)}">${ic("pencil")} تعديل</button><button class="btn btn-ghost btn-xs" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="إضافة نفس الكتاب لصف دراسي آخر أو سلسلة بكود جديد">${ic("package-plus")} نسخ لصف</button>` : ""}${!hasUse && can("DELETE_BOOK") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب">${ic("trash-2")} حذف</button>` : ""}</div>`;
-    } }
-  ], list, { maxH: 640, emptyIcon: "library-big", empty: q ? "لا نتائج للبحث" : "الكتالوج فارغ", emptySub: q ? "" : "أضف الكتب يدوياً أو استوردها من Excel." });
 }
+
+function rowDraftOf(x) {
+  const dr = BK_UI.dirty[x.Book_ID];
+  return {
+    coverPrice: dr && dr.coverPrice !== undefined ? dr.coverPrice : (x.Book_Status === "Pricing" && !n(x.Cover_Price) ? "" : x.Cover_Price),
+    supplierDiscountPct: dr && dr.supplierDiscountPct !== undefined ? dr.supplierDiscountPct : x.Supplier_Discount_Pct,
+    volumeDiscountSharePct: dr && dr.volumeDiscountSharePct !== undefined ? dr.volumeDiscountSharePct : (x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct),
+    empDiscountPct: dr && dr.empDiscountPct !== undefined ? dr.empDiscountPct : (x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct),
+    bookStatus: dr && dr.bookStatus !== undefined ? dr.bookStatus : x.Book_Status
+  };
+}
+
+function booksTable() {
+  const d = A(), st = d.stockMap || {}, q = (Q.books || "").toLowerCase();
+  const list = filteredBooksList();
+  const rcMap = resCount();
+  const canEdit = can("SAVE_BOOK");
+  const dirtyIds = Object.keys(BK_UI.dirty);
+
+  const stageTone = stg => /أطفال/.test(stg) ? "bg-amber-50 text-amber-800 ring-amber-200" : /ابتدائ/.test(stg) ? "bg-brand-50 text-brand-800 ring-brand-200" : /إعداد/.test(stg) ? "bg-sky-50 text-sky-800 ring-sky-200" : /ثانو/.test(stg) ? "bg-emerald-50 text-emerald-800 ring-emerald-200" : "bg-slate-100 text-slate-700 ring-slate-200";
+
+  // شريط حفظ التعديلات المباشرة داخل الجدول
+  const dirtyBanner = dirtyIds.length ? `
+    <div id="bkDirtyBar" class="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-amber-50/90 ring-1 ring-amber-300 px-4 py-2.5 text-sm shadow-xs">
+      <div class="flex items-center gap-2 text-amber-900 font-semibold">
+        <span class="w-7 h-7 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold num text-xs">${dirtyIds.length}</span>
+        <span>لديك تعديلات مباشرة غير محفوظة في الجدول على <b>${dirtyIds.length}</b> كتاب</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" class="btn btn-primary btn-xs" data-act="bkSaveAllInline">${ic("check")} حفظ كل التعديلات (${dirtyIds.length})</button>
+        <button type="button" class="btn btn-outline btn-xs" data-act="bkDiscardInline">${ic("x")} تراجع</button>
+      </div>
+    </div>` : "";
+
+  // حساب إجماليات ومتوسطات صف التذييل
+  const priced = list.filter(x => x.Book_Status !== "Pricing" && n(x.Cover_Price) > 0);
+  const totResP = list.reduce((s, x) => s + (rcMap[x.Book_ID] ? rcMap[x.Book_ID].p : 0), 0);
+  const totResQ = list.reduce((s, x) => s + (rcMap[x.Book_ID] ? rcMap[x.Book_ID].q : 0), 0);
+  const avgCover = priced.length ? r2(sum(priced, "Cover_Price") / priced.length) : 0;
+  const avgCost = priced.length ? r2(sum(priced, "Standard_Net_Cost") / priced.length) : 0;
+  const avgEmp = priced.length ? r2(sum(priced, "Emp_Selling_Price") / priced.length) : 0;
+  const avgMargin = r2(avgEmp - avgCost);
+  const totOnHand = list.reduce((s, x) => s + n(st[x.Book_ID] ? st[x.Book_ID].onHand : 0), 0);
+  const totFree = list.reduce((s, x) => s + n(st[x.Book_ID] ? st[x.Book_ID].free : 0), 0);
+
+  const footHtml = list.length ? `<tr>
+    <td class="text-slate-600">الإجمالي (${fmt(list.length)})</td>
+    <td class="text-xs text-slate-500">كتب مطابقة للبحث (${fmt(priced.length)} مسعّر)</td>
+    <td class="text-xs text-slate-500">—</td>
+    <td class="text-xs text-slate-500">—</td>
+    <td class="num">${totResQ ? `${fmt(totResP)} حاجز · ${fmt(totResQ)} نسخة` : "0"}</td>
+    <td class="num text-slate-700" title="متوسط سعر الغلاف">${avgCover ? fmt(avgCover) : "—"}</td>
+    <td class="num text-slate-500">—</td>
+    <td class="num text-slate-700" title="متوسط صافي التكلفة">${avgCost ? fmt(avgCost) : "—"}</td>
+    <td class="num text-brand-800" title="متوسط سعر الموظف">${avgEmp ? fmt(avgEmp) : "—"}</td>
+    <td class="num ${avgMargin < 0 ? "text-rose-600" : "text-emerald-700"}" title="متوسط الهامش">${priced.length ? fmt(avgMargin) : "—"}</td>
+    <td class="num">${fmt(totOnHand)} / ${fmt(totFree)}</td>
+    <td></td>
+  </tr>` : "";
+
+  const tbl = UI.table([
+    { t: "الكود", cls: "w-24", v: x => `<span class="inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-bold num ring-1 ${stageTone(x.Stage || "")}">${esc(x.Book_ID)}</span>` },
+    { t: "الكتاب · الناشر · المادة", v: x => `<div class="flex items-center gap-2.5">${coverThumb(x)}<div class="min-w-0 flex-1">
+      <button class="text-right font-bold text-slate-900 hover:text-brand-700 hover:underline leading-snug block truncate max-w-[260px]" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button>
+      <div class="flex flex-wrap items-center gap-1 mt-1">
+        <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[11px] font-semibold">${ic("store", "!w-3 !h-3 text-slate-400")}${esc(x.Publisher || "—")}</span>
+        <span class="inline-flex items-center gap-1 rounded-md bg-brand-50/70 text-brand-800 px-1.5 py-0.5 text-[11px] font-semibold">${esc(x.Subject || "—")}</span>
+        ${x.Book_Part ? `<span class="inline-flex items-center rounded-md bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10.5px] font-semibold">${esc(x.Book_Part)}</span>` : ""}
+      </div>
+    </div></div>` },
+    { t: "الصف والمدرسة", v: x => `<div class="space-y-1">
+      <div class="font-bold text-slate-800 text-xs">${esc(x.Grade)}</div>
+      <div class="flex flex-wrap items-center gap-1">
+        <span class="text-[10.5px] text-slate-400">${esc((x.Stage || "").replace("المرحلة ", ""))}</span>
+        <span class="inline-flex items-center rounded-md ring-1 ring-slate-200 bg-white px-1.5 py-0.2 text-[10.5px] font-semibold text-slate-600">${esc(x.School_Types || "حكومي")}</span>
+      </div>
+    </div>` },
+    { t: "الحالة", v: x => {
+      const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
+      const dr = rowDraftOf(x);
+      if (inEd) {
+        return `<select class="tbl-sel" data-bk-inline="${esc(x.Book_ID)}" data-f="bookStatus">
+          ${[["Available", "متاح"], ["Pricing", "جاري التسعير"], ["Not_Yet_Printed", "لم يُطبع بعد"], ["Suspended", "موقوف"], ["Discontinued", "ملغى"]].map(o => `<option value="${o[0]}" ${dr.bookStatus === o[0] ? "selected" : ""}>${o[1]}</option>`).join("")}
+        </select>`;
+      }
+      return pill(x.Book_Status);
+    } },
+    { t: "الحاجزون", cls: "num text-center", v: x => { const c = rcMap[x.Book_ID]; return c ? `<button class="inline-flex items-center gap-1 rounded-lg bg-brand-50/70 hover:bg-brand-100 text-brand-800 px-2 py-1 text-xs font-bold transition" data-act="bookRes" data-id="${esc(x.Book_ID)}">${ic("users", "!w-3.5 !h-3.5")} ${fmt(c.p)} <span class="text-slate-400 font-normal">|</span> ${fmt(c.q)} نسخة</button>` : `<span class="text-slate-300">0</span>`; } },
+    { t: "سعر الغلاف", cls: "num text-center", v: x => {
+      const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
+      const dr = rowDraftOf(x);
+      if (inEd) {
+        return `<input type="number" step="any" inputmode="decimal" class="tbl-inp" data-bk-inline="${esc(x.Book_ID)}" data-f="coverPrice" value="${esc(dr.coverPrice)}" placeholder="الغلاف">`;
+      }
+      return x.Book_Status === "Pricing" && !n(x.Cover_Price)
+        ? `<button type="button" class="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-0.5 text-xs font-semibold hover:bg-amber-100 transition" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط لإدخال السعر فوراً"` : ""}>جاري التسعير ${canEdit ? ic("pencil", "!w-3 !h-3") : ""}</button>`
+        : `<button type="button" class="font-bold text-slate-800 hover:text-brand-700 transition inline-flex items-center gap-1" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط للتعديل السريع بالجدول"` : ""}>${fmt(x.Cover_Price)}</button>`;
+    } },
+    { t: "خصم المكتبة", cls: "num text-center", v: x => {
+      const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
+      const dr = rowDraftOf(x);
+      if (inEd) {
+        return `<div class="inline-flex items-center gap-0.5"><input type="number" step="any" inputmode="decimal" class="tbl-inp !w-16" data-bk-inline="${esc(x.Book_ID)}" data-f="supplierDiscountPct" value="${esc(dr.supplierDiscountPct)}" placeholder="%"><span class="text-[11px] text-slate-400">%</span></div>`;
+      }
+      return `<span class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">${fmt(x.Supplier_Discount_Pct)}%</span>`;
+    } },
+    { t: "التكلفة", cls: "num text-center", v: x => {
+      const dr = rowDraftOf(x);
+      const p = bookPrice(dr);
+      const cost = BK_UI.dirty[x.Book_ID] ? p.cost : n(x.Standard_Net_Cost);
+      return `<span data-bk-cost="${esc(x.Book_ID)}" class="font-semibold text-slate-700">${fmt(cost)}</span>`;
+    } },
+    { t: "سعر الموظف", cls: "num text-center", v: x => {
+      const dr = rowDraftOf(x);
+      const p = bookPrice(dr);
+      const emp = BK_UI.dirty[x.Book_ID] ? p.emp : n(x.Emp_Selling_Price);
+      return `<b data-bk-emp="${esc(x.Book_ID)}" class="inline-flex items-center justify-center rounded-lg bg-brand-50 text-brand-900 px-2.5 py-0.5 font-bold">${fmt(emp)}</b>`;
+    } },
+    { t: "الهامش", cls: "num text-center", v: x => {
+      const dr = rowDraftOf(x);
+      const p = bookPrice(dr);
+      const m = BK_UI.dirty[x.Book_ID] ? p.margin : r2(n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost));
+      return `<span data-bk-margin="${esc(x.Book_ID)}" class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-bold ${m < 0 ? "bg-rose-50 text-rose-600 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}">${fmt(m)}</span>`;
+    } },
+    { t: "المخزن / حر", cls: "num text-center", v: x => {
+      const oh = st[x.Book_ID] ? st[x.Book_ID].onHand : 0, fr = st[x.Book_ID] ? st[x.Book_ID].free : 0;
+      return `<span class="text-xs font-semibold ${oh > 0 ? "text-slate-800" : "text-slate-400"}">${fmt(oh)} <span class="text-slate-300">/</span> <span class="${fr > 0 ? "text-emerald-700 font-bold" : ""}">${fmt(fr)}</span></span>`;
+    } },
+    { t: "إجراءات", actions: true, cls: "w-44", v: x => {
+      const hasUse = !!(rcMap[x.Book_ID] || (st[x.Book_ID] && st[x.Book_ID].onHand));
+      const isRowEd = BK_UI.editingRow === x.Book_ID || !!BK_UI.dirty[x.Book_ID];
+      return `<div class="flex items-center justify-end gap-1">
+        ${canEdit && isRowEd ? `<button class="btn btn-primary btn-xs !px-2" data-act="bkSaveRow" data-id="${esc(x.Book_ID)}" title="حفظ التعديل السريع لهذا الكتاب">${ic("check")} حفظ</button>` : ""}
+        ${canEdit && !BK_UI.inlineMode && !isRowEd ? `<button class="btn btn-ghost btn-xs !px-2 text-brand-700 hover:bg-brand-50" data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="تعديل السعر والخصم مباشرة داخل السطر">${ic("SlidersHorizontal" in (window.ICONS || {}) ? "SlidersHorizontal" : "sliders-horizontal")}</button>` : ""}
+        ${canEdit ? `<button class="btn btn-outline btn-xs !px-2.5" data-act="bookForm" data-id="${esc(x.Book_ID)}" title="فتح لوحة التعديل الكاملة">${ic("pencil")} تعديل</button>
+        <button class="btn btn-ghost btn-xs !px-2 text-slate-600 hover:text-brand-800" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="إضافة نفس الكتاب لصف دراسي آخر أو سلسلة بكود جديد">${ic("package-plus")} نسخ لصف</button>` : ""}
+        ${!hasUse && can("DELETE_BOOK") ? `<button class="btn btn-ghost btn-xs !px-2 text-rose-600 hover:bg-rose-50" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب">${ic("trash-2")} حذف</button>` : ""}
+      </div>`;
+    } }
+  ], list, {
+    maxH: 660,
+    foot: footHtml,
+    rowCls: x => BK_UI.dirty[x.Book_ID] ? "row-dirty" : (n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost) && x.Book_Status !== "Pricing" ? "row-loss" : ""),
+    rowAttr: x => `data-book-row="${esc(x.Book_ID)}"`,
+    emptyIcon: "library-big",
+    empty: q ? "لا نتائج مطابقة للبحث أو الفلتر" : "الكتالوج فارغ",
+    emptySub: q ? "جرّب تغيير المرحلة أو مسح الفلاتر." : "أضف الكتب من لوحة الإدخال السريع أعلاه أو من استوديو الإضافة."
+  });
+  return dirtyBanner + tbl;
+}
+
+/** لوحة الإدخال السريع المدمجة أعلى جدول الكتب (إضافة كتاب أو سلسلة كاملة في ثوانٍ بدون نوافذ منبثقة) */
+function quickBookEntryBarHTML() {
+  if (!can("SAVE_BOOK") || !BK_UI.quickOpen) return "";
+  const d = A(), c = d.catalog || {}, qf = BK_UI.qForm;
+  const grades = c.grades || [];
+  const pubs = c.publishers || [];
+  const subs = c.subjects || [];
+  const parts = c.parts || [];
+  if (!qf.publisher && pubs[0]) qf.publisher = pubs[0];
+  if (!qf.subject && subs[0]) qf.subject = subs[0];
+  if (qf.supplierDiscountPct === "" && d.suppliers[0] && d.suppliers[0].Default_Discount_Pct !== undefined) qf.supplierDiscountPct = d.suppliers[0].Default_Discount_Pct;
+  const p = bookPrice(qf);
+  const autoName = previewBookName(qf.publisher, qf.subject, qf.bookPart, qf.schoolTypes);
+  const gObj = grades.find(g => g.label === qf.grade);
+  const nextCode = qf.mode === "series" && qf.stage
+    ? grades.filter(g => g.stage === qf.stage).map(g => g.code).join("، ")
+    : (gObj ? nextCodePreview(gObj.code, d.books) : "تلقائي");
+
+  return `
+    <div id="quickBookPanel" class="mb-4 rounded-2xl bg-gradient-to-b from-brand-50/70 via-white to-white ring-1 ring-brand-200 p-4 shadow-soft">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-3 mb-3 border-b border-slate-200/80">
+        <div class="flex items-center gap-2.5">
+          <span class="w-9 h-9 rounded-xl bg-brand-700 text-white flex items-center justify-center shadow-xs">${ic("zap" in (window.ICONS || {}) ? "zap" : "plus")}</span>
+          <div>
+            <h3 class="font-bold text-slate-900 text-sm">لوحة الإدخال السريع للكتب والسلاسل</h3>
+            <p class="text-[11.5px] text-slate-500">أدخل الكتاب أو السلسلة مباشرة في خطوة واحدة، أو اضغط «إضافة +» بجانب أي قائمة لإضافة دار نشر أو مادة جديدة</p>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          <span class="text-[11.5px] text-slate-500 font-semibold ml-1">تحديد سريع:</span>
+          <button type="button" class="qchip ${qf.mode === "single" ? "active" : ""}" data-act="qbMode" data-id="single">كتاب لصف واحد</button>
+          <button type="button" class="qchip ${qf.mode === "series" && qf.stage === "المرحلة الابتدائية" ? "active" : ""}" data-act="qbSeries" data-id="المرحلة الابتدائية">سلسلة الابتدائي (1–6)</button>
+          <button type="button" class="qchip ${qf.mode === "series" && qf.stage === "المرحلة الإعدادية" ? "active" : ""}" data-act="qbSeries" data-id="المرحلة الإعدادية">سلسلة الإعدادي (1–3)</button>
+          <button type="button" class="qchip ${qf.mode === "series" && qf.stage === "المرحلة الثانوية" ? "active" : ""}" data-act="qbSeries" data-id="المرحلة الثانوية">سلسلة الثانوي (1–3)</button>
+          <button type="button" class="qchip ${qf.mode === "series" && qf.stage === "رياض الأطفال" ? "active" : ""}" data-act="qbSeries" data-id="رياض الأطفال">رياض الأطفال</button>
+          <button type="button" class="icon-btn w-8 h-8 text-slate-400 hover:text-slate-700" data-act="toggleQuickEntry" title="طي لوحة الإدخال السريع">${ic("x")}</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5 items-end">
+        <div>
+          <label class="label !text-[11.5px]">${qf.mode === "series" ? "المرحلة (سلسلة كاملة)" : "الصف الدراسي"}</label>
+          ${qf.mode === "series"
+            ? `<select class="input !h-10 !text-xs font-bold text-brand-800 bg-brand-50/40" data-change="qbField" data-k="stage">
+                ${["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية", "رياض الأطفال"].map(st => `<option value="${esc(st)}" ${qf.stage === st ? "selected" : ""}>كل صفوف ${esc(st)} (${grades.filter(g => g.stage === st).length} صفوف)</option>`).join("")}
+              </select>`
+            : `<select class="input !h-10 !text-xs font-semibold" data-change="qbField" data-k="grade">
+                ${grades.map(g => `<option value="${esc(g.label)}" ${qf.grade === g.label ? "selected" : ""}>${esc(g.label)} (${esc(g.code)})</option>`).join("")}
+              </select>`}
+        </div>
+        <div>
+          <div class="flex items-center justify-between"><label class="label !text-[11.5px]">دار النشر</label><button type="button" class="text-[11px] font-bold text-brand-700 hover:underline" data-act="catalogMgr" data-id="publishers">+ جديد</button></div>
+          <select class="input !h-10 !text-xs font-semibold" data-change="qbField" data-k="publisher">
+            ${pubs.map(pub => `<option value="${esc(pub)}" ${qf.publisher === pub ? "selected" : ""}>${esc(pub)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div class="flex items-center justify-between"><label class="label !text-[11.5px]">المادة الدراسية</label><button type="button" class="text-[11px] font-bold text-brand-700 hover:underline" data-act="catalogMgr" data-id="subjects">+ جديد</button></div>
+          <select class="input !h-10 !text-xs font-semibold" data-change="qbField" data-k="subject">
+            ${subs.map(sub => `<option value="${esc(sub)}" ${qf.subject === sub ? "selected" : ""}>${esc(sub)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <div class="flex items-center justify-between"><label class="label !text-[11.5px]">جزء الكتاب</label><button type="button" class="text-[11px] font-bold text-brand-700 hover:underline" data-act="catalogMgr" data-id="parts">+ جديد</button></div>
+          <select class="input !h-10 !text-xs" data-change="qbField" data-k="bookPart">
+            <option value="" ${!qf.bookPart ? "selected" : ""}>كتاب كامل (بلا جزء)</option>
+            ${parts.map(pt => `<option value="${esc(pt)}" ${qf.bookPart === pt ? "selected" : ""}>${esc(pt)}</option>`).join("")}
+          </select>
+        </div>
+        <div>
+          <label class="label !text-[11.5px]">نوع المدرسة</label>
+          <select class="input !h-10 !text-xs" data-change="qbField" data-k="schoolTypes">
+            ${typeCombos(c.schoolTypes || []).map(op => `<option value="${esc(op[0])}" ${qf.schoolTypes === op[0] ? "selected" : ""}>${esc(op[1])}</option>`).join("")}
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-1.5">
+          <div>
+            <label class="label !text-[11.5px]">سعر الغلاف</label>
+            <input type="number" step="any" inputmode="decimal" class="input !h-10 !text-xs num font-bold" placeholder="جاري التسعير" value="${esc(qf.coverPrice)}" data-input="qbPrice" data-k="coverPrice">
+          </div>
+          <div>
+            <label class="label !text-[11.5px]">خصم المورد %</label>
+            <input type="number" step="any" inputmode="decimal" class="input !h-10 !text-xs num font-bold" placeholder="%" value="${esc(qf.supplierDiscountPct)}" data-input="qbPrice" data-k="supplierDiscountPct">
+          </div>
+        </div>
+        <div>
+          <button type="button" class="btn btn-primary !h-10 w-full text-xs font-bold shadow-sm" data-act="qbSubmit">${ic("plus")} ${qf.mode === "series" ? "إضافة السلسلة" : "إضافة الكتاب"}</button>
+        </div>
+      </div>
+
+      <div id="qbLiveBar" class="mt-3 pt-2.5 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div class="flex flex-wrap items-center gap-2 text-slate-600">
+          <span>الاسم التلقائي: <b class="text-slate-900">${esc(autoName || "—")}</b></span>
+          <span class="text-slate-300">|</span>
+          <span>الكود: <b class="num text-brand-800">${esc(nextCode)}</b></span>
+        </div>
+        <div class="flex flex-wrap items-center gap-3 num">
+          <span>صافي التكلفة: <b class="text-slate-800">${qf.coverPrice ? fmt(p.cost) + " ج.م" : "—"}</b></span>
+          <span>سعر الموظف: <b class="text-brand-800">${qf.coverPrice ? fmt(p.emp) + " ج.م" : "جاري التسعير"}</b></span>
+          <span>الهامش: <b class="${p.margin < 0 ? "text-rose-600" : "text-emerald-700"}">${qf.coverPrice ? fmt(p.margin) + " ج.م" : "—"}</b></span>
+        </div>
+      </div>
+    </div>`;
+}
+
+/** فلاتر الكتالوج الاحترافية: شريط المراحل السريع + الفلاتر المنسدلة */
+function bookFilters() {
+  const d = A(), c = d.catalog || {}, f = Q.bookF || {};
+  const stages = ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"];
+  const sel = (k, label, opts) => `<select class="input !h-9 !w-auto !text-xs font-semibold bg-slate-50/70 hover:bg-white" data-change="bookF" data-k="${k}"><option value="">${label}</option>${opts.map(o => `<option value="${esc(o[0])}" ${f[k] === o[0] ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>`;
+  const pricing = d.books.filter(b => b.Book_Status === "Pricing").length;
+  const stageGrades = (c.grades || []).filter(g => !f.stage || g.stage === f.stage);
+  const hasFilters = !!(f.stage || f.grade || f.type || f.pub || f.sub || f.st || Q.books);
+
+  return `
+    <div class="w-full space-y-2.5">
+      <div class="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+        <div class="flex flex-wrap items-center gap-1.5">
+          <button type="button" class="qchip ${!f.stage ? "active" : ""}" data-act="bkStageF" data-id="">كل المراحل <span class="num opacity-75">(${d.books.length})</span></button>
+          ${stages.map(st => {
+            const cnt = d.books.filter(b => b.Stage === st).length;
+            return `<button type="button" class="qchip ${f.stage === st ? "active" : ""}" data-act="bkStageF" data-id="${esc(st)}">${esc(st.replace("المرحلة ", ""))} <span class="num opacity-75">(${cnt})</span></button>`;
+          }).join("")}
+        </div>
+        <div class="flex flex-wrap items-center gap-1.5">
+          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.quickOpen ? "btn-primary" : "btn-soft"} btn-xs" data-act="toggleQuickEntry">${ic("plus")} لوحة الإدخال السريع</button>` : ""}
+          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.inlineMode ? "btn-gold" : "btn-outline"} btn-xs" data-act="toggleInlineBooks">${ic("pencil")} ${BK_UI.inlineMode ? "إغلاق التعديل بالجدول" : "تعديل الأسعار بالجدول"}</button>` : ""}
+          <button type="button" class="btn btn-ghost btn-xs" data-act="exportBooks">${ic("download")} تصدير Excel</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        ${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر أو المادة…")}
+        ${sel("grade", "كل الصفوف", stageGrades.map(g => [g.label, g.label]))}
+        ${sel("pub", "كل دور النشر", (c.publishers || []).map(t => [t, t]))}
+        ${sel("sub", "كل المواد", (c.subjects || []).map(t => [t, t]))}
+        ${sel("type", "كل المدارس", (c.schoolTypes || []).map(t => [t, t]))}
+        ${sel("st", "كل الحالات", [["Pricing", `جاري التسعير (${pricing})`], ["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد"], ["Suspended", "موقوف"], ["Discontinued", "ملغى"]])}
+        ${hasFilters ? `<button type="button" class="btn btn-ghost btn-xs text-rose-600" data-act="bkClearF">${ic("x")} مسح الفلاتر</button>` : ""}
+      </div>
+    </div>`;
+}
+
 Router.add("/a/books", view => {
-  const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
-  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
+  const d = A(), loss = d.books.filter(x => x.Book_Status !== "Pricing" && n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
+  const pricingCnt = d.books.filter(x => x.Book_Status === "Pricing").length;
+  const availCnt = d.books.filter(x => x.Book_Status === "Available" || x.Book_Status === "Not_Yet_Printed").length;
+  const rcMap = resCount();
+  const totalReqCopies = Object.values(rcMap).reduce((s, c) => s + c.q, 0);
+  const pubsCnt = new Set(d.books.map(b => b.Publisher).filter(Boolean)).size;
+  const subsCnt = new Set(d.books.map(b => b.Subject).filter(Boolean)).size;
+
+  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب مسجل · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
     lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("sliders-horizontal")} قوائم الكتالوج</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
-    + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
-    + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
-      ${bookFilters()}
-      <button class="btn btn-ghost btn-sm" data-act="exportBooks">${ic("download")} تصدير</button></div><div id="booksList">${booksTable()}</div></section>`;
+    + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        ${UI.kpi("إجمالي الكتب المسجلة", fmt(d.books.length), { icon: "library-big", tone: "brand", foot: `${fmt(pubsCnt)} دار نشر · ${fmt(subsCnt)} مادة دراسية` })}
+        ${UI.kpi("متاح للحجز الآن", fmt(availCnt), { icon: "circle-check", tone: "green", foot: pricingCnt ? `${fmt(pricingCnt)} كتاب جاري تسعيره` : "جميع الكتب مسعّرة وجاهزة" })}
+        ${UI.kpi("النسخ المحجوزة بالمرحلة", fmt(totalReqCopies), { icon: "shopping-cart", tone: "blue", foot: `في ${esc(phaseObj().Phase_Name || "المرحلة المختارة")}` })}
+        ${UI.kpi("الخصم الموحد للموظف", fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT) + "%", { icon: "badge-percent", tone: loss ? "red" : "amber", foot: loss ? `تنبيه: ${loss} كتاب أقل من التكلفة` : `عقد المكتبة الرئيسية: ${esc((d.suppliers[0] || {}).Supplier_Name || "—")}` })}
+      </div>`
+    + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-200 text-rose-800 p-3.5 mb-4 text-sm flex items-center gap-2">${ic("triangle-alert", "text-rose-600")}<span class="font-semibold">${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية — يمكنك تعديلها مباشرة من الجدول أدناه.</span></div>` : "")
+    + `<div id="quickEntryWrap">${quickBookEntryBarHTML()}</div>`
+    + `<section class="card card-pad"><div id="bookFiltersWrap" class="mb-3.5">${bookFilters()}</div><div id="booksList">${booksTable()}</div></section>`;
 });
 on("qBooks", v => { Q.books = v.trim(); rerenderList("booksList", booksTable); });
+on("bookF", (v, el) => { Q.bookF = Object.assign({}, Q.bookF, { [el.dataset.k]: v }); rerenderList("booksList", booksTable); });
+on("bkStageF", stg => { Q.bookF = Object.assign({}, Q.bookF, { stage: stg || "", grade: "" }); const fw = $("#bookFiltersWrap"); if (fw) fw.innerHTML = bookFilters(); rerenderList("booksList", booksTable); });
+on("bkClearF", () => { Q.books = ""; Q.bookF = {}; const fw = $("#bookFiltersWrap"); if (fw) fw.innerHTML = bookFilters(); rerenderList("booksList", booksTable); });
+on("toggleQuickEntry", () => { BK_UI.quickOpen = !BK_UI.quickOpen; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); const fw = $("#bookFiltersWrap"); if (fw) fw.innerHTML = bookFilters(); });
+on("qbMode", m => { BK_UI.qForm.mode = m; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); });
+on("qbSeries", stg => { BK_UI.qForm.mode = "series"; BK_UI.qForm.stage = stg; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); });
+on("qbField", (v, el) => { BK_UI.qForm[el.dataset.k] = v; const qw = $("#quickEntryWrap"); if (qw) qw.innerHTML = quickBookEntryBarHTML(); });
+on("qbPrice", (v, el) => {
+  BK_UI.qForm[el.dataset.k] = v;
+  const bar = $("#qbLiveBar");
+  if (bar) {
+    const qf = BK_UI.qForm, p = bookPrice(qf);
+    const autoName = previewBookName(qf.publisher, qf.subject, qf.bookPart, qf.schoolTypes);
+    const grades = (A().catalog || {}).grades || [];
+    const gObj = grades.find(g => g.label === qf.grade);
+    const nextCode = qf.mode === "series" && qf.stage ? grades.filter(g => g.stage === qf.stage).map(g => g.code).join("، ") : (gObj ? nextCodePreview(gObj.code, A().books) : "تلقائي");
+    bar.innerHTML = `<div class="flex flex-wrap items-center gap-2 text-slate-600"><span>الاسم التلقائي: <b class="text-slate-900">${esc(autoName || "—")}</b></span><span class="text-slate-300">|</span><span>الكود: <b class="num text-brand-800">${esc(nextCode)}</b></span></div>
+      <div class="flex flex-wrap items-center gap-3 num"><span>صافي التكلفة: <b class="text-slate-800">${qf.coverPrice ? fmt(p.cost) + " ج.م" : "—"}</b></span><span>سعر الموظف: <b class="text-brand-800">${qf.coverPrice ? fmt(p.emp) + " ج.م" : "جاري التسعير"}</b></span><span>الهامش: <b class="${p.margin < 0 ? "text-rose-600" : "text-emerald-700"}">${qf.coverPrice ? fmt(p.margin) + " ج.م" : "—"}</b></span></div>`;
+  }
+});
+on("qbSubmit", async () => {
+  const qf = BK_UI.qForm, grades = ((A().catalog || {}).grades || []);
+  const targetGrades = qf.mode === "series" ? grades.filter(g => g.stage === (qf.stage || "المرحلة الابتدائية")).map(g => g.label) : [qf.grade];
+  if (!targetGrades.length) return toast("اختر الصف الدراسي أو المرحلة أولاً", "warning");
+  if (!qf.publisher || !qf.subject) return toast("اختر دار النشر والمادة الدراسية", "warning");
+  const payload = {
+    grade: targetGrades[0], grades: targetGrades, schoolTypes: qf.schoolTypes || "حكومي",
+    publisher: qf.publisher, subject: qf.subject, bookPart: qf.bookPart || "",
+    supplierId: (A().suppliers[0] || {}).Supplier_ID || "", bookStatus: "Available",
+    coverPrice: qf.coverPrice, supplierDiscountPct: qf.supplierDiscountPct
+  };
+  const r = await call("SAVE_BOOK", payload, { block: true });
+  if (r && r.success && targetGrades.length > 1 && !Array.isArray(r.books)) {
+    for (const gl of targetGrades.slice(1)) await call("SAVE_BOOK", Object.assign({}, payload, { grade: gl, grades: [gl] }), { block: true });
+  }
+  toast((r && r.message) || (r && r.success ? "تمت الإضافة بنجاح" : "تعذر الحفظ"), r && r.success ? "success" : "danger");
+  if (r && r.success) { await Admin.load(); Shell.rerender(); }
+});
+
+// أحداث التعديل المباشر داخل جدول الكتب والأسعار
+on("toggleInlineBooks", () => {
+  BK_UI.inlineMode = !BK_UI.inlineMode;
+  if (!BK_UI.inlineMode) BK_UI.editingRow = null;
+  const fw = $("#bookFiltersWrap"); if (fw) fw.innerHTML = bookFilters();
+  rerenderList("booksList", booksTable);
+});
+on("bkQuickRow", id => {
+  BK_UI.editingRow = BK_UI.editingRow === id ? null : id;
+  rerenderList("booksList", booksTable);
+  const inp = $(`[data-bk-inline="${id}"][data-f="coverPrice"]`);
+  if (inp) setTimeout(() => { inp.focus(); if (inp.select) inp.select(); }, 20);
+});
+on("bkDiscardInline", () => {
+  BK_UI.dirty = {};
+  BK_UI.editingRow = null;
+  rerenderList("booksList", booksTable);
+});
+async function saveInlineBookRow(bookId, silent) {
+  const b = A().books.find(x => x.Book_ID === bookId);
+  if (!b) return { success: false };
+  const dr = rowDraftOf(b);
+  const r = await call("SAVE_BOOK", {
+    bookId: b.Book_ID, grade: b.Grade, grades: [b.Grade], schoolTypes: b.School_Types || "حكومي",
+    publisher: b.Publisher, subject: b.Subject, bookPart: b.Book_Part || "",
+    supplierId: b.Supplier_ID || (A().suppliers[0] || {}).Supplier_ID || "",
+    bookStatus: dr.bookStatus === "Pricing" ? "Available" : (dr.bookStatus || "Available"),
+    coverPrice: dr.coverPrice, supplierDiscountPct: dr.supplierDiscountPct,
+    volumeDiscountSharePct: dr.volumeDiscountSharePct, empDiscountPct: dr.empDiscountPct
+  }, { block: !silent });
+  if (r && r.success) delete BK_UI.dirty[bookId];
+  return r;
+}
+on("bkSaveRow", async id => {
+  const r = await saveInlineBookRow(id, false);
+  toast((r && r.message) || (r && r.success ? "تم حفظ تعديل الكتاب" : "تعذر الحفظ"), r && r.success ? "success" : "danger");
+  if (r && r.success) { BK_UI.editingRow = null; await Admin.load(); rerenderList("booksList", booksTable); }
+});
+on("bkSaveAllInline", async () => {
+  const ids = Object.keys(BK_UI.dirty);
+  if (!ids.length) return;
+  busy(true, true);
+  let okCnt = 0, lastErr = "";
+  try {
+    for (const id of ids) {
+      const r = await saveInlineBookRow(id, true);
+      if (r && r.success) okCnt++; else if (r && r.message) lastErr = r.message;
+    }
+  } finally { busy(false, false); }
+  BK_UI.editingRow = null;
+  await Admin.load();
+  Shell.rerender();
+  toast(okCnt ? `تم حفظ تعديلات ${okCnt} كتاب بنجاح` + (lastErr ? ` · ${lastErr}` : "") : (lastErr || "تعذر الحفظ"), okCnt ? "success" : "danger");
+});
+document.addEventListener("input", e => {
+  const el = e.target.closest && e.target.closest("[data-bk-inline]");
+  if (!el) return;
+  const id = el.dataset.bkInline, f = el.dataset.f;
+  const b = A().books.find(x => x.Book_ID === id);
+  if (!b) return;
+  BK_UI.dirty[id] = Object.assign(rowDraftOf(b), { [f]: el.value });
+  const dr = BK_UI.dirty[id];
+  if (f === "coverPrice" && n(el.value) > 0 && dr.bookStatus === "Pricing") dr.bookStatus = "Available";
+  const p = bookPrice(dr);
+  const cEl = $(`[data-bk-cost="${id}"]`), eEl = $(`[data-bk-emp="${id}"]`), mEl = $(`[data-bk-margin="${id}"]`), tr = $(`tr[data-book-row="${id}"]`);
+  if (cEl) cEl.textContent = fmt(p.cost);
+  if (eEl) eEl.textContent = fmt(p.emp);
+  if (mEl) { mEl.textContent = fmt(p.margin); mEl.className = `inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-bold ${p.margin < 0 ? "bg-rose-50 text-rose-600 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}`; }
+  if (tr) tr.classList.add("row-dirty");
+});
+document.addEventListener("keydown", e => {
+  const el = e.target.closest && e.target.closest("[data-bk-inline]");
+  if (!el) return;
+  if (e.key === "Enter") { e.preventDefault(); ACTIONS.bkSaveRow(el.dataset.bkInline); }
+  else if (e.key === "Escape") { e.preventDefault(); delete BK_UI.dirty[el.dataset.bkInline]; BK_UI.editingRow = null; rerenderList("booksList", booksTable); }
+});
 // ---------------- صور أغلفة الكتب ----------------
 const coverThumb = x => `<button class="w-9 h-12 rounded-md shrink-0 overflow-hidden ring-1 ring-slate-200 bg-slate-50 flex items-center justify-center text-slate-300 hover:ring-brand-400" data-act="${can("SAVE_BOOK") ? "coverPick" : "coverView"}" data-id="${esc(x.Book_ID)}" title="صورة الغلاف">${x.Cover_URL ? `<img src="${esc(x.Cover_URL)}" alt="" loading="lazy" class="w-full h-full object-cover">` : logoFor(A().pubLogos, x.Publisher, x.Subject) ? `<img src="${esc(logoFor(A().pubLogos, x.Publisher, x.Subject))}" alt="" loading="lazy" class="w-full h-full object-contain p-0.5 bg-white opacity-70">` : ic("plus")}</button>`;
 /** يختار ملف(ات) صور من الجهاز */
@@ -359,14 +773,6 @@ on("coversBulk", async () => {
   await Admin.load();
   toast(`تم رفع ${done} غلاف${fail ? ` · تعذر ${fail}` : ""}${miss.length ? ` · ${miss.length} ملف بلا كود معروف` : ""}`, fail ? "warning" : "success");
 });
-/** فلاتر الكتالوج: الصف، نوع المدرسة، الناشر، المادة، الحالة */
-function bookFilters() {
-  const c = A().catalog || {}, f = Q.bookF || {};
-  const sel = (k, label, opts) => `<select class="input !h-10 !w-auto !text-sm" data-change="bookF" data-k="${k}"><option value="">${label}</option>${opts.map(o => `<option value="${esc(o[0])}" ${f[k] === o[0] ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>`;
-  const pricing = A().books.filter(b => b.Book_Status === "Pricing").length;
-  return `<div class="flex flex-wrap gap-2">${sel("grade", "كل الصفوف", (c.grades || []).map(g => [g.label, g.label]))}${sel("type", "كل الأنواع", (c.schoolTypes || []).map(t => [t, t]))}${sel("pub", "كل الناشرين", (c.publishers || []).map(t => [t, t]))}${sel("sub", "كل المواد", (c.subjects || []).map(t => [t, t]))}${sel("st", "كل الحالات", [["Pricing", `جاري التسعير (${pricing})`], ["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد"], ["Suspended", "موقوف"], ["Discontinued", "ملغى"]])}</div>`;
-}
-on("bookF", (v, el) => { Q.bookF = Object.assign({}, Q.bookF, { [el.dataset.k]: v }); rerenderList("booksList", booksTable); });
 on("exportBooks", () => exportCSV("الكتالوج", ["الكود", "الكتاب", "المرحلة", "الصف", "نوع المدرسة", "الناشر", "المادة", "الجزء", "الحالة", "كود المكتبة", "الغلاف", "خصم المكتبة %", "التكلفة", "سعر الموظف"], A().books.map(x => [x.Book_ID, x.Book_Name, x.Stage, x.Grade, x.School_Types, x.Publisher, x.Subject, x.Book_Part, ar(x.Book_Status), x.Supplier_ID, x.Cover_Price, x.Supplier_Discount_Pct, x.Standard_Net_Cost, x.Emp_Selling_Price])));
 /** خيارات نوع المدرسة: كل نوع منفرداً أو مشتركاً (حكومي، حكومي + لغات، ...) */
 function typeCombos(types) {
@@ -557,7 +963,7 @@ on("cmDelGrade", async lbl => {
   cmRefresh();
 });
 
-// ---------------- نافذة تسجيل كتاب / سلسلة متكاملة بقوائم منسدلة تفاعلية مبدعة ----------------
+// ---------------- استوديو إدخال وتعديل الكتب والسلاسل الاحترافي (3 أقسام بحدود خفيفة ومرونة فائقة) ----------------
 async function openBookModal(id, cloneFromId) {
   const src = id ? A().books.find(b => b.Book_ID === id) : (cloneFromId ? A().books.find(b => b.Book_ID === cloneFromId) : null);
   const x = id ? (src || {}) : (src ? Object.assign({}, src, { Book_ID: "", Grade: "" }) : {});
@@ -570,20 +976,25 @@ async function openBookModal(id, cloneFromId) {
   const extra = { grades: [], newPublisher: "", newSubject: "", newBookPart: "", newGradeLabel: "", newGradeStage: "المرحلة الابتدائية", newGradeCode: "", addedPubs: [], addedSubs: [], addedParts: [], addedGrades: [] };
   let wired = false;
 
-  // بناء قائمة منسدلة ذكية قابلة للبحث والإضافة الفورية بضغطة واحدة (بدون فواصل)
+  // بناء قائمة منسدلة ذكية قابلة للبحث والإضافة الفورية + شريط شرائح سريعة (Quick Chips) للاختيار بضغطة واحدة
   const buildSmartDropdown = (name, label, iconName, currentVal, placeholder, emptyOptionLabel) => {
-    const opts = [["" , emptyOptionLabel || placeholder]].concat(
-      (name === "publisher" ? publishers : name === "subject" ? subjects : parts).map(t => [t, t]),
+    const srcList = name === "publisher" ? publishers : name === "subject" ? subjects : parts;
+    const opts = [["", emptyOptionLabel || placeholder]].concat(
+      srcList.map(t => [t, t]),
       [["__NEW__", "+ إضافة جديد"]]
     );
     return `
       <div class="relative" data-smart-dd="${name}">
-        <label class="label">${esc(label)}</label>
+        <div class="flex items-center justify-between mb-1">
+          <label class="label !mb-0">${esc(label)}</label>
+          <button type="button" data-dd-trigger="${name}" class="text-[11px] font-bold text-brand-700 hover:underline">${ic("plus", "!w-3 !h-3")} بحث / إضافة جديد</button>
+        </div>
         <select name="${name}" class="sr-only" tabindex="-1">${opts.map(o => `<option value="${esc(o[0])}" ${String(o[0]) === String(currentVal) ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>
-        <button type="button" data-dd-trigger="${name}" class="w-full flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-white px-3.5 py-2.5 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
-          <span class="flex items-center gap-2.5 min-w-0 flex-1" data-dd-label="${name}"></span>
+        <button type="button" data-dd-trigger="${name}" class="w-full flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-slate-50/50 hover:bg-white px-3 py-2 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+          <span class="flex items-center gap-2 min-w-0 flex-1" data-dd-label="${name}"></span>
           <span class="text-slate-400 shrink-0">${ic("chevron-down")}</span>
         </button>
+        <div data-dd-chips="${name}" class="flex flex-wrap gap-1 mt-1.5"></div>
         <div data-dd-panel="${name}" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
           <div class="flex items-center gap-1.5 mb-2.5">
             <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="${name}" class="input !h-9 !text-xs" placeholder="ابحث في القائمة أو اكتب اسماً جديداً لإضافته فوراً…"></div>
@@ -595,91 +1006,146 @@ async function openBookModal(id, cloneFromId) {
       </div>`;
   };
 
+  const schoolTypeOpts = typeCombos(c.schoolTypes || []);
+
   const fields = [
-    { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-2xl bg-gradient-to-l from-brand-50/90 to-slate-50 ring-1 ring-brand-100 px-4 py-3.5 text-sm"></div>` }
-  ];
-  if (!id) {
-    fields.push({ name: "regMode", label: "نظام الإضافة", type: "seg", value: "single", options: [["single", "كتاب لصف دراسي واحد"], ["series", "سلسلة متكاملة لعدة صفوف"]] });
-  }
-  fields.push(
-    { name: "_gradePicker", type: "html", html: `
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
-        <div id="singleGradeCol" class="${!id ? "" : ""}">
+    { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-2xl bg-gradient-to-l from-brand-50/90 via-white to-slate-50 ring-1 ring-brand-200/80 px-4 py-3.5 text-sm shadow-xs"></div>` },
+    { name: "_secIdentity", type: "html", html: `
+      <div class="studio-sec">
+        <div class="studio-sec-head">
+          <div class="flex items-center gap-2 font-bold text-slate-800 text-[13.5px]">
+            <span class="w-6 h-6 rounded-lg bg-brand-700 text-white text-xs flex items-center justify-center num">1</span>
+            <span>هوية الكتاب وتصنيفه (دار النشر · المادة · الجزء)</span>
+          </div>
+          <span class="text-[11px] text-slate-400">اضغط على أي شريحة سريعة أو اختر من القائمة المنسدلة</span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3.5">
+          ${buildSmartDropdown("publisher", "دار النشر", "store", x.Publisher || "", "— اختر دار النشر أو أضف جديدة —")}
+          ${buildSmartDropdown("subject", "المادة الدراسية", "book-open", x.Subject || "", "— اختر المادة أو أضف جديدة —")}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3 border-t border-slate-100">
+          ${buildSmartDropdown("bookPart", "جزء الكتاب", "library", x.Book_Part || "", "كتاب واحد (بدون جزء فرعي)", "كتاب واحد (بدون جزء فرعي)")}
+          <div>
+            <label class="label" for="f_schoolTypes">نوع المدرسة</label>
+            <select id="f_schoolTypes" name="schoolTypes" class="sr-only" tabindex="-1">${schoolTypeOpts.map(op => `<option value="${esc(op[0])}" ${String(op[0]) === String(x.School_Types || "حكومي") ? "selected" : ""}>${esc(op[1])}</option>`).join("")}</select>
+            <div id="schoolTypePills" class="flex flex-wrap gap-1.5 mt-1">
+              ${schoolTypeOpts.map(op => `<button type="button" data-quick-type="${esc(op[0])}" class="qchip">${esc(op[1])}</button>`).join("")}
+            </div>
+            <div class="mt-2.5 flex items-center justify-between text-[11px] text-slate-400 bg-slate-50 rounded-lg px-2.5 py-1.5 ring-1 ring-slate-100">
+              <span>المكتبة المتعاقدة: <b class="text-slate-700">${esc((A().suppliers[0] || {}).Supplier_Name || "الرئيسية")}</b></span>
+              <select id="f_supplierId" name="supplierId" class="hidden">${A().suppliers.slice(0, 1).map(s => `<option value="${esc(s.Supplier_ID)}">${esc(s.Supplier_Name)}</option>`).join("")}</select>
+              <span class="text-emerald-700 font-semibold">تلقائي</span>
+            </div>
+          </div>
+        </div>
+      </div>` },
+    { name: "_secGrades", type: "html", html: `
+      <div class="studio-sec">
+        <div class="studio-sec-head">
+          <div class="flex items-center gap-2 font-bold text-slate-800 text-[13.5px]">
+            <span class="w-6 h-6 rounded-lg bg-brand-700 text-white text-xs flex items-center justify-center num">2</span>
+            <span>الصف الدراسي أو السلسلة المتكاملة</span>
+          </div>
+          ${!id ? `<div class="seg !w-auto !p-0.5" style="grid-template-columns:repeat(2,auto)" data-seg="regMode">
+            <button type="button" class="!px-3 !py-1 !text-xs" data-v="single" aria-pressed="true">كتاب لصف واحد</button>
+            <button type="button" class="!px-3 !py-1 !text-xs" data-v="series" aria-pressed="false">سلسلة لعدة صفوف</button>
+          </div><input type="hidden" name="regMode" value="single">` : `<span class="pill pill-brand !text-[11px]">تعديل كتاب مسجل</span>`}
+        </div>
+
+        ${!id ? `<div class="mb-3 flex flex-wrap items-center gap-1.5 bg-slate-50 rounded-xl px-3 py-2 ring-1 ring-slate-200/70">
+          <span class="text-[11.5px] font-bold text-slate-600 ml-1">${ic("library-big", "text-brand-600 !w-3.5 !h-3.5")} تحديد سلسلة مرحلة كاملة بضغطة:</span>
+          <button type="button" class="qchip" data-quick-series="المرحلة الابتدائية">الابتدائي 1–6</button>
+          <button type="button" class="qchip" data-quick-series="المرحلة الإعدادية">الإعدادي 1–3</button>
+          <button type="button" class="qchip" data-quick-series="المرحلة الثانوية">الثانوي 1–3</button>
+          <button type="button" class="qchip" data-quick-series="رياض الأطفال">رياض الأطفال</button>
+        </div>` : ""}
+
+        <div id="singleGradeCol">
           <div class="relative" data-smart-dd="grade">
-            <label class="label">الصف الدراسي</label>
             <select name="grade" class="sr-only" tabindex="-1">${[["", "— اختر الصف —"]].concat(grades.map(g => [g.label, g.label + " · " + g.stage]), [["__NEW__", "+ إضافة صف دراسي جديد"]]).map(o => `<option value="${esc(o[0])}" ${String(o[0]) === String(x.Grade || "") ? "selected" : ""}>${esc(o[1])}</option>`).join("")}</select>
-            <button type="button" data-dd-trigger="grade" class="w-full flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-white px-3.5 py-2.5 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
-              <span class="flex items-center gap-2 min-w-0 flex-1" data-dd-label="grade"></span>
-              <span class="text-slate-400 shrink-0">${ic("chevron-down")}</span>
-            </button>
+            <div class="flex items-center gap-2">
+              <button type="button" data-dd-trigger="grade" class="flex-1 flex items-center justify-between gap-2.5 rounded-xl ring-1 ring-slate-200 bg-slate-50/50 hover:bg-white px-3.5 py-2 text-right text-sm hover:ring-brand-400 focus:outline-none focus:ring-2 focus:ring-brand-500 transition">
+                <span class="flex items-center gap-2 min-w-0 flex-1" data-dd-label="grade"></span>
+                <span class="text-slate-400 shrink-0">${ic("chevron-down")}</span>
+              </button>
+              <button type="button" data-toggle-newgrade class="btn btn-soft btn-xs !h-10 shrink-0">${ic("plus")} صف جديد</button>
+            </div>
+            <div id="inlineNewGradeBox" class="hidden rounded-xl bg-brand-50/70 ring-1 ring-brand-200 p-3 mt-2 space-y-2">
+              <div class="text-[11.5px] font-bold text-brand-900">إضافة صف دراسي جديد للقائمة:</div>
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <input data-x="newGradeLabel" class="input !h-9 !text-xs bg-white" placeholder="اسم الصف (مثل: تمهيدي)">
+                <select data-x="newGradeStage" class="input !h-9 !text-xs bg-white">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select>
+                <input data-x="newGradeCode" class="input !h-9 !text-xs bg-white num" placeholder="الكود (تلقائي)">
+              </div>
+              <button type="button" data-confirm-newgrade class="btn btn-primary btn-xs w-full">${ic("check")} اعتماد الصف واختياره</button>
+            </div>
             <div data-dd-panel="grade" class="hidden mt-1.5 rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-3 z-30">
               <div class="flex items-center justify-between gap-2 mb-2">
-                <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="grade" class="input !h-9 !text-xs" placeholder="ابحث عن الصف أو اكتب صفاً جديداً…"></div>
-                <button type="button" data-toggle-newgrade class="btn btn-soft btn-xs !h-9 shrink-0">${ic("plus")} صف جديد</button>
-              </div>
-              <div id="inlineNewGradeBox" class="hidden rounded-xl bg-brand-50/70 ring-1 ring-brand-200 p-2.5 mb-2.5 space-y-2">
-                <div class="text-[11.5px] font-bold text-brand-900">إضافة صف دراسي جديد للقائمة:</div>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <input data-x="newGradeLabel" class="input !h-9 !text-xs bg-white" placeholder="اسم الصف (مثل: تمهيدي)">
-                  <select data-x="newGradeStage" class="input !h-9 !text-xs bg-white">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select>
-                  <input data-x="newGradeCode" class="input !h-9 !text-xs bg-white num" placeholder="الكود (تلقائي)">
-                </div>
-                <button type="button" data-confirm-newgrade class="btn btn-primary btn-xs w-full">${ic("check")} اعتماد الصف واختياره</button>
+                <div class="input-icon flex-1">${ic("search")}<input type="text" data-dd-search="grade" class="input !h-9 !text-xs" placeholder="ابحث عن الصف…"></div>
               </div>
               <div data-dd-list="grade" class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-56 overflow-y-auto p-0.5"></div>
             </div>
+            <div id="singleGradeQuickGrid" class="mt-2.5 flex flex-wrap gap-1"></div>
           </div>
-          ${!id ? `<div class="mt-2 flex flex-wrap items-center gap-1">
-            <span class="text-[11px] text-slate-400 ml-1">أو سلسلة سريعة:</span>
-            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الابتدائية">الابتدائي 1–6</button>
-            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الإعدادية">الإعدادي 1–3</button>
-            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="المرحلة الثانوية">الثانوي 1–3</button>
-            <button type="button" class="chip !h-7 !px-2 !text-[11px]" data-quick-series="رياض الأطفال">رياض الأطفال</button>
-          </div>` : ""}
         </div>
-        <div>
-          <label class="label" for="f_schoolTypes">نوع المدرسة</label>
-          <select id="f_schoolTypes" name="schoolTypes" class="input">${typeCombos(c.schoolTypes || []).map(op => `<option value="${esc(op[0])}" ${String(op[0]) === String(x.School_Types || "حكومي") ? "selected" : ""}>${esc(op[1])}</option>`).join("")}</select>
+
+        <div id="seriesWrap" class="hidden mt-2 rounded-2xl bg-slate-50/80 ring-1 ring-slate-200 p-3">
+          <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+            <div>
+              <span class="font-bold text-xs text-slate-800">صفوف السلسلة المختارة:</span>
+              <span id="seriesCountBadge" class="mr-1.5 pill pill-brand !text-[11px]">0 صفوف مختارة</span>
+            </div>
+            <div class="flex flex-wrap gap-1">
+              <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الابتدائية">الابتدائي (1–6)</button>
+              <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الإعدادية">الإعدادي (1–3)</button>
+              <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الثانوية">الثانوي (1–3)</button>
+              <button type="button" class="btn btn-soft btn-xs" data-series-stage="رياض الأطفال">رياض الأطفال</button>
+              <button type="button" class="btn btn-ghost btn-xs" data-series-stage="ALL">الكل</button>
+              <button type="button" class="btn btn-ghost btn-xs text-rose-600" data-series-stage="NONE">مسح</button>
+            </div>
+          </div>
+          <div id="seriesGradesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5"></div>
         </div>
-      </div>
-      <div id="seriesWrap" class="hidden mt-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5">
-        <div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+      </div>` },
+    { name: "_secPricing", type: "html", html: `
+      <div class="studio-sec">
+        <div class="studio-sec-head">
+          <div class="flex items-center gap-2 font-bold text-slate-800 text-[13.5px]">
+            <span class="w-6 h-6 rounded-lg bg-brand-700 text-white text-xs flex items-center justify-center num">3</span>
+            <span>التسعير والخصومات والحالة</span>
+          </div>
+          <div class="flex items-center gap-1">
+            <span class="text-[11px] text-slate-400 ml-1">خصم المورد السريع:</span>
+            ${[15, 20, 22, 25, 30].map(pct => `<button type="button" data-quick-disc="${pct}" class="qchip !px-2 !py-0.5 num">${pct}%</button>`).join("")}
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
           <div>
-            <span class="font-bold text-[13.5px] text-slate-800">${ic("library-big", "text-brand-600")} حدّد صفوف السلسلة الدراسية:</span>
-            <span id="seriesCountBadge" class="mr-1.5 pill pill-brand !text-[11px]">0 صفوف مختارة</span>
+            <label class="label !text-xs" for="f_coverPrice">سعر الغلاف (ج.م)</label>
+            <input id="f_coverPrice" name="coverPrice" type="number" inputmode="decimal" step="any" class="input !h-10 num font-bold text-slate-900" value="${esc(x.Cover_Price || "")}" placeholder="فارغ = جاري التسعير">
           </div>
-          <div class="flex flex-wrap gap-1">
-            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الابتدائية">الابتدائي (1–6)</button>
-            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الإعدادية">الإعدادي (1–3)</button>
-            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الثانوية">الثانوي (1–3)</button>
-            <button type="button" class="btn btn-soft btn-xs" data-series-stage="رياض الأطفال">رياض الأطفال</button>
-            <button type="button" class="btn btn-ghost btn-xs" data-series-stage="ALL">الكل</button>
-            <button type="button" class="btn btn-ghost btn-xs text-rose-600" data-series-stage="NONE">مسح</button>
+          <div>
+            <label class="label !text-xs" for="f_supplierDiscountPct">خصم المكتبة %</label>
+            <input id="f_supplierDiscountPct" name="supplierDiscountPct" type="number" inputmode="decimal" step="any" class="input !h-10 num font-bold" value="${esc(x.Supplier_Discount_Pct || "")}" placeholder="%">
+          </div>
+          <div>
+            <label class="label !text-xs" for="f_volumeDiscountSharePct">خصم الكمية %</label>
+            <input id="f_volumeDiscountSharePct" name="volumeDiscountSharePct" type="number" inputmode="decimal" step="any" class="input !h-10 num" value="${esc(x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct)}" placeholder="من عقد المكتبة">
+          </div>
+          <div>
+            <label class="label !text-xs" for="f_empDiscountPct">خصم الموظف %</label>
+            <input id="f_empDiscountPct" name="empDiscountPct" type="number" inputmode="decimal" step="any" class="input !h-10 num" value="${esc(x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct)}" placeholder="الخصم الموحد">
+          </div>
+          <div class="col-span-2 sm:col-span-1">
+            <label class="label !text-xs" for="f_bookStatus">حالة الإتاحة</label>
+            <select id="f_bookStatus" name="bookStatus" class="input !h-10 !text-xs font-semibold">
+              ${[["Available", "متاح للحجز"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]].map(op => `<option value="${op[0]}" ${String(op[0]) === String(x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available")) ? "selected" : ""}>${op[1]}</option>`).join("")}
+            </select>
           </div>
         </div>
-        <div id="seriesGradesGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5"></div>
-      </div>` },
-    { name: "_pubSubRow", type: "html", html: `
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        ${buildSmartDropdown("publisher", "دار النشر", "store", x.Publisher || "", "— اختر دار النشر أو أضف جديدة —")}
-        ${buildSmartDropdown("subject", "المادة الدراسية", "book-open", x.Subject || "", "— اختر المادة أو أضف جديدة —")}
-      </div>` },
-    { name: "_partSupRow", type: "html", html: `
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        ${buildSmartDropdown("bookPart", "جزء الكتاب", "library", x.Book_Part || "", "كتاب واحد (بدون جزء فرعي)", "كتاب واحد (بدون جزء فرعي)")}
-        <div>
-          <label class="label" for="f_supplierId">المكتبة (الرئيسية)</label>
-          <select id="f_supplierId" name="supplierId" class="input">${A().suppliers.slice(0, 1).map(s => `<option value="${esc(s.Supplier_ID)}">${esc(s.Supplier_Name)}</option>`).join("")}</select>
-          <p class="hint">كل الكتب تتبع المكتبة الرئيسية المسجلة</p>
-        </div>
-      </div>` },
-    { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
-    { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
-    { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
-    { name: "volumeDiscountSharePct", label: "خصم الكمية %", type: "number", value: x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct, cols: 1, placeholder: "من عقد المكتبة" },
-    { name: "empDiscountPct", label: "خصم الموظف %", type: "number", value: x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct, cols: 1, placeholder: "الخصم الموحد" },
-    { name: "_pv", type: "html", html: `<div id="pricePv" class="rounded-2xl bg-brand-50 p-4"></div>` }
-  );
+        <div id="pricePv" class="mt-3 rounded-xl bg-brand-50/80 ring-1 ring-brand-100 p-3"></div>
+      </div>` }
+  ];
 
   // قراءة كل قيم النموذج شاملة الحقول المخصصة داخل كتل HTML
   const readForm = form => {
@@ -745,13 +1211,14 @@ async function openBookModal(id, cloneFromId) {
     const ql = q.toLowerCase();
     const listEl = form.querySelector(`[data-dd-list="${name}"]`);
     const promptEl = form.querySelector(`[data-dd-newprompt="${name}"]`);
+    const chipsEl = form.querySelector(`[data-dd-chips="${name}"]`);
 
     if (name === "grade") {
       const gObj = grades.find(g => g.label === val);
       if (lblEl) {
         lblEl.innerHTML = val
           ? `<span class="w-7 h-7 rounded-lg bg-brand-50 text-brand-700 flex items-center justify-center text-xs font-bold num shrink-0">${esc(gObj ? gObj.code : "جديد")}</span><span class="font-bold text-slate-900 truncate">${esc(val)}</span><span class="text-xs text-slate-400 truncate">${esc(gObj ? gObj.stage : extra.newGradeStage)}</span>`
-          : `<span class="text-slate-400">${ic("graduation-cap")} — اختر الصف الدراسي من القائمة أو أضف جديداً —</span>`;
+          : `<span class="text-slate-400">${ic("graduation-cap")} — اختر الصف الدراسي من القائمة أو من الشرائح أدناه —</span>`;
       }
       if (listEl) {
         const filtered = grades.filter(g => !ql || (g.label + " " + g.stage + " " + g.code).toLowerCase().includes(ql));
@@ -762,6 +1229,10 @@ async function openBookModal(id, cloneFromId) {
             <span class="text-[10px] num px-1.5 py-0.5 rounded ${active ? "bg-white/20 text-white" : "bg-white text-slate-500"}">${esc(g.code)}</span>
           </button>`;
         }).join("") || `<div class="col-span-3 text-center py-3 text-xs text-slate-400">لا يوجد صف مطابق — اضغط «+ صف جديد» لإضافته</div>`;
+      }
+      const sgGrid = form.querySelector("#singleGradeQuickGrid");
+      if (sgGrid) {
+        sgGrid.innerHTML = grades.map(g => `<button type="button" data-dd-pick="grade" data-val="${esc(g.label)}" class="qchip ${g.label === val ? "active" : ""}"><span>${esc(g.label)}</span><span class="num text-[10px] opacity-75">(${esc(g.code)})</span></button>`).join("");
       }
       return;
     }
@@ -781,6 +1252,12 @@ async function openBookModal(id, cloneFromId) {
       } else {
         lblEl.innerHTML = `<span class="w-7 h-7 rounded-lg bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">${ic(iconName)}</span><span class="${name === "bookPart" ? "font-semibold text-slate-700" : "text-slate-400"} truncate">${esc(emptyText)}</span>`;
       }
+    }
+
+    if (chipsEl) {
+      const topItems = items.slice(0, name === "bookPart" ? 6 : 8);
+      const zeroChip = name === "bookPart" ? `<button type="button" data-dd-pick="bookPart" data-val="" class="qchip ${!val ? "active" : ""}">كامل (بلا جزء)</button>` : "";
+      chipsEl.innerHTML = zeroChip + topItems.map(it => `<button type="button" data-dd-pick="${name}" data-val="${esc(it)}" class="qchip ${it === val ? "active" : ""}">${esc(it)}</button>`).join("");
     }
 
     if (promptEl) {
@@ -845,15 +1322,14 @@ async function openBookModal(id, cloneFromId) {
   };
 
   const v = await UI.form({
-    title: id ? "تعديل كتاب" : (cloneFromId ? "إضافة نفس الكتاب لصف جديد أو سلسلة" : "تسجيل كتاب أو سلسلة جديدة"),
-    sub: id ? x.Book_Name : (cloneFromId && src ? `نسخ من: ${src.Book_Name} (${src.Book_ID}) — اختر الصف الجديد أو السلسلة` : "اختر من القوائم المنسدلة أو أضف دار نشر / مادة / صفاً جديداً بضغطة واحدة، أو سجّل سلسلة كاملة لعدة صفوف"),
-    wide: true, icon: "check", fields,
+    title: id ? "لوحة تعديل الكتاب والتسعير" : (cloneFromId ? "إضافة نفس الكتاب لصف جديد أو سلسلة" : "استوديو تسجيل كتاب أو سلسلة متكاملة"),
+    sub: id ? `${x.Book_Name} (${x.Book_ID})` : (cloneFromId && src ? `نسخ من: ${src.Book_Name} (${src.Book_ID}) — اختر الصف الجديد أو السلسلة` : "اختر من الشرائح السريعة أو القوائم المنسدلة، أو أضف دار نشر / مادة / صفاً جديداً بضغطة واحدة"),
+    wide: true, icon: "check", ok: id ? "حفظ تعديلات الكتاب" : "اعتماد وحفظ في الكتالوج", fields,
     onChange: (_, form) => {
       if (!wired) {
         wired = true;
         renderSeriesGrid(form);
 
-        // تفعيل القوائم المنسدلة التفاعلية (دار النشر · المادة · الجزء · الصف)
         form.addEventListener("click", e => {
           const trig = e.target.closest("[data-dd-trigger]");
           if (trig) {
@@ -877,6 +1353,18 @@ async function openBookModal(id, cloneFromId) {
             const panel = form.querySelector(`[data-dd-panel="${name}"]`);
             if (panel) panel.classList.add("hidden");
             ["grade", "publisher", "subject", "bookPart"].forEach(k => renderSmartDropdown(form, k));
+            form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const qt = e.target.closest("[data-quick-type]");
+          if (qt) {
+            setSelectValue(form, "schoolTypes", qt.dataset.quickType, qt.textContent);
+            form.dispatchEvent(new Event("input"));
+            return;
+          }
+          const qd = e.target.closest("[data-quick-disc]");
+          if (qd && form.elements.supplierDiscountPct) {
+            form.elements.supplierDiscountPct.value = qd.dataset.quickDisc;
             form.dispatchEvent(new Event("input"));
             return;
           }
@@ -988,7 +1476,6 @@ async function openBookModal(id, cloneFromId) {
 
       const f = readForm(form);
       const isSeries = !id && f.regMode === "series";
-      // عند التحويل لوضع السلسلة، إذا كان هناك صف مختار مسبقاً ولم تُحدَّد صفوف السلسلة بعد، نحدده تلقائياً
       if (isSeries && !extra.grades.length && f.grade && f.grade !== "__NEW__") {
         extra.grades = [f.grade];
         renderSeriesGrid(form);
@@ -997,10 +1484,21 @@ async function openBookModal(id, cloneFromId) {
       if (singleCol) singleCol.classList.toggle("hidden", isSeries);
       if (srWrap) srWrap.classList.toggle("hidden", !isSeries);
 
+      // تحديث أزرار نوع المدرسة السريعة وأزرار خصم المكتبة السريعة
+      $$("[data-quick-type]", form).forEach(btn => btn.classList.toggle("active", btn.dataset.quickType === (f.schoolTypes || "حكومي")));
+      $$("[data-quick-disc]", form).forEach(btn => btn.classList.toggle("active", String(btn.dataset.quickDisc) === String(f.supplierDiscountPct || "")));
+
       ["grade", "publisher", "subject", "bookPart"].forEach(k => renderSmartDropdown(form, k));
 
       const p = bookPrice(f), el = form.querySelector("#pricePv"), cpv = form.querySelector("#bookCodePv");
-      if (el) el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
+      const saving = r2(n(f.coverPrice) - p.emp);
+      if (el) el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">${[
+        ["بعد خصم الصنف", p.first, "text-slate-800"],
+        [`صافي التكلفة (كمية ${p.vd}%)`, p.cost, "text-slate-900"],
+        [`سعر الموظف (خصم ${p.ed}%)`, p.emp, "text-brand-800"],
+        ["وفر الموظف بالنسخة", saving > 0 ? saving : 0, "text-emerald-700"],
+        ["هامش المبادرة", p.margin, p.margin < 0 ? "text-rose-600" : "text-emerald-700"]
+      ].map(c => `<div class="rounded-xl bg-white/90 ring-1 ring-brand-100/80 px-2.5 py-2"><div class="text-[10.5px] text-slate-500 font-semibold">${c[0]}</div><div class="text-base font-bold num mt-0.5 ${c[2]}">${fmt(c[1])} <span class="text-[10px] font-normal text-slate-400">ج.م</span></div></div>`).join("")}</div>`;
 
       if (cpv) {
         const pub = cleanCatItem(f.publisher === "__NEW__" ? extra.newPublisher : f.publisher);
@@ -1010,11 +1508,16 @@ async function openBookModal(id, cloneFromId) {
         const lg = pub ? logoFor(A().pubLogos, pub, sub) : "";
         const cTypes = String(f.schoolTypes || "").split(/[,،+]/).map(s => s.trim()).filter(Boolean);
         const findDup = gLabel => (gLabel && pub && sub) ? A().books.find(b => b.Book_ID !== id && b.Book_Status !== "Discontinued" && b.Grade === gLabel && b.Publisher === pub && b.Subject === sub && (b.Book_Part || "") === part && cTypes.some(t => String(b.School_Types || "").split(/[,،+]/).map(s => s.trim()).includes(t))) : null;
-        const nameBar = `<div class="flex items-center gap-3 mb-2 pb-2 border-b border-brand-100/80">
-          <span class="w-10 h-10 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden shrink-0">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain p-0.5" alt="">` : ic("book-open", "text-brand-600")}</span>
-          <div class="min-w-0 flex-1">
-            <div class="text-[11px] text-slate-400 font-semibold">اسم الكتاب التلقائي في الكتالوج</div>
-            <div class="font-bold text-slate-900 text-[15px] truncate">${autoName ? esc(autoName) : `<span class="text-slate-400 font-normal text-xs">اختر دار النشر والمادة لتوليد اسم الكتاب تلقائياً…</span>`}</div>
+        const nameBar = `<div class="flex flex-wrap items-center justify-between gap-3 mb-2 pb-2 border-b border-brand-100/80">
+          <div class="flex items-center gap-3 min-w-0">
+            <span class="w-11 h-11 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center overflow-hidden shrink-0 shadow-xs">${lg ? `<img src="${esc(lg)}" class="w-full h-full object-contain p-0.5" alt="">` : ic("book-open", "text-brand-600")}</span>
+            <div class="min-w-0">
+              <div class="text-[11px] text-slate-400 font-semibold">المعاينة الحية لبطاقة الكتاب في الكتالوج</div>
+              <div class="font-bold text-slate-900 text-[15px] truncate">${autoName ? esc(autoName) : `<span class="text-slate-400 font-normal text-xs">اختر دار النشر والمادة لتوليد اسم الكتاب تلقائياً…</span>`}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 num text-xs">
+            <span class="rounded-lg bg-white ring-1 ring-slate-200 px-2.5 py-1 font-semibold text-slate-700">سعر الموظف: <b class="text-brand-800">${n(f.coverPrice) ? fmt(p.emp) + " ج.م" : "جاري التسعير"}</b></span>
           </div>
         </div>`;
 
@@ -1023,7 +1526,7 @@ async function openBookModal(id, cloneFromId) {
         extra.finalGrades = targetGrades;
         if (isSeries) {
           if (!targetGrades.length) {
-            cpv.innerHTML = nameBar + `<div class="text-xs text-amber-700 font-semibold">${ic("info")} اختر صفوف السلسلة من الأزرار السريعة أعلاه (مثل: <b>الابتدائي 1–6</b>) ليتم توليد كود لكل صف تلقائياً.</div>`;
+            cpv.innerHTML = nameBar + `<div class="text-xs text-amber-700 font-semibold">${ic("info")} اختر صفوف السلسلة من الأزرار السريعة (مثل: <b>الابتدائي 1–6</b>) ليتم توليد كود لكل صف تلقائياً.</div>`;
           } else {
             const sim = A().books.slice();
             const chips = targetGrades.map(gl => {
@@ -1040,7 +1543,7 @@ async function openBookModal(id, cloneFromId) {
           const gLabel = targetGrades[0] || "";
           const dup = findDup(gLabel);
           if (dup) cpv.innerHTML = nameBar + `<div class="text-rose-600 font-semibold text-xs">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(gLabel)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</div>`;
-          else if (id) cpv.innerHTML = nameBar + `<div class="text-xs">الكود الحالي: <b class="num text-brand-800">${esc(x.Book_ID)}</b> · الصف: <b>${esc(gLabel)}</b></div>`;
+          else if (id) cpv.innerHTML = nameBar + `<div class="text-xs">الكود الحالي: <b class="num text-brand-800">${esc(x.Book_ID)}</b> · الصف: <b>${esc(gLabel)}</b> · المدرسة: <b>${esc(f.schoolTypes || "حكومي")}</b></div>`;
           else if (gLabel) {
             const gObj = grades.find(g => g.label === gLabel);
             cpv.innerHTML = nameBar + `<div class="text-xs">الصف: <b>${esc(gLabel)}</b> ← الكود التلقائي التالي: <b class="num text-brand-800">${esc(gObj ? nextCodePreview(gObj.code, A().books) : "تلقائي")}</b></div>`;
