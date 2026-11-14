@@ -177,7 +177,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="pplTab"][data-id="skip"]'); await settle(); await settle(); check(!d.querySelector('#pplBody .skeleton'), 'skipped tab loads');
   // كل التقارير
   await go('/a/reports');
-  for (const r of ['R14', 'R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08', 'R09', 'R10', 'R11', 'R12', 'R13']) {
+  for (const r of ['R00', 'R15', 'R16', 'R14', 'R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08', 'R09', 'R10', 'R11', 'R12', 'R13']) {
     w.eval('Rep').sel = r; w.eval('Shell').rerender(); await settle(); await settle();
     const a = d.getElementById('repArea');
     check(a && a.innerHTML.length > 60 && !a.querySelector('.skeleton'), 'report ' + r);
