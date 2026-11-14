@@ -315,4 +315,40 @@ ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, g.sessionToken), 'guest portal works');
 fail(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'شركة أخرى' }), 'outsource company must be from list');
 const os1 = ok(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'Tedata' }), 'outsource Tedata');
 assert.strictEqual(os1.newMemberId, '6000001'); passed++;
+
+// 26) حذف مرحلة/مكتبة · تبعية الكتب للمكتبة الرئيسية · منع تكرار الكتاب عند التسجيل والتكويد
+const mainSupId = rows(S.SUPPLIERS)[0].Supplier_ID;
+ok(api('SAVE_SUPPLIER', { supplierName: 'مكتبة فرعية للتجربة', volumeDiscountPct: 3 }, coord), 'add secondary supplier');
+const subSupId = rows(S.SUPPLIERS)[1].Supplier_ID;
+assert.ok(rows(S.BOOKS).every(b => b.Supplier_ID === mainSupId), 'all books belong to main supplier'); passed++;
+// تسجيل كتاب جديد: يتبع المكتبة الرئيسية ويُولَّد له كود فريد، ولا يُسمح بتكراره
+ok(api('SAVE_SETTING', { key: 'BOOK_PUBLISHERS', value: 'سلاح التلميذ,المعاصر,الامتحان' }, A), 'ensure publishers list');
+ok(api('SAVE_SETTING', { key: 'BOOK_SUBJECTS', value: 'عربي,رياضيات,علوم,إنجليزي' }, A), 'ensure subjects list');
+ok(api('SAVE_SETTING', { key: 'BOOK_PARTS', value: 'شرح,أسئلة' }, A), 'ensure parts list');
+const nb1 = ok(api('SAVE_BOOK', { grade: '4 ابتدائي', schoolTypes: 'حكومي،أزهر', publisher: 'سلاح التلميذ', subject: 'عربي', bookPart: 'شرح', supplierId: subSupId, coverPrice: 120, supplierDiscountPct: 20 }, coord), 'save new book');
+assert.strictEqual(nb1.book.Supplier_ID, mainSupId, 'new book forced to main supplier');
+assert.strictEqual(nb1.book.Book_ID, 'P4-001'); passed++;
+// محاولة تسجيل نفس الكتاب مرة أخرى (أو بتقاطع نوع مدرسة): يُرفض لمنع التكرار
+fail(api('SAVE_BOOK', { grade: '4 ابتدائي', schoolTypes: 'حكومي', publisher: 'سلاح التلميذ', subject: 'عربي', bookPart: 'شرح', coverPrice: 130, supplierDiscountPct: 20 }, coord), 'duplicate book rejected', /مسجّل بالفعل/);
+// طبعة لغات منفصلة لنفس المادة والناشر والصف مسموحة وتأخذ الكود التالي بدون تكرار
+const nb2 = ok(api('SAVE_BOOK', { grade: '4 ابتدائي', schoolTypes: 'لغات', publisher: 'سلاح التلميذ', subject: 'عربي', bookPart: 'شرح' }, coord), 'distinct lang edition allowed');
+assert.strictEqual(nb2.book.Book_ID, 'P4-002');
+assert.strictEqual(nb2.book.Supplier_ID, mainSupId); passed++;
+// تعديل كتاب موجود ليطابق كتاباً آخر في نفس الصف: يُرفض
+fail(api('SAVE_BOOK', { bookId: 'P4-002', grade: '4 ابتدائي', schoolTypes: 'حكومي', publisher: 'سلاح التلميذ', subject: 'عربي', bookPart: 'شرح' }, coord), 'edit into duplicate rejected', /مسجّل بالفعل/);
+// استيراد كتاب مكرر في نفس الصف بكود مختلف: يُرفض السطر المكرر
+const impRes = ok(api('BULK_IMPORT_BOOKS', { booksArray: [{ Book_ID: 'P4-099', Book_Name: nb1.book.Book_Name, Stage: 'المرحلة الابتدائية', Grade: '4 ابتدائي', Subject: 'عربي', Publisher: 'سلاح التلميذ', School_Types: 'حكومي', Book_Part: 'شرح', Cover_Price: 120, Supplier_Discount_Pct: 20 }] }, coord), 'bulk import duplicate check');
+assert.ok(/كتاب مكرر/.test(impRes.message) && !rows(S.BOOKS).some(b => b.Book_ID === 'P4-099')); passed++;
+// حذف المكتبة الفرعية غير المرتبطة بحركات، ومنع حذف المكتبة المرتبطة بحركات
+fail(api('DELETE_SUPPLIER', { supplierId: mainSupId }, coord), 'cannot delete supplier with invoices/PO', /لارتباطها/);
+ok(api('DELETE_SUPPLIER', { supplierId: subSupId }, coord), 'delete unused secondary supplier');
+assert.strictEqual(rows(S.SUPPLIERS).length, 1); passed++;
+// حذف مرحلة فارغة، ومنع حذف مرحلة مرتبطة بحجوزات
+fail(api('DELETE_PHASE', { phaseId: 'PH-01' }, coord), 'cannot delete phase with reservations', /لارتباطها/);
+ok(api('SAVE_PHASE', { phaseName: 'مرحلة مؤقتة', startDate: '2027-05-01', endDate: '2027-05-15' }, coord), 'add temp phase');
+const tempPh = rows(S.PHASES).find(p => p.Phase_Name === 'مرحلة مؤقتة');
+ok(api('DELETE_PHASE', { phaseId: tempPh.Phase_ID }, coord), 'delete empty phase');
+assert.ok(!rows(S.PHASES).some(p => p.Phase_ID === tempPh.Phase_ID)); passed++;
+
 console.log('\nALL PASSED:', passed, 'checks');
+

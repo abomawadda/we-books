@@ -376,13 +376,13 @@ on("bookForm", async id => {
   const v = await UI.form({
     title: id ? "تعديل كتاب" : "كتاب جديد", sub: id ? x.Book_Name : "", wide: true, icon: "check",
     fields: [
-      { name: "bookId", type: "html", html: id ? `<div class="rounded-xl bg-slate-50 px-4 py-3 text-sm">الكود: <b class="num">${esc(x.Book_ID)}</b></div>` : `<div class="rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">يُولَّد الكود تلقائياً من الصف (مثل P4-012).</div>` },
+      { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-xl bg-slate-50 px-4 py-3 text-sm">${id ? `الكود: <b class="num">${esc(x.Book_ID)}</b>` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار."}</div>` },
       { name: "grade", label: "الصف الدراسي", type: "select", value: x.Grade || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.grades || []).map(g => [g.label, g.label + " · " + g.stage])) },
       { name: "schoolTypes", label: "نوع المدرسة", type: "select", value: x.School_Types || "حكومي", cols: 1, required: true, options: typeCombos(c.schoolTypes || []) },
       { name: "publisher", label: "الناشر", type: "select", value: x.Publisher || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.publishers || []).map(t => [t, t])) },
       { name: "subject", label: "المادة", type: "select", value: x.Subject || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.subjects || []).map(t => [t, t])) },
       { name: "bookPart", label: "جزء الكتاب", type: "select", value: x.Book_Part || "", cols: 1, options: [["", "كتاب واحد"]].concat((c.parts || []).map(t => [t, t])) },
-      { name: "supplierId", label: "المكتبة", type: "select", value: x.Supplier_ID || "", cols: 1, options: A().suppliers.map(s => [s.Supplier_ID, s.Supplier_Name]) },
+      { name: "supplierId", label: "المكتبة (الرئيسية)", type: "select", value: (A().suppliers[0] || {}).Supplier_ID || "", cols: 1, options: A().suppliers.slice(0, 1).map(s => [s.Supplier_ID, s.Supplier_Name]), hint: "كل الكتب تتبع المكتبة الرئيسية المسجلة" },
       { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
       { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
       { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
@@ -391,8 +391,15 @@ on("bookForm", async id => {
       { name: "_pv", type: "html", html: `<div id="pricePv" class="rounded-2xl bg-brand-50 p-4"></div>` }
     ],
     onChange: (f, form) => {
-      const p = bookPrice(f), el = form.querySelector("#pricePv");
+      const p = bookPrice(f), el = form.querySelector("#pricePv"), cpv = form.querySelector("#bookCodePv");
       el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
+      if (cpv) {
+        const cTypes = String(f.schoolTypes || "").split(/[,،+]/).map(s => s.trim()).filter(Boolean);
+        const dup = (f.grade && f.publisher && f.subject) ? A().books.find(b => b.Book_ID !== id && b.Book_Status !== "Discontinued" && b.Grade === f.grade && b.Publisher === f.publisher && b.Subject === f.subject && (b.Book_Part || "") === (f.bookPart || "") && cTypes.some(t => String(b.School_Types || "").split(/[,،+]/).map(s => s.trim()).includes(t))) : null;
+        if (dup) cpv.innerHTML = `<span class="text-rose-600 font-semibold">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(f.grade)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</span>`;
+        else if (id) cpv.innerHTML = `الكود: <b class="num">${esc(x.Book_ID)}</b>`;
+        else { const g = (c.grades || []).find(g => g.label === f.grade); cpv.innerHTML = g ? `الكود التلقائي المقترح للصف (${esc(g.code)}): يُولَّد بدون تكرار عند الحفظ.` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار."; }
+      }
     }
   });
   if (v) { delete v._pv; v.bookId = id || ""; await act("SAVE_BOOK", v); }
@@ -427,7 +434,7 @@ function bpBody() {
   <div class="flex flex-wrap items-end gap-2 mb-3">
     <div><div class="label">القالب يشمل</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="scope"><option value="pricing" ${s.scope === "pricing" ? "selected" : ""}>الكتب بانتظار السعر</option><option value="filtered" ${s.scope === "filtered" ? "selected" : ""}>الكتب الظاهرة بالفلاتر الحالية</option><option value="all" ${s.scope === "all" ? "selected" : ""}>كل الكتب</option></select></div>
     <button class="btn btn-outline btn-sm !h-10" data-act="bpTemplate">${ic("download")} تنزيل القالب</button>
-    <div class="mr-auto"><div class="label">المكتبة الافتراضية</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="sup">${d.suppliers.map(x => `<option value="${esc(x.Supplier_ID)}" ${s.sup === x.Supplier_ID ? "selected" : ""}>${esc(x.Supplier_Name)}</option>`).join("")}</select></div>
+    <div class="mr-auto"><div class="label">المكتبة</div><div class="input !h-10 !w-auto flex items-center bg-slate-50">${ic("store", "text-brand-600")}&nbsp;${esc((d.suppliers[0] || {}).Supplier_Name || "—")} (الرئيسية)</div></div>
   </div>
   <div class="rounded-2xl ring-1 ring-slate-200 p-3 mb-3"><div class="flex items-center justify-between mb-2"><div class="font-bold text-[13.5px] text-slate-800">${ic("badge-percent", "text-brand-600")} خصم المكتبة حسب الناشر</div><button class="btn btn-ghost btn-xs" data-act="bpRuleAdd">${ic("plus")} قاعدة</button></div>
     ${s.rules.map((r, i) => `<div class="flex flex-wrap items-start gap-2 mb-2"><input class="input !h-10 !w-20 num" inputmode="decimal" placeholder="%" value="${esc(r.pct)}" data-change="bpRule" data-i="${i}" data-k="pct">
@@ -497,7 +504,7 @@ Router.add("/a/phases", view => {
         <div class="flex items-start justify-between gap-2"><div><div class="text-[11.5px] text-slate-400 num">${esc(p.Phase_ID)}</div><h3 class="font-bold text-slate-900 text-[16px]">${esc(p.Phase_Name)}</h3></div>${pill(st)}</div>
         <dl class="grid grid-cols-2 gap-2 mt-4">${UI.stat("الحجز من", esc(day(p.Start_DateTime)))}${UI.stat("الحجز إلى", esc(day(p.End_DateTime)))}${UI.stat("بداية التسليم", esc(day(p.Delivery_Start_Date)) || "—")}${UI.stat("الصفوف", esc(p.Allowed_Grades === "ALL" || !p.Allowed_Grades ? "الكل" : p.Allowed_Grades))}</dl>
         <div class="flex items-center justify-between mt-4 text-[13px] text-slate-500"><span>${fmt(new Set(its.map(i => i.Emp_ID)).size)} موظف · ${fmt(sum(its, "Requested_Qty"))} نسخة</span>
-          <div class="flex gap-1.5">${cur ? "" : `<button class="btn btn-ghost btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">عرض</button>`}${lockedBtn("SAVE_PHASE", `<button class="btn btn-outline btn-xs" data-act="phaseForm" data-id="${esc(p.Phase_ID)}">${ic("pencil")} تعديل</button>`)}</div></div></article>`;
+          <div class="flex gap-1.5">${cur ? "" : `<button class="btn btn-ghost btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">عرض</button>`}${lockedBtn("SAVE_PHASE", `<button class="btn btn-outline btn-xs" data-act="phaseForm" data-id="${esc(p.Phase_ID)}">${ic("pencil")} تعديل</button>`)}${its.length ? "" : lockedBtn("DELETE_PHASE", `<button class="btn btn-ghost btn-xs text-rose-600" data-act="phaseDel" data-id="${esc(p.Phase_ID)}">${ic("trash-2")} حذف</button>`)}</div></div></article>`;
     }).join("")}</div>` : `<div class="card">${UI.empty("calendar-range", "لا توجد مراحل بعد", "", lockedBtn("SAVE_PHASE", `<button class="btn btn-primary mt-5" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>`))}</div>`);
 });
 on("phaseForm", async id => {
@@ -510,20 +517,31 @@ on("phaseForm", async id => {
     { name: "allowedGrades", label: "الصفوف المتاحة", value: p.Allowed_Grades || "ALL", cols: 1, hint: "ALL أو أسماء مفصولة بفاصلة" }] });
   if (v) await act("SAVE_PHASE", Object.assign({ phaseId: id || "" }, v));
 });
+on("phaseDel", id => {
+  const p = A().phases.find(x => x.Phase_ID === id) || {};
+  return act("DELETE_PHASE", { phaseId: id }, { title: "حذف مرحلة", message: `سيتم حذف المرحلة «${p.Phase_Name || id}» نهائياً. الحذف متاح فقط لمرحلة بلا حجوزات أو حركات. متابعة؟`, ok: "حذف", tone: "danger" });
+});
 
 // ============================================================ المكتبات
 Router.add("/a/suppliers", view => {
-  const d = A(), bal = supplierBalances();
-  view.innerHTML = UI.pageHead("المكتبات المتعاقدة", "خصم الكمية يُطبق على إجمالي الفاتورة بعد خصومات الأصناف", lockedBtn("SAVE_SUPPLIER", `<button class="btn btn-primary btn-sm" data-act="supplierForm">${ic("plus")} مكتبة جديدة</button>`))
+  const d = A(), bal = supplierBalances(), mainId = (d.suppliers[0] || {}).Supplier_ID;
+  view.innerHTML = UI.pageHead("المكتبات المتعاقدة", "كل الكتب تتبع المكتبة الرئيسية (أول مكتبة مسجلة) · خصم الكمية يُطبق على إجمالي الفاتورة بعد خصومات الأصناف", lockedBtn("SAVE_SUPPLIER", `<button class="btn btn-primary btn-sm" data-act="supplierForm">${ic("plus")} مكتبة جديدة</button>`))
     + (d.suppliers.length ? `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">${d.suppliers.map(s => { const x = bal[s.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 }; const due = x.inv - x.claim - x.ret - x.paid;
-      return `<article class="card card-pad"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
+      const isMain = s.Supplier_ID === mainId, hasMoves = !!bal[s.Supplier_ID];
+      return `<article class="card card-pad ${isMain ? "ring-2 ring-brand-400" : ""}"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
         <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم كمية ${fmt(s.Volume_Discount_Pct)}%</span></div>
-        <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div></article>`; }).join("")}</div>`
+        <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div>
+        <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="btn btn-ghost btn-xs text-rose-600" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}">${ic("trash-2")} حذف</button>`)}</div></article>`; }).join("")}</div>`
       : `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.")}</div>`);
 });
 on("supplierForm", async () => {
   const v = await UI.form({ title: "مكتبة جديدة", fields: [{ name: "supplierName", label: "اسم المكتبة", required: true }, { name: "phone", label: "الهاتف", type: "tel", cols: 1 }, { name: "volumeDiscountPct", label: "خصم الكمية %", type: "number", cols: 1 }] });
   if (v) await act("SAVE_SUPPLIER", v);
+});
+on("supplierDel", id => {
+  const d = A(), s = d.suppliers.find(x => x.Supplier_ID === id) || {}, isMain = (d.suppliers[0] || {}).Supplier_ID === id, next = d.suppliers[1];
+  const extra = isMain ? (next ? `\nهذه هي المكتبة الرئيسية: ستصبح «${next.Supplier_Name}» هي الرئيسية وتنتقل إليها كل الكتب.` : "\nهذه هي المكتبة الرئيسية الوحيدة.") : "";
+  return act("DELETE_SUPPLIER", { supplierId: id }, { title: "حذف مكتبة", message: `سيتم حذف المكتبة «${s.Supplier_Name || id}» نهائياً. الحذف متاح فقط لمكتبة بلا طلبات توريد أو فواتير أو حركات حساب.${extra}\nمتابعة؟`, ok: "حذف", tone: "danger" });
 });
 function supplierBalances() {
   const out = {};
@@ -576,8 +594,8 @@ Router.add("/a/settings", view => {
 // [الدور، الاسم، اختصار للموبايل، باقي الاسم للشاشات الأكبر]
 const PERM_ROLES = [["Coordinator", "مسؤول المبادرة", "مسؤول", " المبادرة"], ["Finance", "أمين الصندوق", "الصندوق", ""], ["Warehouse", "أمين المخزن", "المخزن", ""]];
 const PERM_GROUPS = [
-  ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"]]],
-  ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"]]],
+  ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"], ["DELETE_SUPPLIER", "حذف مكتبة"]]],
+  ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["DELETE_PHASE", "حذف مرحلة"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"]]],
   ["التوزيع والتسليم", [["RUN_ALLOCATION_ENGINE", "تشغيل التوزيع بالأسبقية"], ["MANUAL_ALLOCATION_OVERRIDE", "تعديل التوزيع يدوياً"], ["CARRY_WAITLIST_TO_PHASE", "ترحيل المنتظرين"], ["EXECUTE_BOOK_DELIVERY", "تسليم الكتب"], ["CANCEL_UNDELIVERED_QTY", "إلغاء كمية لم تُسلَّم"], ["RECORD_BOOK_RETURN", "مرتجعات الموظفين"], ["RECORD_STOCK_ADJUSTMENT", "تسويات المخزن"]]],
   ["الخزينة والفواتير", [["RECORD_EMPLOYEE_PAYMENT", "تحصيل وإصدار إيصال"], ["VOID_EMPLOYEE_PAYMENT", "إلغاء إيصال"], ["REFUND_EMPLOYEE_CREDIT", "رد رصيد لموظف"], ["CUSTOMIZE_EMP_INSTALLMENTS", "تعديل خطة الأقساط"], ["ADJUST_EMP_INVOICE", "تعديل الفاتورة (خصم/إضافة)"], ["DELETE_EMP_INVOICE", "حذف فاتورة"], ["RECORD_SUPPLIER_PAYMENT", "السداد للمكتبة"], ["RECORD_INITIATIVE_EXPENSE", "المصروفات"], ["CLOSE_CASH_DAY", "إقفال الخزينة اليومي"]]]
 ];
@@ -1255,7 +1273,7 @@ on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEd
 
 // ============================================================ سجل التعديلات
 const AUD_MOD = { Reservations: "الحجوزات", ReservationItems: "بنود الحجز", Invoices: "الفواتير", Payments: "الإيصالات", Installments: "الأقساط", Catalog: "الكتب", Settings: "الإعدادات", Phases: "المراحل", PO_Snapshot: "طلب التوريد", Supplier_Invoices: "فواتير المكتبة", Supplier: "حساب المكتبة", Suppliers: "المكتبات", Allocation: "التوزيع", Delivery: "التسليم", Returns: "المرتجعات", Inventory: "المخزن", Expenses: "المصروفات", Cash: "الخزينة", Employees: "الموظفون", Auth: "الدخول" };
-const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
+const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
 const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "إجمالي الغلاف", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "الغلاف", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
 const AUD_TONE = a => /DELETE|VOID|REMOVE|CANCEL/.test(a) ? "red" : /ADJUST|DECREASE|CUSTOM|SET_STATUS|PERMISSION|SETTING/.test(a) ? "amber" : /ON_BEHALF|MANUAL/.test(a) ? "blue" : "green";
 Q.aud = Q.aud || { module: "", q: "", days: 7 };

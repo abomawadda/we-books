@@ -554,6 +554,7 @@ const ACTION_ACL = {
   GET_SETTLEMENT_REPORT: ADMIN_ROLES,
   SAVE_SETTING: ["Admin"],
   SAVE_SUPPLIER: ["Coordinator"],
+  DELETE_SUPPLIER: ["Coordinator"],
   SAVE_BOOK: ["Coordinator"],
   BULK_IMPORT_BOOKS: ["Coordinator"],
   BULK_PRICE_BOOKS: ["Coordinator"],
@@ -561,6 +562,7 @@ const ACTION_ACL = {
   SET_PUBLISHER_LOGO: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
+  DELETE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
   GENERATE_PO_SNAPSHOT: ["Coordinator"],
   CANCEL_PO_BACKORDER: ["Coordinator"],
@@ -645,6 +647,8 @@ function callServerApi(action, payload, sessionToken) {
       case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
       case "BULK_IMPORT_EMPLOYEES": return E.bulkImportEmployees(session, payload.employeesArray || []);
       case "SAVE_PHASE": return E.savePhase(session, payload);
+      case "DELETE_PHASE": return E.deletePhase(session, payload);
+      case "DELETE_SUPPLIER": return E.deleteSupplier(session, payload);
       case "SET_PHASE_STATUS": return E.setPhaseStatus(session, payload);
       case "GENERATE_PO_SNAPSHOT": return E.generatePurchaseOrderSnapshot(session, payload.phaseId);
       case "CANCEL_PO_BACKORDER": return E.cancelPoBackorder(session, payload);
@@ -686,6 +690,23 @@ const OperationsEngine = {
     const p = DB_Engine.getAllRecords(this.S().PHASES).find(x => Util.str(x.Phase_ID) === Util.str(phaseId));
     Util.require(p, "المرحلة غير موجودة: " + phaseId);
     return p;
+  },
+
+  /** المكتبة الرئيسية = أول مكتبة مسجلة؛ كل الكتب تتبعها */
+  mainSupplier_: function() {
+    return DB_Engine.getAllRecords(this.S().SUPPLIERS)[0] || null;
+  },
+
+  /** ربط كل كتب الكتالوج بالمكتبة الرئيسية (يكتب ما يختلف فقط) */
+  assignBooksToMainSupplier_: function() {
+    const S = this.S(), main = this.mainSupplier_();
+    if (!main) return 0;
+    const id = Util.str(main.Supplier_ID);
+    let n = 0;
+    DB_Engine.getAllRecords(S.BOOKS).forEach(b => {
+      if (Util.str(b.Supplier_ID) !== id) { DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, { Supplier_ID: id }); n++; }
+    });
+    return n;
   },
 
   /** هل الحجز مفتوح الآن؟ (الحالة Open وداخل نافذة التاريخ، أو تجاوز يدوي) */
@@ -885,7 +906,7 @@ const OperationsEngine = {
       settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
-      books: DB_Engine.getAllRecords(S.BOOKS),
+      books: (() => { const main = this.mainSupplier_(), mid = main ? Util.str(main.Supplier_ID) : ""; return DB_Engine.getAllRecords(S.BOOKS).map(b => mid && Util.str(b.Supplier_ID) !== mid ? Object.assign({}, b, { Supplier_ID: mid }) : b); })(),
       phases: phases,
       resHeaders: DB_Engine.getAllRecords(S.RES_HEADER),
       resItems: resItems,
@@ -1096,7 +1117,7 @@ const OperationsEngine = {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
       const phases = DB_Engine.getAllRecords(S.PHASES);
-      const pId = Util.str(payload.phaseId) || ("PH-" + ("0" + (phases.length + 1)).slice(-2));
+      const pId = Util.str(payload.phaseId) || ("PH-" + ("0" + (phases.reduce((m, p) => Math.max(m, parseInt(String(p.Phase_ID).replace(/\D/g, ""), 10) || 0), 0) + 1)).slice(-2));
       const existing = phases.find(p => Util.str(p.Phase_ID) === pId);
       Util.require(Util.str(payload.phaseName), "أدخل اسم المرحلة.");
       const st = Util.str(payload.startDate), en = Util.str(payload.endDate);
@@ -1116,6 +1137,25 @@ const OperationsEngine = {
       else DB_Engine.insertRecordsBatch(S.PHASES, [obj]);
       DB_Engine.logAudit(session.userId, session.role, "Phases", "SAVE_PHASE", pId, existing, obj);
       return { success: true, message: "تم حفظ المرحلة (" + pId + ")." };
+    });
+  },
+
+  /** حذف مرحلة: مسموح فقط إن لم يرتبط بها أي سجل (حجوزات، فواتير، توريد، مخزن، تسليم، مصروفات…) */
+  deletePhase: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const phase = this.getPhase_(payload.phaseId);
+      const pId = Util.str(phase.Phase_ID);
+      const used = [];
+      getDatabaseSchemaDefinition_().forEach(t => {
+        if (t.name === S.PHASES || t.headers.indexOf("Phase_ID") === -1) return;
+        const c = DB_Engine.getAllRecords(t.name).filter(r => Util.str(r.Phase_ID) === pId).length;
+        if (c) used.push(t.name.replace(/^\d+_/, "") + " (" + c + ")");
+      });
+      Util.require(!used.length, "لا يمكن حذف المرحلة " + pId + " لارتباطها بسجلات: " + used.join("، ") + ". يمكنك إغلاقها بدلاً من الحذف.");
+      DB_Engine.overwriteTableData(S.PHASES, DB_Engine.getAllRecords(S.PHASES).filter(p => Util.str(p.Phase_ID) !== pId));
+      DB_Engine.logAudit(session.userId, session.role, "Phases", "DELETE_PHASE", pId, phase, null);
+      return { success: true, message: "تم حذف المرحلة (" + (phase.Phase_Name || pId) + ")." };
     });
   },
 
@@ -1239,11 +1279,38 @@ const OperationsEngine = {
       publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS") };
   },
 
-  /** كود جديد للكتاب: كود الصف + رقم تسلسلي داخل الصف (P4-007) */
+  /** كود جديد للكتاب: كود الصف + رقم تسلسلي فريد داخل الصف (P4-007) دون تكرار أي كود موجود */
   nextBookCode_: function(gradeCode, books) {
     const pre = gradeCode + "-";
-    const max = books.reduce((m, b) => { const id = Util.str(b.Book_ID); return id.indexOf(pre) === 0 ? Math.max(m, parseInt(id.slice(pre.length), 10) || 0) : m; }, 0);
-    return pre + ("00" + (max + 1)).slice(-3);
+    const taken = {};
+    let max = 0;
+    books.forEach(b => {
+      const id = Util.str(b.Book_ID).toUpperCase();
+      taken[id] = 1;
+      if (id.indexOf(pre.toUpperCase()) === 0) max = Math.max(max, parseInt(id.slice(pre.length), 10) || 0);
+    });
+    let n = max + 1, code;
+    do { code = pre + String(n++).padStart(3, "0"); } while (taken[code.toUpperCase()]);
+    return code;
+  },
+
+  /** فحص تكرار الكتاب داخل نفس الصف (بنفس الاسم المعروض، أو نفس الناشر + المادة + الجزء مع تقاطع نوع المدرسة) */
+  findDuplicateBook_: function(books, cand, ignoreId) {
+    const ig = Util.str(ignoreId).toUpperCase();
+    const g = Util.str(cand.Grade), nm = Util.str(cand.Book_Name);
+    const pub = Util.str(cand.Publisher), sub = Util.str(cand.Subject), part = Util.str(cand.Book_Part);
+    const cTypes = String(cand.School_Types || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
+    return books.find(b => {
+      const bid = Util.str(b.Book_ID).toUpperCase();
+      if (!bid || bid === ig || Util.str(b.Book_Status) === "Discontinued") return false;
+      if (Util.str(b.Grade) !== g) return false;
+      if (nm && Util.str(b.Book_Name) === nm) return true;
+      if (pub && sub && Util.str(b.Publisher) === pub && Util.str(b.Subject) === sub && Util.str(b.Book_Part) === part) {
+        const bTypes = String(b.School_Types || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
+        if (!cTypes.length || !bTypes.length || cTypes.some(t => bTypes.indexOf(t) !== -1)) return true;
+      }
+      return false;
+    }) || null;
   },
 
   /** اسم العرض: الناشر — المادة (الجزء)، مع «لغات» لطبعة مدارس اللغات من مادة لها طبعة عربية */
@@ -1286,7 +1353,9 @@ const OperationsEngine = {
       const S = this.S();
       const lists = this.catalogLists_();
       const books = DB_Engine.getAllRecords(S.BOOKS);
-      const existing = payload.bookId ? books.find(b => Util.str(b.Book_ID) === Util.str(payload.bookId)) : null;
+      const reqId = Util.str(payload.bookId);
+      const existing = reqId ? books.find(b => Util.str(b.Book_ID).toUpperCase() === reqId.toUpperCase()) : null;
+      if (reqId) Util.require(existing, "الكتاب المطلوب تعديله غير موجود (" + reqId + ").");
       const grade = lists.grades.find(g => g.label === Util.str(payload.grade));
       Util.require(grade, "اختر الصف الدراسي من القائمة.");
       const types = String(payload.schoolTypes || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
@@ -1301,10 +1370,12 @@ const OperationsEngine = {
         Book_ID: id, Book_Name: this.bookDisplayName_(publisher, subject, part, types), Stage: grade.stage, Grade: grade.label,
         Subject: subject, Publisher: publisher, School_Types: types.join("،"), Book_Part: part
       };
+      const dup = this.findDuplicateBook_(books, base, existing ? existing.Book_ID : "");
+      Util.require(!dup, "هذا الكتاب مسجّل بالفعل في (" + grade.label + ") بكود " + (dup ? dup.Book_ID + " — " + dup.Book_Name : "") + ". عدّل الكتاب الموجود بدلاً من تكراره.");
       let obj, msg;
       if (priced) {
-        const sup = DB_Engine.getAllRecords(S.SUPPLIERS).find(s => Util.str(s.Supplier_ID) === Util.str(payload.supplierId));
-        Util.require(sup, "اختر المكتبة الموردة.");
+        const sup = this.mainSupplier_(); // كل الكتب تتبع المكتبة الرئيسية المسجلة
+        Util.require(sup, "سجّل المكتبة الرئيسية أولاً من صفحة المكتبات.");
         const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
         const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : sup.Volume_Discount_Pct;
         const p = FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct);
@@ -1320,7 +1391,7 @@ const OperationsEngine = {
         msg = "تم حفظ الكتاب " + id + " بسعر موظف " + p.empSellingPrice + " ج.م." + warn;
       } else {
         obj = Object.assign(base, {
-          Supplier_ID: Util.str(payload.supplierId) || (existing ? existing.Supplier_ID : ""), Cover_Price: "", Supplier_Discount_Pct: "",
+          Supplier_ID: (this.mainSupplier_() || {}).Supplier_ID || "", Cover_Price: "", Supplier_Discount_Pct: "",
           Initial_Purchase_Price: "", Volume_Discount_Share_Pct: "", Standard_Net_Cost: "", Emp_Discount_Pct: "", Emp_Selling_Price: "",
           Book_Status: "Pricing"
         });
@@ -1328,6 +1399,7 @@ const OperationsEngine = {
       }
       if (existing) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, obj);
       else DB_Engine.insertRecordsBatch(S.BOOKS, [obj]);
+      this.assignBooksToMainSupplier_();
       DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", id, existing, obj);
       return { success: true, message: msg, book: obj };
     });
@@ -1357,9 +1429,9 @@ const OperationsEngine = {
         seen[id] = 1; res.name = b.Book_Name;
         const cover = Util.num(r.coverPrice);
         if (!(cover > 0)) { res.error = "سعر الغلاف غير صحيح"; return; }
-        const supId = Util.str(r.supplierId) || Util.str(def.supplierId) || Util.str(b.Supplier_ID) || firstSup;
+        const supId = firstSup; // كل الكتب تتبع المكتبة الرئيسية المسجلة
         const sup = sups[supId];
-        if (!sup) { res.error = "مكتبة غير معروفة: " + supId; return; }
+        if (!sup) { res.error = "سجّل المكتبة الرئيسية أولاً"; return; }
         const pub = Util.str(b.Publisher);
         const discRaw = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? r.supplierDiscountPct
           : pubRule[pub] !== undefined ? pubRule[pub]
@@ -1397,22 +1469,31 @@ const OperationsEngine = {
       const sups = {};
       DB_Engine.getAllRecords(S.SUPPLIERS).forEach(s => sups[Util.str(s.Supplier_ID)] = s);
       const map = {};
-      DB_Engine.getAllRecords(S.BOOKS).forEach(b => map[Util.str(b.Book_ID)] = b);
+      const byUpper = {};
+      DB_Engine.getAllRecords(S.BOOKS).forEach(b => { const k = Util.str(b.Book_ID); map[k] = b; byUpper[k.toUpperCase()] = k; });
       let added = 0, updated = 0;
       const errors = [];
       booksArray.forEach((inp, idx) => {
-        const id = Util.str(inp.Book_ID);
-        if (!id) return;
+        const rawId = Util.str(inp.Book_ID);
+        if (!rawId) return;
+        const id = byUpper[rawId.toUpperCase()] || rawId;
         // حماية من لصق أعمدة بترتيب خاطئ (مثل وضع السعر مكان اسم الكتاب)
         if (/^[\d.,\s%]+$/.test(Util.str(inp.Book_Name)) || /^[\d.,\s%]+$/.test(Util.str(inp.Stage))) { errors.push("سطر " + (idx + 1) + " (" + id + "): الاسم أو المرحلة رقم — راجع ترتيب الأعمدة"); return; }
-        const sup = sups[Util.str(inp.Supplier_ID)] || sups[Object.keys(sups)[0]];
+        const old = map[id] || {};
+        const cand = {
+          Grade: inp.Grade || old.Grade || "", Book_Name: Util.str(inp.Book_Name) || old.Book_Name || "",
+          Publisher: inp.Publisher || old.Publisher || "", Subject: inp.Subject || old.Subject || "",
+          Book_Part: inp.Book_Part || old.Book_Part || "", School_Types: inp.School_Types || old.School_Types || ""
+        };
+        const dup = this.findDuplicateBook_(Object.keys(map).map(k => map[k]), cand, id);
+        if (dup) { errors.push("سطر " + (idx + 1) + " (" + id + "): كتاب مكرر في نفس الصف مع (" + dup.Book_ID + " — " + dup.Book_Name + ")"); return; }
+        const sup = sups[Object.keys(sups)[0]]; // كل الكتب تتبع المكتبة الرئيسية المسجلة
         if (!(Util.num(inp.Cover_Price) > 0)) { // بلا سعر: يُضاف بحالة «جاري التسعير»
-          const base = map[id] || {};
-          if (!map[id]) added++; else updated++;
-          map[id] = Object.assign({}, base, {
-            Book_ID: id, Book_Name: Util.str(inp.Book_Name) || base.Book_Name, Stage: inp.Stage || base.Stage || "", Grade: inp.Grade || base.Grade || "",
-            Subject: inp.Subject || base.Subject || "", Publisher: inp.Publisher || base.Publisher || "-", Supplier_ID: sup ? sup.Supplier_ID : (base.Supplier_ID || ""),
-            School_Types: inp.School_Types || base.School_Types || "", Book_Part: inp.Book_Part || base.Book_Part || "",
+          if (!map[id]) { added++; byUpper[id.toUpperCase()] = id; } else updated++;
+          map[id] = Object.assign({}, old, {
+            Book_ID: id, Book_Name: cand.Book_Name, Stage: inp.Stage || old.Stage || "", Grade: cand.Grade,
+            Subject: cand.Subject, Publisher: cand.Publisher || "-", Supplier_ID: sup ? sup.Supplier_ID : (old.Supplier_ID || ""),
+            School_Types: cand.School_Types, Book_Part: cand.Book_Part,
             Cover_Price: "", Supplier_Discount_Pct: "", Initial_Purchase_Price: "", Volume_Discount_Share_Pct: "", Standard_Net_Cost: "",
             Emp_Discount_Pct: "", Emp_Selling_Price: "", Book_Status: "Pricing" });
           return;
@@ -1421,16 +1502,15 @@ const OperationsEngine = {
         const p = FinancialEngine.calculateBookPricing(inp.Cover_Price, inp.Supplier_Discount_Pct,
           inp.Volume_Discount_Share_Pct !== undefined && inp.Volume_Discount_Share_Pct !== "" ? inp.Volume_Discount_Share_Pct : sup.Volume_Discount_Pct,
           inp.Emp_Discount_Pct !== undefined && inp.Emp_Discount_Pct !== "" ? inp.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
-        const old = map[id] || {};
-        if (map[id]) updated++; else added++;
+        if (map[id]) updated++; else { added++; byUpper[id.toUpperCase()] = id; }
         map[id] = {
-          Book_ID: id, Book_Name: Util.str(inp.Book_Name) || old.Book_Name || "", Stage: inp.Stage || old.Stage || "", Grade: inp.Grade || old.Grade || "", Subject: inp.Subject || old.Subject || "",
-          Publisher: inp.Publisher || old.Publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
+          Book_ID: id, Book_Name: cand.Book_Name, Stage: inp.Stage || old.Stage || "", Grade: cand.Grade, Subject: cand.Subject,
+          Publisher: cand.Publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
           Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
           Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
           Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
-          School_Types: inp.School_Types || (map[id] ? map[id].School_Types : ""), Book_Part: inp.Book_Part || (map[id] ? map[id].Book_Part : ""), Cover_URL: old.Cover_URL || "",
-          Book_Status: inp.Book_Status || (map[id] && map[id].Book_Status !== "Pricing" ? map[id].Book_Status : "Available")
+          School_Types: cand.School_Types, Book_Part: cand.Book_Part, Cover_URL: old.Cover_URL || "",
+          Book_Status: inp.Book_Status || (old.Book_Status && old.Book_Status !== "Pricing" ? old.Book_Status : "Available")
         };
       });
       DB_Engine.overwriteTableData(S.BOOKS, Object.keys(map).map(k => map[k]));
@@ -1474,7 +1554,7 @@ const OperationsEngine = {
       const S = this.S();
       const list = DB_Engine.getAllRecords(S.SUPPLIERS);
       Util.require(Util.str(payload.supplierName), "أدخل اسم المكتبة.");
-      const supId = Util.str(payload.supplierId) || ("SUP-" + ("0" + (list.length + 1)).slice(-2));
+      const supId = Util.str(payload.supplierId) || ("SUP-" + ("0" + (list.reduce((m, s) => Math.max(m, parseInt(String(s.Supplier_ID).replace(/\D/g, ""), 10) || 0), 0) + 1)).slice(-2));
       const existing = list.find(s => Util.str(s.Supplier_ID) === supId);
       const obj = {
         Supplier_ID: supId, Supplier_Name: payload.supplierName, Contact_Person: payload.contactPerson || (existing ? existing.Contact_Person : "-"),
@@ -1485,8 +1565,41 @@ const OperationsEngine = {
       };
       if (existing) DB_Engine.updateRecordByPK(S.SUPPLIERS, "Supplier_ID", supId, obj);
       else DB_Engine.insertRecordsBatch(S.SUPPLIERS, [obj]);
+      const moved = this.assignBooksToMainSupplier_(); // أول مكتبة تُسجَّل تصبح الرئيسية وتُربط بها كل الكتب
       DB_Engine.logAudit(session.userId, session.role, "Suppliers", "SAVE_SUPPLIER", supId, existing, obj);
-      return { success: true, message: "تم حفظ بيانات المكتبة (" + supId + ")." };
+      return { success: true, message: "تم حفظ بيانات المكتبة (" + supId + ")." + (moved ? " رُبط " + moved + " كتاباً بالمكتبة الرئيسية." : "") };
+    });
+  },
+
+  /**
+   * حذف مكتبة: مسموح فقط إن لم يرتبط بها طلب توريد أو فاتورة أو حركة حساب أو مرتجع.
+   * المكتبة الرئيسية (أول مكتبة) تتبعها كل الكتب: عند حذفها تصبح التالية رئيسية وتنتقل إليها الكتب،
+   * ولا تُحذف إن كانت الوحيدة وفي الكتالوج كتب.
+   */
+  deleteSupplier: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const list = DB_Engine.getAllRecords(S.SUPPLIERS);
+      const supId = Util.str(payload.supplierId);
+      const sup = list.find(s => Util.str(s.Supplier_ID) === supId);
+      Util.require(sup, "المكتبة غير موجودة: " + supId);
+      const used = [];
+      getDatabaseSchemaDefinition_().forEach(t => {
+        if (t.name === S.SUPPLIERS || t.name === S.BOOKS || t.headers.indexOf("Supplier_ID") === -1) return;
+        const c = DB_Engine.getAllRecords(t.name).filter(r => Util.str(r.Supplier_ID) === supId).length;
+        if (c) used.push(t.name.replace(/^\d+_/, "") + " (" + c + ")");
+      });
+      const rets = DB_Engine.getAllRecords(S.DELIVERY_RETURNS).filter(r => r.Doc_Type === "SUPPLIER_RETURN" && Util.str(r.Party_ID) === supId).length;
+      if (rets) used.push("Supplier_Returns (" + rets + ")");
+      Util.require(!used.length, "لا يمكن حذف المكتبة " + (sup.Supplier_Name || supId) + " لارتباطها بسجلات: " + used.join("، ") + ".");
+      const isMain = Util.str(list[0].Supplier_ID) === supId;
+      const bookCount = DB_Engine.getAllRecords(S.BOOKS).length;
+      Util.require(!(isMain && list.length === 1 && bookCount), "لا يمكن حذف المكتبة الرئيسية الوحيدة — كل كتب الكتالوج (" + bookCount + ") تابعة لها. سجّل مكتبة أخرى أولاً.");
+      DB_Engine.overwriteTableData(S.SUPPLIERS, list.filter(s => Util.str(s.Supplier_ID) !== supId));
+      const moved = isMain ? this.assignBooksToMainSupplier_() : 0;
+      DB_Engine.logAudit(session.userId, session.role, "Suppliers", "DELETE_SUPPLIER", supId, sup, null);
+      const main = this.mainSupplier_();
+      return { success: true, message: "تم حذف المكتبة (" + (sup.Supplier_Name || supId) + ")." + (isMain && main ? " المكتبة الرئيسية الآن: " + main.Supplier_Name + (moved ? " ونُقل إليها " + moved + " كتاباً." : ".") : "") };
     });
   },
 
@@ -1505,6 +1618,7 @@ const OperationsEngine = {
       Util.require(!this.isBookingOpen_(phase), "أغلق الحجز لهذه المرحلة أولاً قبل تجميد الحصر.");
       const invs = DB_Engine.getAllRecords(S.SUP_INV_HEADER).filter(h => Util.str(h.Phase_ID) === Util.str(phaseId));
       Util.require(invs.length === 0, "تم استلام فواتير على هذه المرحلة، ولا يمكن إعادة تجميد الحصر.");
+      this.assignBooksToMainSupplier_();
 
       const books = DB_Engine.getAllRecords(S.BOOKS);
       const items = DB_Engine.getAllRecords(S.RES_ITEMS).filter(i => !this.isCancelledItem_(i));
