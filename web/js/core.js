@@ -143,9 +143,20 @@ async function act(action, payload, confirmOpts) {
   if (r.success) await reloadData();
   return r;
 }
+/** حزمة الإدارة تُحمَّل عند دخول الإدارة فقط — الموظف على موبايل ضعيف لا يحمّل ~250 ك.ب لا يحتاجها */
+const ADMIN_BUNDLE = ["js/admin.js", "js/reports.js", "js/insights.js", "js/admin-pickup.js"];
+let adminBundleP = null;
+function loadAdminBundle() {
+  if (typeof Admin !== "undefined") return Promise.resolve();
+  if (adminBundleP) return adminBundleP;
+  const me = document.querySelector('script[src*="js/core.js"]'), v = me ? (me.getAttribute("src").split("?")[1] || "") : "";
+  const one = src => new Promise((ok, no) => { const s = document.createElement("script"); s.src = src + (v ? "?" + v : ""); s.async = false; s.onload = ok; s.onerror = () => no(new Error(src)); document.head.appendChild(s); });
+  adminBundleP = ADMIN_BUNDLE.reduce((p, f) => p.then(() => one(f)), Promise.resolve()).catch(e => { adminBundleP = null; toast("تعذر تحميل لوحة الإدارة — تأكد من الإنترنت وحدّث الصفحة", "danger"); throw e; });
+  return adminBundleP;
+}
 async function reloadData() {
   if (!APP.user) return;
-  if (APP.user.userType === "ADMIN") await Admin.load(); else await Emp.load();
+  if (APP.user.userType === "ADMIN") { await loadAdminBundle(); await Admin.load(); } else await Emp.load();
 }
 
 // ---------------------------------------------------------------- مكونات العرض

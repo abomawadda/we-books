@@ -191,7 +191,7 @@ ${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="الس�
     Shell.renderPhaseBox();
     const view = $("#view");
     const ready = APP.user.userType === "ADMIN" ? APP.adm : APP.emp;
-    if (!ready) { view.innerHTML = UI.skeleton(5); return; }
+    if (!ready || !fn) { view.innerHTML = UI.skeleton(5); return; }
     try { fn(view); } catch (err) { console.error(err); view.innerHTML = UI.empty("circle-alert", "تعذر عرض الصفحة", String(err && err.message || err)); }
     if (Shell._lastKey !== key) { window.scrollTo(0, 0); Shell._lastKey = key; }
   },
