@@ -282,13 +282,16 @@ function booksTable() {
     { t: "سعر الموظف", cls: "num", v: x => `<b class="text-brand-800">${fmt(x.Emp_Selling_Price)}</b>` },
     { t: "الهامش", cls: "num", v: x => { const m = r2(n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost)); return `<span class="${m < 0 ? "text-rose-600 font-bold" : "text-emerald-600"}">${fmt(m)}</span>`; } },
     { t: "المخزن / حر", cls: "num", v: x => `${fmt(st[x.Book_ID] ? st[x.Book_ID].onHand : 0)} / ${fmt(st[x.Book_ID] ? st[x.Book_ID].free : 0)}` },
-    { t: "", actions: true, v: x => can("SAVE_BOOK") ? `<button class="btn btn-outline btn-xs" data-act="bookForm" data-id="${esc(x.Book_ID)}">${ic("pencil")} تعديل</button>` : "" }
+    { t: "", actions: true, v: x => {
+      const hasUse = !!(resCount()[x.Book_ID] || (st[x.Book_ID] && st[x.Book_ID].onHand));
+      return `<div class="flex items-center gap-1">${can("SAVE_BOOK") ? `<button class="btn btn-outline btn-xs" data-act="bookForm" data-id="${esc(x.Book_ID)}">${ic("pencil")} تعديل</button><button class="btn btn-ghost btn-xs" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="إضافة نفس الكتاب لصف دراسي آخر أو سلسلة بكود جديد">${ic("package-plus")} نسخ لصف</button>` : ""}${!hasUse && can("DELETE_BOOK") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب">${ic("trash-2")} حذف</button>` : ""}</div>`;
+    } }
   ], list, { maxH: 640, emptyIcon: "library-big", empty: q ? "لا نتائج للبحث" : "الكتالوج فارغ", emptySub: q ? "" : "أضف الكتب يدوياً أو استوردها من Excel." });
 }
 Router.add("/a/books", view => {
   const d = A(), loss = d.books.filter(x => n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost)).length;
   view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب جديد</button>`))
+    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
     + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-100 text-rose-800 p-3.5 mb-4 text-sm flex gap-2">${ic("triangle-alert", "mt-0.5")}${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية.</div>` : "")
     + `<section class="card card-pad"><div class="flex flex-wrap items-center justify-between gap-3 mb-4">${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر")}
       ${bookFilters()}
@@ -371,38 +374,166 @@ function typeCombos(types) {
   for (let m = 1; m < (1 << types.length); m++) { const pick = types.filter((t, i) => m & (1 << i)); out.push([pick.join("،"), pick.length > 1 ? "مشترك: " + pick.join(" + ") : pick[0]]); }
   return out.sort((a, b) => a[0].split("،").length - b[0].split("،").length);
 }
-on("bookForm", async id => {
-  const x = id ? A().books.find(b => b.Book_ID === id) : {}, c = A().catalog || {};
+/** معاينة الكود التلقائي التالي لصف دراسي */
+function nextCodePreview(gradeCode, books) {
+  const pre = gradeCode + "-", taken = {};
+  let max = 0;
+  books.forEach(b => {
+    const id = String(b.Book_ID || "").toUpperCase();
+    taken[id] = 1;
+    if (id.indexOf(pre.toUpperCase()) === 0) max = Math.max(max, parseInt(id.slice(pre.length), 10) || 0);
+  });
+  let n = max + 1, code;
+  do { code = pre + String(n++).padStart(3, "0"); } while (taken[code.toUpperCase()]);
+  return code;
+}
+async function openBookModal(id, cloneFromId) {
+  const src = id ? A().books.find(b => b.Book_ID === id) : (cloneFromId ? A().books.find(b => b.Book_ID === cloneFromId) : null);
+  const x = id ? (src || {}) : (src ? Object.assign({}, src, { Book_ID: "", Grade: "" }) : {});
+  const c = A().catalog || {}, grades = c.grades || [];
+  const stages = [...new Set(["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"].concat(grades.map(g => g.stage).filter(Boolean)))];
+  const extra = { grades: [], newPublisher: "", newSubject: "", newBookPart: "", newGradeLabel: "", newGradeStage: "المرحلة الابتدائية", newGradeCode: "" };
+  let wired = false;
+  const fields = [
+    { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-xl bg-slate-50 px-4 py-3 text-sm">${id ? `الكود: <b class="num">${esc(x.Book_ID)}</b>` : "يُولَّد الكود تلقائياً لكل صف (مثل P1-012) دون تكرار."}</div>` }
+  ];
+  if (!id) {
+    fields.push({ name: "regMode", label: "نظام الإضافة", type: "seg", value: "single", options: [["single", "صف دراسي واحد (أو صف جديد)"], ["series", "سلسلة متكاملة لعدة صفوف"]] });
+  }
+  fields.push(
+    { name: "grade", label: "الصف الدراسي", type: "select", value: x.Grade || "", cols: 1, options: [["", "— اختر الصف —"]].concat(grades.map(g => [g.label, g.label + " · " + g.stage]), [["__NEW__", "+ إضافة صف دراسي جديد…"]]) },
+    { name: "schoolTypes", label: "نوع المدرسة", type: "select", value: x.School_Types || "حكومي", cols: 1, required: true, options: typeCombos(c.schoolTypes || []) },
+    { name: "_gradeExtra", type: "html", html: `
+      <div id="newGradeWrap" class="hidden rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div><label class="label">اسم الصف الدراسي الجديد</label><input data-x="newGradeLabel" class="input" placeholder="مثال: تمهيدي أو 4 ثانوي"></div>
+        <div><label class="label">المرحلة الدراسية</label><select data-x="newGradeStage" class="input">${stages.map(st => `<option value="${esc(st)}" ${st === "المرحلة الابتدائية" ? "selected" : ""}>${esc(st)}</option>`).join("")}</select></div>
+        <div><label class="label">بادئة الكود (اختياري)</label><input data-x="newGradeCode" class="input num" placeholder="تلقائي (مثل P7 أو KG0)"></div>
+      </div>
+      <div id="seriesWrap" class="hidden rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <span class="font-bold text-[13px] text-slate-800">${ic("library-big", "text-brand-600")} اختر صفوف السلسلة (يُكوَّد كتاب مستقل لكل صف بنفس البيانات):</span>
+          <div class="flex flex-wrap gap-1">
+            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الابتدائية">الابتدائي (1–6)</button>
+            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الإعدادية">الإعدادي (1–3)</button>
+            <button type="button" class="btn btn-soft btn-xs" data-series-stage="المرحلة الثانوية">الثانوي (1–3)</button>
+            <button type="button" class="btn btn-soft btn-xs" data-series-stage="رياض الأطفال">رياض الأطفال</button>
+            <button type="button" class="btn btn-ghost btn-xs" data-series-stage="ALL">الكل</button>
+            <button type="button" class="btn btn-ghost btn-xs text-rose-600" data-series-stage="NONE">مسح</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-1.5">${grades.map(g => `<label class="flex items-center gap-2 rounded-xl bg-white ring-1 ring-slate-200 px-2.5 py-2 text-xs font-semibold text-slate-700 cursor-pointer hover:ring-brand-400"><input type="checkbox" data-series-g="${esc(g.label)}" data-series-st="${esc(g.stage)}" class="w-4 h-4 accent-brand-700"><span>${esc(g.label)} <span class="text-[10.5px] text-slate-400 num">(${esc(g.code)})</span></span></label>`).join("")}</div>
+      </div>` },
+    { name: "publisher", label: "دار النشر", type: "select", value: x.Publisher || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.publishers || []).map(t => [t, t]), [["__NEW__", "+ إضافة دار نشر جديدة…"]]) },
+    { name: "subject", label: "المادة", type: "select", value: x.Subject || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.subjects || []).map(t => [t, t]), [["__NEW__", "+ إضافة مادة جديدة…"]]) },
+    { name: "_pubSubExtra", type: "html", html: `<div id="newPubSubWrap" class="hidden grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5">
+      <div id="newPubBox" class="hidden"><label class="label">اسم دار النشر الجديدة</label><input data-x="newPublisher" class="input" placeholder="مثال: الأضواء"></div>
+      <div id="newSubBox" class="hidden"><label class="label">اسم المادة الجديدة</label><input data-x="newSubject" class="input" placeholder="مثال: مهارات مهنية"></div>
+    </div>` },
+    { name: "bookPart", label: "جزء الكتاب", type: "select", value: x.Book_Part || "", cols: 1, options: [["", "كتاب واحد"]].concat((c.parts || []).map(t => [t, t]), [["__NEW__", "+ إضافة جزء جديد…"]]) },
+    { name: "supplierId", label: "المكتبة (الرئيسية)", type: "select", value: (A().suppliers[0] || {}).Supplier_ID || "", cols: 1, options: A().suppliers.slice(0, 1).map(s => [s.Supplier_ID, s.Supplier_Name]), hint: "كل الكتب تتبع المكتبة الرئيسية المسجلة" },
+    { name: "_partExtra", type: "html", html: `<div id="newPartWrap" class="hidden rounded-2xl bg-brand-50/60 ring-1 ring-brand-200 p-3.5"><label class="label">اسم جزء الكتاب الجديد</label><input data-x="newBookPart" class="input" placeholder="مثال: مراجعة نهائية أو ملحق امتحانات"></div>` },
+    { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
+    { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
+    { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
+    { name: "volumeDiscountSharePct", label: "خصم الكمية %", type: "number", value: x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct, cols: 1, placeholder: "من عقد المكتبة" },
+    { name: "empDiscountPct", label: "خصم الموظف %", type: "number", value: x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct, cols: 1, placeholder: "الخصم الموحد" },
+    { name: "_pv", type: "html", html: `<div id="pricePv" class="rounded-2xl bg-brand-50 p-4"></div>` }
+  );
+
   const v = await UI.form({
-    title: id ? "تعديل كتاب" : "كتاب جديد", sub: id ? x.Book_Name : "", wide: true, icon: "check",
-    fields: [
-      { name: "bookId", type: "html", html: `<div id="bookCodePv" class="rounded-xl bg-slate-50 px-4 py-3 text-sm">${id ? `الكود: <b class="num">${esc(x.Book_ID)}</b>` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار."}</div>` },
-      { name: "grade", label: "الصف الدراسي", type: "select", value: x.Grade || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.grades || []).map(g => [g.label, g.label + " · " + g.stage])) },
-      { name: "schoolTypes", label: "نوع المدرسة", type: "select", value: x.School_Types || "حكومي", cols: 1, required: true, options: typeCombos(c.schoolTypes || []) },
-      { name: "publisher", label: "الناشر", type: "select", value: x.Publisher || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.publishers || []).map(t => [t, t])) },
-      { name: "subject", label: "المادة", type: "select", value: x.Subject || "", cols: 1, required: true, options: [["", "— اختر —"]].concat((c.subjects || []).map(t => [t, t])) },
-      { name: "bookPart", label: "جزء الكتاب", type: "select", value: x.Book_Part || "", cols: 1, options: [["", "كتاب واحد"]].concat((c.parts || []).map(t => [t, t])) },
-      { name: "supplierId", label: "المكتبة (الرئيسية)", type: "select", value: (A().suppliers[0] || {}).Supplier_ID || "", cols: 1, options: A().suppliers.slice(0, 1).map(s => [s.Supplier_ID, s.Supplier_Name]), hint: "كل الكتب تتبع المكتبة الرئيسية المسجلة" },
-      { name: "bookStatus", label: "الحالة", type: "select", value: x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available"), options: [["Available", "متاح"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]] },
-      { name: "coverPrice", label: "سعر الغلاف", type: "number", value: x.Cover_Price || "", cols: 1, hint: "اتركه فارغاً ليظهر الكتاب «جاري التسعير»" },
-      { name: "supplierDiscountPct", label: "خصم المكتبة على الصنف %", type: "number", value: x.Supplier_Discount_Pct || "", cols: 1 },
-      { name: "volumeDiscountSharePct", label: "خصم الكمية %", type: "number", value: x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct, cols: 1, placeholder: "من عقد المكتبة" },
-      { name: "empDiscountPct", label: "خصم الموظف %", type: "number", value: x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct, cols: 1, placeholder: "الخصم الموحد" },
-      { name: "_pv", type: "html", html: `<div id="pricePv" class="rounded-2xl bg-brand-50 p-4"></div>` }
-    ],
+    title: id ? "تعديل كتاب" : (cloneFromId ? "إضافة نفس الكتاب لصف جديد أو سلسلة" : "تسجيل كتاب أو سلسلة جديدة"),
+    sub: id ? x.Book_Name : (cloneFromId && src ? `نسخ من: ${src.Book_Name} (${src.Book_ID}) — اختر الصف الجديد أو السلسلة` : "يمكنك إضافة دار نشر أو مادة أو صف جديد، أو تسجيل سلسلة كاملة لعدة صفوف دفعة واحدة"),
+    wide: true, icon: "check", fields,
     onChange: (f, form) => {
+      if (!wired) {
+        wired = true;
+        $$("[data-x]", form).forEach(inp => inp.addEventListener("input", () => { extra[inp.dataset.x] = inp.value; form.dispatchEvent(new Event("input")); }));
+        $$("[data-series-g]", form).forEach(cb => cb.addEventListener("change", () => {
+          extra.grades = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG);
+          form.dispatchEvent(new Event("input"));
+        }));
+        $$("[data-series-stage]", form).forEach(btn => btn.addEventListener("click", () => {
+          const st = btn.dataset.seriesStage;
+          $$("[data-series-g]", form).forEach(cb => { cb.checked = st === "ALL" ? true : st === "NONE" ? false : cb.dataset.seriesSt === st; });
+          extra.grades = $$("[data-series-g]:checked", form).map(el => el.dataset.seriesG);
+          form.dispatchEvent(new Event("input"));
+        }));
+      }
+      const isSeries = !id && f.regMode === "series";
+      const gSelWrap = form.elements.grade ? form.elements.grade.closest("div") : null;
+      if (gSelWrap) gSelWrap.classList.toggle("hidden", isSeries);
+      const ngWrap = form.querySelector("#newGradeWrap"), srWrap = form.querySelector("#seriesWrap");
+      if (ngWrap) ngWrap.classList.toggle("hidden", isSeries || f.grade !== "__NEW__");
+      if (srWrap) srWrap.classList.toggle("hidden", !isSeries);
+      const pubNew = f.publisher === "__NEW__", subNew = f.subject === "__NEW__", partNew = f.bookPart === "__NEW__";
+      const psWrap = form.querySelector("#newPubSubWrap"), pbBox = form.querySelector("#newPubBox"), sbBox = form.querySelector("#newSubBox"), ptWrap = form.querySelector("#newPartWrap");
+      if (psWrap) psWrap.classList.toggle("hidden", !pubNew && !subNew);
+      if (pbBox) pbBox.classList.toggle("hidden", !pubNew);
+      if (sbBox) sbBox.classList.toggle("hidden", !subNew);
+      if (ptWrap) ptWrap.classList.toggle("hidden", !partNew);
+
       const p = bookPrice(f), el = form.querySelector("#pricePv"), cpv = form.querySelector("#bookCodePv");
       el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">${[["بعد خصم الصنف", p.first], [`التكلفة (خصم كمية ${p.vd}%)`, p.cost], [`سعر الموظف (خصم ${p.ed}%)`, p.emp], ["الهامش", p.margin]].map((c, i) => `<div><div class="text-[11px] text-brand-700/80 font-semibold">${c[0]}</div><div class="text-lg font-bold num ${i === 3 && c[1] < 0 ? "text-rose-600" : i === 2 ? "text-brand-800" : "text-slate-900"}">${fmt(c[1])}</div></div>`).join("")}</div>`;
       if (cpv) {
+        const pub = (pubNew ? extra.newPublisher : f.publisher || "").trim();
+        const sub = (subNew ? extra.newSubject : f.subject || "").trim();
+        const part = (partNew ? extra.newBookPart : f.bookPart || "").trim();
         const cTypes = String(f.schoolTypes || "").split(/[,،+]/).map(s => s.trim()).filter(Boolean);
-        const dup = (f.grade && f.publisher && f.subject) ? A().books.find(b => b.Book_ID !== id && b.Book_Status !== "Discontinued" && b.Grade === f.grade && b.Publisher === f.publisher && b.Subject === f.subject && (b.Book_Part || "") === (f.bookPart || "") && cTypes.some(t => String(b.School_Types || "").split(/[,،+]/).map(s => s.trim()).includes(t))) : null;
-        if (dup) cpv.innerHTML = `<span class="text-rose-600 font-semibold">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(f.grade)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</span>`;
-        else if (id) cpv.innerHTML = `الكود: <b class="num">${esc(x.Book_ID)}</b>`;
-        else { const g = (c.grades || []).find(g => g.label === f.grade); cpv.innerHTML = g ? `الكود التلقائي المقترح للصف (${esc(g.code)}): يُولَّد بدون تكرار عند الحفظ.` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار."; }
+        const findDup = gLabel => (gLabel && pub && sub) ? A().books.find(b => b.Book_ID !== id && b.Book_Status !== "Discontinued" && b.Grade === gLabel && b.Publisher === pub && b.Subject === sub && (b.Book_Part || "") === part && cTypes.some(t => String(b.School_Types || "").split(/[,،+]/).map(s => s.trim()).includes(t))) : null;
+        if (isSeries) {
+          if (!extra.grades.length) cpv.innerHTML = `<span class="text-slate-600">اختر صفوف السلسلة من الأزرار أعلاه (مثلاً: <b>الابتدائي 1–6</b>) ليتم توليد كود لكل صف تلقائياً.</span>`;
+          else {
+            const sim = A().books.slice();
+            const chips = extra.grades.map(gl => {
+              const dup = findDup(gl);
+              if (dup) return `<span class="inline-flex items-center gap-1 rounded-lg bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-semibold">${esc(gl)}: مسجّل (${esc(dup.Book_ID)}) — سيُتخطى</span>`;
+              const gObj = grades.find(g => g.label === gl);
+              const code = gObj ? nextCodePreview(gObj.code, sim) : "—";
+              sim.push({ Book_ID: code });
+              return `<span class="inline-flex items-center gap-1 rounded-lg bg-emerald-100 text-emerald-800 px-2 py-0.5 text-xs font-semibold">${esc(gl)} ← <b class="num">${esc(code)}</b></span>`;
+            });
+            cpv.innerHTML = `<div class="text-xs font-semibold text-slate-700 mb-1.5">أكواد السلسلة التي ستُسجَّل:</div><div class="flex flex-wrap gap-1.5">${chips.join("")}</div>`;
+          }
+        } else {
+          const gLabel = f.grade === "__NEW__" ? extra.newGradeLabel.trim() : f.grade;
+          const dup = findDup(gLabel);
+          if (dup) cpv.innerHTML = `<span class="text-rose-600 font-semibold">${ic("circle-alert")} هذا الكتاب مسجّل بالفعل في ${esc(gLabel)} بكود <b class="num">${esc(dup.Book_ID)}</b> (${esc(dup.Book_Name)}) — عدّله بدلاً من تكراره.</span>`;
+          else if (id) cpv.innerHTML = `الكود: <b class="num">${esc(x.Book_ID)}</b>`;
+          else if (f.grade === "__NEW__" && gLabel) cpv.innerHTML = `<span class="text-brand-800 font-semibold">صف جديد «${esc(gLabel)}» (${esc(extra.newGradeStage)}) ← يُولَّد الكود تلقائياً عند الحفظ.</span>`;
+          else {
+            const gObj = grades.find(g => g.label === gLabel);
+            cpv.innerHTML = gObj ? `الكود التلقائي التالي للصف (${esc(gObj.label)}): <b class="num text-brand-800">${esc(nextCodePreview(gObj.code, A().books))}</b>` : "يُولَّد الكود تلقائياً من الصف (مثل P4-012) دون تكرار.";
+          }
+        }
       }
+    },
+    validate: v => {
+      const isSeries = !id && v.regMode === "series";
+      if (isSeries && !extra.grades.length) { toast("اختر صفاً واحداً على الأقل من صفوف السلسلة", "warning"); return false; }
+      if (!isSeries && !v.grade) { toast("اختر الصف الدراسي", "warning"); return false; }
+      if (!isSeries && v.grade === "__NEW__" && extra.newGradeLabel.trim().length < 2) { toast("أدخل اسم الصف الدراسي الجديد", "warning"); return false; }
+      if (v.publisher === "__NEW__" && extra.newPublisher.trim().length < 2) { toast("أدخل اسم دار النشر الجديدة", "warning"); return false; }
+      if (v.subject === "__NEW__" && extra.newSubject.trim().length < 2) { toast("أدخل اسم المادة الجديدة", "warning"); return false; }
+      if (v.bookPart === "__NEW__" && !extra.newBookPart.trim()) { toast("أدخل اسم جزء الكتاب الجديد", "warning"); return false; }
+      return true;
     }
   });
-  if (v) { delete v._pv; v.bookId = id || ""; await act("SAVE_BOOK", v); }
+  if (!v) return;
+  const isSeries = !id && v.regMode === "series";
+  delete v._pv; delete v._gradeExtra; delete v._pubSubExtra; delete v._partExtra; delete v.regMode;
+  v.bookId = id || "";
+  if (isSeries) { v.grades = extra.grades; v.grade = ""; }
+  if (v.grade === "__NEW__") { v.newGradeLabel = extra.newGradeLabel.trim(); v.newGradeStage = extra.newGradeStage; v.newGradeCode = extra.newGradeCode.trim(); }
+  if (v.publisher === "__NEW__") v.newPublisher = extra.newPublisher.trim();
+  if (v.subject === "__NEW__") v.newSubject = extra.newSubject.trim();
+  if (v.bookPart === "__NEW__") v.newBookPart = extra.newBookPart.trim();
+  await act("SAVE_BOOK", v);
+}
+on("bookForm", id => openBookModal(id, null));
+on("bookClone", id => openBookModal(null, id));
+on("bookDel", id => {
+  const b = A().books.find(x => x.Book_ID === id) || {};
+  return act("DELETE_BOOK", { bookId: id }, { title: "حذف كتاب", message: `سيتم حذف الكتاب «${b.Book_Name || id}» (${id} · ${b.Grade || ""}) نهائياً من الكتالوج.\nالحذف متاح فقط لكتاب بلا حجوزات أو حركات مخزن أو فواتير. متابعة؟`, ok: "حذف", tone: "danger" });
 });
 on("importBooks", async () => {
   const v = await UI.form({ title: "استيراد الكتالوج", wide: true, intro: "انسخ الصفوف من Excel والصقها هنا. الأعمدة بالترتيب:<br><b>الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، سعر الغلاف، خصم المكتبة %</b>",
@@ -594,7 +725,7 @@ Router.add("/a/settings", view => {
 // [الدور، الاسم، اختصار للموبايل، باقي الاسم للشاشات الأكبر]
 const PERM_ROLES = [["Coordinator", "مسؤول المبادرة", "مسؤول", " المبادرة"], ["Finance", "أمين الصندوق", "الصندوق", ""], ["Warehouse", "أمين المخزن", "المخزن", ""]];
 const PERM_GROUPS = [
-  ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"], ["DELETE_SUPPLIER", "حذف مكتبة"]]],
+  ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["DELETE_BOOK", "حذف كتاب من الكتالوج"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"], ["DELETE_SUPPLIER", "حذف مكتبة"]]],
   ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["DELETE_PHASE", "حذف مرحلة"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"]]],
   ["التوزيع والتسليم", [["RUN_ALLOCATION_ENGINE", "تشغيل التوزيع بالأسبقية"], ["MANUAL_ALLOCATION_OVERRIDE", "تعديل التوزيع يدوياً"], ["CARRY_WAITLIST_TO_PHASE", "ترحيل المنتظرين"], ["EXECUTE_BOOK_DELIVERY", "تسليم الكتب"], ["CANCEL_UNDELIVERED_QTY", "إلغاء كمية لم تُسلَّم"], ["RECORD_BOOK_RETURN", "مرتجعات الموظفين"], ["RECORD_STOCK_ADJUSTMENT", "تسويات المخزن"]]],
   ["الخزينة والفواتير", [["RECORD_EMPLOYEE_PAYMENT", "تحصيل وإصدار إيصال"], ["VOID_EMPLOYEE_PAYMENT", "إلغاء إيصال"], ["REFUND_EMPLOYEE_CREDIT", "رد رصيد لموظف"], ["CUSTOMIZE_EMP_INSTALLMENTS", "تعديل خطة الأقساط"], ["ADJUST_EMP_INVOICE", "تعديل الفاتورة (خصم/إضافة)"], ["DELETE_EMP_INVOICE", "حذف فاتورة"], ["RECORD_SUPPLIER_PAYMENT", "السداد للمكتبة"], ["RECORD_INITIATIVE_EXPENSE", "المصروفات"], ["CLOSE_CASH_DAY", "إقفال الخزينة اليومي"]]]
@@ -1273,7 +1404,7 @@ on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEd
 
 // ============================================================ سجل التعديلات
 const AUD_MOD = { Reservations: "الحجوزات", ReservationItems: "بنود الحجز", Invoices: "الفواتير", Payments: "الإيصالات", Installments: "الأقساط", Catalog: "الكتب", Settings: "الإعدادات", Phases: "المراحل", PO_Snapshot: "طلب التوريد", Supplier_Invoices: "فواتير المكتبة", Supplier: "حساب المكتبة", Suppliers: "المكتبات", Allocation: "التوزيع", Delivery: "التسليم", Returns: "المرتجعات", Inventory: "المخزن", Expenses: "المصروفات", Cash: "الخزينة", Employees: "الموظفون", Auth: "الدخول" };
-const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
+const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", DELETE_BOOK: "حذف كتاب من الكتالوج", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
 const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "إجمالي الغلاف", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "الغلاف", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
 const AUD_TONE = a => /DELETE|VOID|REMOVE|CANCEL/.test(a) ? "red" : /ADJUST|DECREASE|CUSTOM|SET_STATUS|PERMISSION|SETTING/.test(a) ? "amber" : /ON_BEHALF|MANUAL/.test(a) ? "blue" : "green";
 Q.aud = Q.aud || { module: "", q: "", days: 7 };

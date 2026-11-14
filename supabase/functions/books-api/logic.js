@@ -556,6 +556,7 @@ const ACTION_ACL = {
   SAVE_SUPPLIER: ["Coordinator"],
   DELETE_SUPPLIER: ["Coordinator"],
   SAVE_BOOK: ["Coordinator"],
+  DELETE_BOOK: ["Coordinator"],
   BULK_IMPORT_BOOKS: ["Coordinator"],
   BULK_PRICE_BOOKS: ["Coordinator"],
   SET_BOOK_COVER: ["Coordinator"],
@@ -639,6 +640,7 @@ function callServerApi(action, payload, sessionToken) {
       case "POST_ANNOUNCEMENT": return E.postAnnouncement(session, payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
       case "SAVE_BOOK": return E.saveBook(session, payload);
+      case "DELETE_BOOK": return E.deleteBook(session, payload);
       case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
       case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
       case "SET_PUBLISHER_LOGO": return E.setPublisherLogo(session, payload.publisher, payload.url);
@@ -838,18 +840,18 @@ const OperationsEngine = {
   kidsOf_: function(emp) {
     let o = null; try { o = JSON.parse(emp.Kids_JSON || "null"); } catch (e) { o = null; }
     if (!o || !Array.isArray(o.kids)) return [];
-    const labels = SYSTEM_CONFIG.CATALOG.GRADES.map(g => g.label), yrs = Math.max(0, this.schoolYear_() - Util.num(o.y || this.schoolYear_()));
+    const labels = this.gradesList_().map(g => g.label), yrs = Math.max(0, this.schoolYear_() - Util.num(o.y || this.schoolYear_()));
     return o.kids.map(k => { const i = labels.indexOf(k.grade); if (!yrs || i < 0) return Object.assign({}, k, { promoted: 0 });
       const j = i + yrs; return Object.assign({}, k, { grade: j < labels.length ? labels[j] : "", graduated: j >= labels.length, promoted: yrs }); });
   },
   saveMyKids: function(empId, kids) {
-    const S = this.S(), lists = SYSTEM_CONFIG.CATALOG;
+    const S = this.S(), lists = SYSTEM_CONFIG.CATALOG, grades = this.gradesList_();
     Util.require(Array.isArray(kids) && kids.length <= 12, "الحد الأقصى 12 (أبناء وأقارب).");
     // rel = صلة القرابة لقريب (كتبه تُسجَّل باسمه كمستفيد)، وفارغة لأبناء الموظف
     const clean = kids.map(k => ({ name: Util.str(k.name).replace(/[|<>—]/g, " ").slice(0, 30), gender: k.gender === "g" ? "g" : "b",
       grade: Util.str(k.grade), type: Util.str(k.type), rel: Util.str(k.rel).replace(/[|<>—]/g, " ").slice(0, 20) }));
     clean.forEach((k, i) => Util.require(!k.rel || k.name, "اكتب اسم القريب رقم " + (i + 1) + "."));
-    clean.forEach((k, i) => { Util.require(lists.GRADES.some(g => g.label === k.grade), "اختر صف الابن رقم " + (i + 1) + "."); Util.require(!k.type || lists.SCHOOL_TYPES.indexOf(k.type) !== -1, "نوع مدرسة غير صحيح."); });
+    clean.forEach((k, i) => { Util.require(grades.some(g => g.label === k.grade), "اختر صف الابن رقم " + (i + 1) + "."); Util.require(!k.type || lists.SCHOOL_TYPES.indexOf(k.type) !== -1, "نوع مدرسة غير صحيح."); });
     const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === Util.str(empId));
     Util.require(emp, "الحساب غير موجود.");
     DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Kids_JSON: JSON.stringify({ y: this.schoolYear_(), kids: clean }) });
@@ -874,7 +876,7 @@ const OperationsEngine = {
     return {
       success: true,
       activePhase: active, phases: phases,
-      catalog: { grades: SYSTEM_CONFIG.CATALOG.GRADES, schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES },
+      catalog: { grades: this.gradesList_(), schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES },
       settings: {
         UNIFIED_EMP_DISCOUNT_PCT: settings.UNIFIED_EMP_DISCOUNT_PCT, MAX_INSTALLMENT_COUNT: settings.MAX_INSTALLMENT_COUNT,
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
@@ -1271,11 +1273,33 @@ const OperationsEngine = {
     });
   },
 
+  /** الصفوف الدراسية (الأصلية + أي صفوف إضافية مسجلة في الإعداد BOOK_GRADES) */
+  gradesList_: function() {
+    const base = SYSTEM_CONFIG.CATALOG.GRADES.slice();
+    const seenL = {}, seenC = {};
+    base.forEach(g => { seenL[g.label] = 1; seenC[g.code.toUpperCase()] = 1; });
+    try {
+      const row = DB_Engine.getAllRecords(this.S().SETTINGS).find(r => r.Setting_Key === "BOOK_GRADES");
+      const arr = row && row.Setting_Value ? JSON.parse(String(row.Setting_Value)) : [];
+      if (Array.isArray(arr)) arr.forEach(g => {
+        const label = Util.str(g && g.label), code = Util.str(g && g.code).toUpperCase(), stage = Util.str(g && g.stage) || "مرحلة أخرى";
+        if (label && code && !seenL[label] && !seenC[code]) { seenL[label] = 1; seenC[code] = 1; base.push({ code: code, label: label, stage: stage }); }
+      });
+    } catch (e) { /* */ }
+    return base;
+  },
+
+  upsertSettingRow_: function(session, key, val, type, desc) {
+    const S = this.S(), row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
+    const rec = { Setting_Key: key, Setting_Value: val, Data_Type: type || "STRING", Description: desc || (row ? row.Description : key), Updated_At: Util.now(), Updated_By: Util.actor(session) };
+    if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", key, rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
+  },
+
   /** قوائم الكتالوج (الثابتة + القابلة للتعديل من الإعدادات) */
   catalogLists_: function() {
     const st = getSettings_();
     const list = k => Util.str(st[k]).split(/[,،]/).map(x => x.trim()).filter(Boolean);
-    return { grades: SYSTEM_CONFIG.CATALOG.GRADES, schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
+    return { grades: this.gradesList_(), schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
       publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS") };
   },
 
@@ -1356,52 +1380,193 @@ const OperationsEngine = {
       const reqId = Util.str(payload.bookId);
       const existing = reqId ? books.find(b => Util.str(b.Book_ID).toUpperCase() === reqId.toUpperCase()) : null;
       if (reqId) Util.require(existing, "الكتاب المطلوب تعديله غير موجود (" + reqId + ").");
-      const grade = lists.grades.find(g => g.label === Util.str(payload.grade));
-      Util.require(grade, "اختر الصف الدراسي من القائمة.");
+
+      // إضافة دار نشر أو مادة أو جزء أو صف دراسي جديد مباشرة أثناء تسجيل الكتاب
+      const cleanName = v => Util.str(v).replace(/[,،|]/g, " ").replace(/\s+/g, " ").trim();
+      const newPub = cleanName(payload.newPublisher);
+      if (newPub || payload.publisher === "__NEW__") {
+        Util.require(newPub.length >= 2, "أدخل اسم دار النشر الجديدة (حرفان على الأقل).");
+        if (lists.publishers.indexOf(newPub) === -1) {
+          lists.publishers.push(newPub);
+          this.upsertSettingRow_(session, "BOOK_PUBLISHERS", lists.publishers.join("،"), "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)");
+        }
+      }
+      const newSub = cleanName(payload.newSubject);
+      if (newSub || payload.subject === "__NEW__") {
+        Util.require(newSub.length >= 2, "أدخل اسم المادة الجديدة (حرفان على الأقل).");
+        if (lists.subjects.indexOf(newSub) === -1) {
+          lists.subjects.push(newSub);
+          this.upsertSettingRow_(session, "BOOK_SUBJECTS", lists.subjects.join("،"), "STRING", "قائمة المواد في نموذج الكتاب (مفصولة بفاصلة)");
+        }
+      }
+      const newPart = cleanName(payload.newBookPart);
+      if (newPart || payload.bookPart === "__NEW__") {
+        Util.require(newPart.length >= 1, "أدخل اسم جزء الكتاب الجديد.");
+        if (lists.parts.indexOf(newPart) === -1) {
+          lists.parts.push(newPart);
+          this.upsertSettingRow_(session, "BOOK_PARTS", lists.parts.join("،"), "STRING", "أجزاء الكتاب: شرح، أسئلة، تدريبات... (مفصولة بفاصلة)");
+        }
+      }
+      let addedGrade = null;
+      const newGradeLabel = cleanName(payload.newGradeLabel);
+      if (newGradeLabel || payload.grade === "__NEW__") {
+        Util.require(newGradeLabel.length >= 2, "أدخل اسم الصف الدراسي الجديد.");
+        const gStage = cleanName(payload.newGradeStage) || "المرحلة الابتدائية";
+        addedGrade = lists.grades.find(g => g.label === newGradeLabel);
+        if (!addedGrade) {
+          let gCode = Util.str(payload.newGradeCode).toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 6);
+          const usedCodes = {}; lists.grades.forEach(g => { usedCodes[g.code.toUpperCase()] = 1; });
+          if (gCode) Util.require(!usedCodes[gCode], "بادئة الكود (" + gCode + ") مستخدمة لصف آخر.");
+          if (!gCode) {
+            const stPre = /أطفال|تمهيد|تأسيس|كي جي/i.test(gStage + " " + newGradeLabel) ? "KG" : /ابتدائ/i.test(gStage + " " + newGradeLabel) ? "P" : /إعداد/i.test(gStage + " " + newGradeLabel) ? "M" : /ثانو/i.test(gStage + " " + newGradeLabel) ? "S" : "G";
+            let gn = 1;
+            while (usedCodes[stPre + gn]) gn++;
+            gCode = stPre + gn;
+          }
+          addedGrade = { code: gCode, label: newGradeLabel, stage: gStage };
+          lists.grades.push(addedGrade);
+          const customGrades = lists.grades.filter(g => !SYSTEM_CONFIG.CATALOG.GRADES.some(bg => bg.label === g.label));
+          this.upsertSettingRow_(session, "BOOK_GRADES", JSON.stringify(customGrades), "JSON", "صفوف دراسية إضافية [{code,label,stage}]");
+        }
+      }
+
       const types = String(payload.schoolTypes || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
       Util.require(types.length && types.every(t => lists.schoolTypes.indexOf(t) !== -1), "اختر نوع المدرسة من القائمة.");
-      const publisher = Util.str(payload.publisher), subject = Util.str(payload.subject), part = Util.str(payload.bookPart);
-      Util.require(lists.publishers.indexOf(publisher) !== -1, "اختر الناشر من القائمة (يمكن إضافة ناشر جديد من الإعدادات).");
-      Util.require(lists.subjects.indexOf(subject) !== -1, "اختر المادة من القائمة (يمكن إضافة مادة جديدة من الإعدادات).");
+      const publisher = newPub || Util.str(payload.publisher);
+      const subject = newSub || Util.str(payload.subject);
+      const part = newPart || (payload.bookPart === "__NEW__" ? "" : Util.str(payload.bookPart));
+      Util.require(lists.publishers.indexOf(publisher) !== -1, "اختر الناشر من القائمة (أو أضف دار نشر جديدة).");
+      Util.require(lists.subjects.indexOf(subject) !== -1, "اختر المادة من القائمة (أو أضف مادة جديدة).");
       Util.require(!part || lists.parts.indexOf(part) !== -1, "اختر جزء الكتاب من القائمة.");
-      const id = existing ? existing.Book_ID : this.nextBookCode_(grade.code, books);
-      const priced = Util.num(payload.coverPrice) > 0;
-      const base = {
-        Book_ID: id, Book_Name: this.bookDisplayName_(publisher, subject, part, types), Stage: grade.stage, Grade: grade.label,
-        Subject: subject, Publisher: publisher, School_Types: types.join("،"), Book_Part: part
-      };
-      const dup = this.findDuplicateBook_(books, base, existing ? existing.Book_ID : "");
-      Util.require(!dup, "هذا الكتاب مسجّل بالفعل في (" + grade.label + ") بكود " + (dup ? dup.Book_ID + " — " + dup.Book_Name : "") + ". عدّل الكتاب الموجود بدلاً من تكراره.");
-      let obj, msg;
-      if (priced) {
-        const sup = this.mainSupplier_(); // كل الكتب تتبع المكتبة الرئيسية المسجلة
-        Util.require(sup, "سجّل المكتبة الرئيسية أولاً من صفحة المكتبات.");
-        const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
-        const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : sup.Volume_Discount_Pct;
-        const p = FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct);
-        let status = payload.bookStatus || (existing ? existing.Book_Status : "Available");
-        if (status === "Pricing") status = "Available"; // دخل السعر: يُتاح للحجز
-        obj = Object.assign(base, {
-          Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
-          Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
-          Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
-          Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice, Book_Status: status
-        });
-        const warn = p.unitSurplusMargin < 0 ? " تنبيه: هذا الكتاب يُباع بخسارة " + Math.abs(p.unitSurplusMargin) + " ج.م للنسخة." : "";
-        msg = "تم حفظ الكتاب " + id + " بسعر موظف " + p.empSellingPrice + " ج.م." + warn;
+
+      // تحديد الصف أو سلسلة الصفوف المستهدفة
+      let rawGrades = [];
+      if (existing) {
+        rawGrades = [addedGrade ? addedGrade.label : Util.str(payload.grade)];
       } else {
-        obj = Object.assign(base, {
-          Supplier_ID: (this.mainSupplier_() || {}).Supplier_ID || "", Cover_Price: "", Supplier_Discount_Pct: "",
+        if (Array.isArray(payload.grades) && payload.grades.length) rawGrades = payload.grades.map(Util.str).filter(Boolean);
+        else if (Util.str(payload.grades)) rawGrades = String(payload.grades).split(/[,،|]/).map(x => x.trim()).filter(Boolean);
+        else if (addedGrade) rawGrades = [addedGrade.label];
+        else if (Util.str(payload.grade) && payload.grade !== "__NEW__") rawGrades = [Util.str(payload.grade)];
+        if (addedGrade && rawGrades.indexOf(addedGrade.label) === -1) rawGrades.push(addedGrade.label);
+      }
+      const seenG = {};
+      const targetGrades = [];
+      rawGrades.forEach(gl => {
+        if (!gl || gl === "__NEW__" || seenG[gl]) return;
+        seenG[gl] = 1;
+        const gObj = lists.grades.find(g => g.label === gl);
+        Util.require(gObj, "الصف الدراسي غير معروف: " + gl);
+        targetGrades.push(gObj);
+      });
+      Util.require(targetGrades.length > 0, "اختر الصف الدراسي (أو صفوف السلسلة) من القائمة.");
+
+      const priced = Util.num(payload.coverPrice) > 0;
+      const sup = this.mainSupplier_(); // كل الكتب تتبع المكتبة الرئيسية المسجلة
+      if (priced) Util.require(sup, "سجّل المكتبة الرئيسية أولاً من صفحة المكتبات.");
+      const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
+      const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : (sup ? sup.Volume_Discount_Pct : 0);
+      const pricing = priced ? FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct) : null;
+      const dispName = this.bookDisplayName_(publisher, subject, part, types);
+      const buildBookObj = (id, gObj, prevStatus) => {
+        const base = {
+          Book_ID: id, Book_Name: dispName, Stage: gObj.stage, Grade: gObj.label,
+          Subject: subject, Publisher: publisher, School_Types: types.join("،"), Book_Part: part
+        };
+        if (priced) {
+          let status = payload.bookStatus || prevStatus || "Available";
+          if (status === "Pricing") status = "Available";
+          return Object.assign(base, {
+            Supplier_ID: sup.Supplier_ID, Cover_Price: pricing.coverPrice,
+            Supplier_Discount_Pct: pricing.supplierDiscountPct, Initial_Purchase_Price: pricing.initialPurchasePrice,
+            Volume_Discount_Share_Pct: pricing.volumeDiscountSharePct, Standard_Net_Cost: pricing.standardNetCost,
+            Emp_Discount_Pct: pricing.empDiscountPct, Emp_Selling_Price: pricing.empSellingPrice, Book_Status: status
+          });
+        }
+        return Object.assign(base, {
+          Supplier_ID: (sup || {}).Supplier_ID || "", Cover_Price: "", Supplier_Discount_Pct: "",
           Initial_Purchase_Price: "", Volume_Discount_Share_Pct: "", Standard_Net_Cost: "", Emp_Discount_Pct: "", Emp_Selling_Price: "",
           Book_Status: "Pricing"
         });
-        msg = "تم حفظ الكتاب " + id + " بحالة «جاري التسعير» — لن يُتاح للحجز حتى يُدخل سعره.";
+      };
+
+      if (existing) {
+        const gObj = targetGrades[0];
+        const obj = buildBookObj(existing.Book_ID, gObj, existing.Book_Status);
+        const dup = this.findDuplicateBook_(books, obj, existing.Book_ID);
+        Util.require(!dup, "هذا الكتاب مسجّل بالفعل في (" + gObj.label + ") بكود " + (dup ? dup.Book_ID + " — " + dup.Book_Name : "") + ". عدّل الكتاب الموجود بدلاً من تكراره.");
+        DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", existing.Book_ID, obj);
+        this.assignBooksToMainSupplier_();
+        DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", existing.Book_ID, existing, obj);
+        const warn = pricing && pricing.unitSurplusMargin < 0 ? " تنبيه: هذا الكتاب يُباع بخسارة " + Math.abs(pricing.unitSurplusMargin) + " ج.م للنسخة." : "";
+        const msg = priced
+          ? "تم حفظ الكتاب " + existing.Book_ID + " بسعر موظف " + pricing.empSellingPrice + " ج.م." + warn
+          : "تم حفظ الكتاب " + existing.Book_ID + " بحالة «جاري التسعير» — لن يُتاح للحجز حتى يُدخل سعره.";
+        return { success: true, message: msg, book: obj, books: [obj] };
       }
-      if (existing) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, obj);
-      else DB_Engine.insertRecordsBatch(S.BOOKS, [obj]);
+
+      // إضافة كتاب جديد أو سلسلة متكاملة لعدة صفوف دفعة واحدة
+      const toInsert = [], skipped = [];
+      targetGrades.forEach(gObj => {
+        const probe = { Grade: gObj.label, Book_Name: dispName, Publisher: publisher, Subject: subject, Book_Part: part, School_Types: types.join("،") };
+        const dup = this.findDuplicateBook_(books, probe, "");
+        if (dup) {
+          if (targetGrades.length === 1) {
+            Util.require(false, "هذا الكتاب مسجّل بالفعل في (" + gObj.label + ") بكود " + dup.Book_ID + " — " + dup.Book_Name + ". عدّل الكتاب الموجود بدلاً من تكراره.");
+          }
+          skipped.push(gObj.label + " (" + dup.Book_ID + ")");
+          return;
+        }
+        const id = this.nextBookCode_(gObj.code, books);
+        const obj = buildBookObj(id, gObj, null);
+        books.push(obj);
+        toInsert.push(obj);
+      });
+      Util.require(toInsert.length > 0, "جميع صفوف السلسلة المختارة مسجّل بها هذا الكتاب بالفعل: " + skipped.join("، ") + ".");
+      DB_Engine.insertRecordsBatch(S.BOOKS, toInsert);
       this.assignBooksToMainSupplier_();
-      DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", id, existing, obj);
-      return { success: true, message: msg, book: obj };
+      toInsert.forEach(b => DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_BOOK", b.Book_ID, null, b));
+      const warn = pricing && pricing.unitSurplusMargin < 0 ? " تنبيه: يُباع بخسارة " + Math.abs(pricing.unitSurplusMargin) + " ج.م للنسخة." : "";
+      let msg;
+      if (toInsert.length === 1) {
+        msg = priced
+          ? "تم حفظ الكتاب " + toInsert[0].Book_ID + " بسعر موظف " + pricing.empSellingPrice + " ج.م." + warn
+          : "تم حفظ الكتاب " + toInsert[0].Book_ID + " بحالة «جاري التسعير» — لن يُتاح للحجز حتى يُدخل سعره.";
+      } else {
+        msg = "تم تسجيل سلسلة (" + dispName + ") لعدد " + toInsert.length + " صفوف بأكواد: " + toInsert.map(b => b.Grade + " (" + b.Book_ID + ")").join("، ") + "." + warn;
+      }
+      if (skipped.length) msg += " (تخطي المسجّل مسبقاً: " + skipped.join("، ") + ")";
+      return { success: true, message: msg, book: toInsert[0], books: toInsert, skipped: skipped };
+    });
+  },
+
+  /** حذف كتاب مسجل: مسموح فقط إن لم يرتبط بحجوزات قائمة أو طلبات توريد أو فواتير مكتبة أو مخزن أو تسليم */
+  deleteBook: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), id = Util.str(payload.bookId);
+      const books = DB_Engine.getAllRecords(S.BOOKS);
+      const book = books.find(b => Util.str(b.Book_ID).toUpperCase() === id.toUpperCase());
+      Util.require(book, "الكتاب غير موجود: " + id);
+      const bid = Util.str(book.Book_ID);
+      const used = [];
+      const activeRes = DB_Engine.getAllRecords(S.RES_ITEMS).filter(i => Util.str(i.Book_ID) === bid && !this.isCancelledItem_(i)).length;
+      if (activeRes) used.push("حجوزات قائمة (" + activeRes + ")");
+      const po = DB_Engine.getAllRecords(S.PO_SNAPSHOT).filter(r => Util.str(r.Book_ID) === bid).length;
+      if (po) used.push("طلبات توريد (" + po + ")");
+      const sinv = DB_Engine.getAllRecords(S.SUP_INV_ITEMS).filter(r => Util.str(r.Book_ID) === bid).length;
+      if (sinv) used.push("فواتير مكتبة (" + sinv + ")");
+      const inv = DB_Engine.getAllRecords(S.INVENTORY).filter(r => Util.str(r.Book_ID) === bid).length;
+      if (inv) used.push("حركات مخزن (" + inv + ")");
+      const del = DB_Engine.getAllRecords(S.DELIVERY_RETURNS).filter(r => Util.str(r.Book_ID) === bid).length;
+      if (del) used.push("تسليم/مرتجعات (" + del + ")");
+      Util.require(!used.length, "لا يمكن حذف الكتاب (" + bid + " — " + book.Book_Name + ") لارتباطه بـ: " + used.join("، ") + ". يمكنك تغيير حالته إلى «ملغى» أو «موقوف مؤقتاً».");
+      const allItems = DB_Engine.getAllRecords(S.RES_ITEMS);
+      if (allItems.some(i => Util.str(i.Book_ID) === bid)) {
+        DB_Engine.overwriteTableData(S.RES_ITEMS, allItems.filter(i => Util.str(i.Book_ID) !== bid));
+      }
+      DB_Engine.overwriteTableData(S.BOOKS, books.filter(b => Util.str(b.Book_ID) !== bid));
+      DB_Engine.logAudit(session.userId, session.role, "Catalog", "DELETE_BOOK", bid, book, null);
+      return { success: true, message: "تم حذف الكتاب (" + bid + " — " + book.Book_Name + ")." };
     });
   },
 

@@ -349,6 +349,55 @@ ok(api('SAVE_PHASE', { phaseName: 'مرحلة مؤقتة', startDate: '2027-05-0
 const tempPh = rows(S.PHASES).find(p => p.Phase_Name === 'مرحلة مؤقتة');
 ok(api('DELETE_PHASE', { phaseId: tempPh.Phase_ID }, coord), 'delete empty phase');
 assert.ok(!rows(S.PHASES).some(p => p.Phase_ID === tempPh.Phase_ID)); passed++;
+// إضافة دار نشر جديدة + مادة جديدة + جزء جديد + صف دراسي جديد مباشرة أثناء تسجيل الكتاب
+const customGradeBook = ok(api('SAVE_BOOK', {
+  newGradeLabel: 'تمهيدي',
+  newGradeStage: 'رياض الأطفال',
+  newGradeCode: 'KG0',
+  newPublisher: 'الأضواء',
+  newSubject: 'مهارات مهنية',
+  newBookPart: 'مراجعة نهائية',
+  schoolTypes: 'حكومي',
+  coverPrice: 95,
+  supplierDiscountPct: 20
+}, coord), 'save book with inline new grade/publisher/subject/part');
+assert.strictEqual(customGradeBook.book.Book_ID, 'KG0-001');
+assert.strictEqual(customGradeBook.book.Grade, 'تمهيدي');
+assert.strictEqual(customGradeBook.book.Stage, 'رياض الأطفال');
+assert.strictEqual(customGradeBook.book.Publisher, 'الأضواء');
+assert.strictEqual(customGradeBook.book.Subject, 'مهارات مهنية');
+assert.strictEqual(customGradeBook.book.Book_Part, 'مراجعة نهائية');
+assert.strictEqual(customGradeBook.book.Supplier_ID, mainSupId); passed++;
+// تسجيل سلسلة متكاملة: كتاب الأضواء عربي للصفوف من الأول حتى السادس الابتدائي دفعة واحدة
+const seriesGrades = ['1 ابتدائي', '2 ابتدائي', '3 ابتدائي', '4 ابتدائي', '5 ابتدائي', '6 ابتدائي'];
+const seriesRes = ok(api('SAVE_BOOK', {
+  grades: seriesGrades,
+  schoolTypes: 'حكومي،أزهر',
+  publisher: 'الأضواء',
+  subject: 'عربي',
+  bookPart: 'شرح',
+  coverPrice: 110,
+  supplierDiscountPct: 20
+}, coord), 'save 6-grade primary series');
+assert.strictEqual(seriesRes.books.length, 6, '6 books created for grades 1..6 primary');
+assert.deepStrictEqual(seriesRes.books.map(b => b.Book_ID), ['P1-001', 'P2-001', 'P3-001', 'P4-003', 'P5-001', 'P6-001']); passed++;
+// إعادة تسجيل نفس السلسلة مع إضافة صف جديد (1 إعدادي): يتخطى الـ 6 المسجلة ويضيف الصف الجديد فقط بكود جديد
+const partialSeries = ok(api('SAVE_BOOK', {
+  grades: [...seriesGrades, '1 إعدادي'],
+  schoolTypes: 'حكومي،أزهر',
+  publisher: 'الأضواء',
+  subject: 'عربي',
+  bookPart: 'شرح',
+  coverPrice: 115,
+  supplierDiscountPct: 20
+}, coord), 'partial series skips existing grades and adds new grade');
+assert.strictEqual(partialSeries.books.length, 1);
+assert.strictEqual(partialSeries.books[0].Book_ID, 'M1-001');
+assert.strictEqual(partialSeries.skipped.length, 6); passed++;
+// حذف كتاب مسجل غير مرتبط بحركات، ومنع حذف كتاب مرتبط بحجوزات/مخزون/فواتير
+fail(api('DELETE_BOOK', { bookId: 'BK-101' }, coord), 'cannot delete book linked to reservations/inventory', /لارتباطه/);
+ok(api('DELETE_BOOK', { bookId: 'KG0-001' }, coord), 'delete unused registered book');
+assert.ok(!rows(S.BOOKS).some(b => b.Book_ID === 'KG0-001'), 'deleted book removed from 05_Books'); passed++;
 
 console.log('\nALL PASSED:', passed, 'checks');
 

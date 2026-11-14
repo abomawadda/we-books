@@ -317,6 +317,7 @@ const UI = {
         const v = collect();
         const miss = o.fields.find(fd => fd.required && String(v[fd.name] || "").trim() === "");
         if (miss) { toast("أكمل الحقل: " + miss.label, "warning"); const el = form.elements[miss.name]; if (el && el.focus) el.focus(); return; }
+        if (o.validate && !o.validate(v, form)) return;
         done = true; res(v); m.close();
       };
       form.onsubmit = e => { e.preventDefault(); submit(); };
