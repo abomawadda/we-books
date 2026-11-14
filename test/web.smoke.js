@@ -188,6 +188,17 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(!d.getElementById('appShell').classList.contains('side-collapsed'), 'sidebar re-expanded via header toggle');
   check(d.querySelectorAll('#booksList .act-ic').length >= 3 && d.querySelector('#booksList .col-act'), 'icon-only action buttons (.act-ic) and sticky action column (.col-act) rendered');
 
+  // فحص ترتيب عرض الكتب في الجدول: الناشر ثم المادة ثم الصف ثم الكود
+  const renderedBookIds = Array.from(d.querySelectorAll('#booksList tbody tr[data-id]')).map(tr => tr.dataset.id);
+  const admBooks = w.eval('APP').adm.books;
+  const renderedSorted = renderedBookIds.every((id, idx) => {
+    if (idx === 0) return true;
+    const prev = admBooks.find(b => b.Book_ID === renderedBookIds[idx - 1]);
+    const curr = admBooks.find(b => b.Book_ID === id);
+    if (!prev || !curr) return true;
+    return w.eval('bookSortComparator')(prev, curr, w.eval('APP').adm.catalog) <= 0;
+  });
+  check(renderedSorted, 'books table rendered in strict Publisher -> Subject -> Grade -> Code order');
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');
@@ -199,7 +210,10 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/a/po'); check(/تغيّرت الحجوزات بعد تجميد طلب التوريد/.test(view()), 'PO page shows drift after late edit');
   await go('/a/dash'); check(/تغيّرت الحجوزات بعد طلب التوريد/.test(view()), 'dashboard alert for late edit');
   check(w.eval('APP').adm.poSnapshots.length > 0, 'PO frozen');
-  await go('/a/receive'); d.getElementById('siNo').value = 'INV-1';
+  await go('/a/receive');
+  check(d.getElementById('siVol') && d.getElementById('siVol').value === '3', 'receive defaults to 3% volume discount');
+  check(d.querySelectorAll('[data-act="siVolPreset"]').length === 4, 'receive volume discount presets rendered');
+  d.getElementById('siNo').value = 'INV-1';
   await click('[data-act="submitSI"]'); await ok(); expectNoErrorToasts('supplier invoice');
   check(w.eval('APP').adm.supInvHeaders.length === 1, 'supplier invoice recorded');
   await go('/a/alloc'); await click('[data-act="runAlloc"]'); await ok(); expectNoErrorToasts('allocation');

@@ -192,8 +192,8 @@ ok(api('RECORD_SUPPLIER_PAYMENT', { supplierId: 'SUP-01', amount: 200, docRef: '
 // 13) تقرير التصفية
 const rep = ok(api('GET_SETTLEMENT_REPORT', {}, A), 'settlement');
 console.log(JSON.stringify({ pnl: rep.pnl, supplier: rep.supplier, cash: rep.cash, stock: { qty: rep.stock.qty, value: rep.stock.value }, checklist: rep.checklist.map(c => (c.ok ? '✓ ' : '✗ ') + c.item + ': ' + c.value) }, null, 1));
-// رصيد المكتبة: 307.8 + (2×102.6=205.2) − 102.6 تالف − 200 مدفوع = 210.4
-assert.strictEqual(rep.supplier.balance, 210.4);
+// رصيد المكتبة: 307.8 + (2×108×0.97=209.52) − 102.6 تالف − 200 مدفوع = 214.72
+assert.strictEqual(rep.supplier.balance, 214.72);
 // النقدية: 28 + 222 − 111 رد − 200 − 150 = −211
 assert.strictEqual(rep.cash.expectedCashOnHand, -211);
 
@@ -410,6 +410,80 @@ assert.ok(catRes.bookLists.publishers.includes('كيان'), 'new publisher saved
 assert.ok(catRes.bookLists.subjects.includes('برمجة'), 'new subject saved in catalog lists');
 assert.ok(catRes.bookLists.parts.includes('بنك أسئلة'), 'new part saved in catalog lists');
 assert.ok(catRes.bookLists.grades.some(g => g.label === 'تمهيدي متقدم' && g.code === 'KGA'), 'new custom grade saved in catalog lists'); passed++;
+
+// 17) فحص خصم الكمية وإلغاؤه من سعر الكتب الفردي واحتسابه على إجمالي فاتورة التوريد وترتيب عرض الكتب
+// أ) جميع الكتب لا يُخصم منها أي خصم كمية فردي: Standard_Net_Cost === Initial_Purchase_Price و Volume_Discount_Share_Pct === 0
+const adminData = ok(api('GET_ADMIN_DASHBOARD_DATA', {}, adm.sessionToken), 'get admin dashboard');
+adminData.books.forEach(b => {
+  assert.strictEqual(Number(b.Volume_Discount_Share_Pct || 0), 0, `Book ${b.Book_ID} must have 0 volume discount share`);
+  if (Number(b.Cover_Price) > 0) {
+    const expectedFirst = Math.round(Number(b.Cover_Price) * (1 - Number(b.Supplier_Discount_Pct) / 100) * 100) / 100;
+    assert.strictEqual(Number(b.Standard_Net_Cost), expectedFirst, `Book ${b.Book_ID} standard net cost must equal initial purchase price`);
+    assert.strictEqual(Number(b.Initial_Purchase_Price), expectedFirst, `Book ${b.Book_ID} initial purchase price must equal price after first discount`);
+  }
+});
+passed++;
+
+// ب) فاتورة توريد جديدة بدون تحديد نسبة خصم الكمية تعتمد النسبة الافتراضية 3% للمكتبة
+const auto3Inv = ok(api('SUBMIT_SUPPLIER_INVOICE', {
+  supplierId: mainSupId,
+  phaseId: 'PH-01',
+  supplierInvoiceNo: 'INV-AUTO-3',
+  invoiceDate: '2027-01-10',
+  items: [{ bookId: 'P1-001', orderedQty: 5, receivedQty: 5, coverPrice: 110, itemDiscPct: 20 }]
+}, store), 'invoice with default 3% volume discount');
+// 5 × 88 = 440; 3% خصم كمية على إجمالي الفاتورة = 13.2; الصافي = 426.8
+assert.strictEqual(auto3Inv.invoiceHeader.Volume_Discount_Pct, 3, 'defaults to 3% invoice volume discount');
+assert.strictEqual(auto3Inv.invoiceHeader.Total_After_Item_Discount, 440);
+assert.strictEqual(auto3Inv.invoiceHeader.Volume_Discount_Amount, 13.2);
+assert.strictEqual(auto3Inv.invoiceHeader.Net_Payable_Amount, 426.8);
+assert.strictEqual(auto3Inv.invoiceItems[0].Allocated_Volume_Disc_Per_Unit, 0, 'no volume discount deducted from item line');
+assert.strictEqual(auto3Inv.invoiceItems[0].Actual_Unit_Net_Cost, 88, 'unit cost equals price after item discount');
+passed++;
+
+// ج) إمكانية تغيير نسبة خصم الكمية على الفاتورة (مثلاً 4.5% أو 0%)
+const customVolInv = ok(api('SUBMIT_SUPPLIER_INVOICE', {
+  supplierId: mainSupId,
+  phaseId: 'PH-01',
+  supplierInvoiceNo: 'INV-CUSTOM-45',
+  invoiceDate: '2027-01-11',
+  volumeDiscountPct: 4.5,
+  items: [{ bookId: 'P2-001', orderedQty: 10, receivedQty: 10, coverPrice: 110, itemDiscPct: 20 }]
+}, store), 'invoice with custom 4.5% volume discount');
+// 10 × 88 = 880; 4.5% خصم كمية = 39.6; الصافي = 840.4
+assert.strictEqual(customVolInv.invoiceHeader.Volume_Discount_Pct, 4.5);
+assert.strictEqual(customVolInv.invoiceHeader.Total_After_Item_Discount, 880);
+assert.strictEqual(customVolInv.invoiceHeader.Volume_Discount_Amount, 39.6);
+assert.strictEqual(customVolInv.invoiceHeader.Net_Payable_Amount, 840.4);
+passed++;
+
+// د) التحقق من ترتيب عرض الكتب: الناشر ثم المادة ثم الصف الدراسي ثم الكود
+const catalogGrades = adminData.catalog.grades || [];
+const gradeOrder = {}; catalogGrades.forEach((g, i) => { gradeOrder[g.label] = i; });
+for (let i = 0; i < adminData.books.length - 1; i++) {
+  const b1 = adminData.books[i], b2 = adminData.books[i + 1];
+  const p1 = String(b1.Publisher || ''), p2 = String(b2.Publisher || '');
+  const pCmp = p1.localeCompare(p2, 'ar');
+  if (pCmp !== 0) {
+    assert.ok(pCmp <= 0, `Books order by Publisher failed between ${b1.Book_ID} (${p1}) and ${b2.Book_ID} (${p2})`);
+    continue;
+  }
+  const s1 = String(b1.Subject || ''), s2 = String(b2.Subject || '');
+  const sCmp = s1.localeCompare(s2, 'ar');
+  if (sCmp !== 0) {
+    assert.ok(sCmp <= 0, `Books order by Subject failed between ${b1.Book_ID} (${s1}) and ${b2.Book_ID} (${s2})`);
+    continue;
+  }
+  const r1 = gradeOrder[b1.Grade] !== undefined ? gradeOrder[b1.Grade] : 999;
+  const r2 = gradeOrder[b2.Grade] !== undefined ? gradeOrder[b2.Grade] : 999;
+  if (r1 !== r2) {
+    assert.ok(r1 <= r2, `Books order by Grade failed between ${b1.Book_ID} (${b1.Grade}) and ${b2.Book_ID} (${b2.Grade})`);
+    continue;
+  }
+  const idCmp = String(b1.Book_ID).localeCompare(String(b2.Book_ID), undefined, { numeric: true });
+  assert.ok(idCmp <= 0, `Books order by Book_ID failed between ${b1.Book_ID} and ${b2.Book_ID}`);
+}
+passed++;
 
 console.log('\nALL PASSED:', passed, 'checks');
 

@@ -2,10 +2,42 @@
  * لوحة الإدارة
  * ========================================================================== */
 "use strict";
+function bookSortComparator(a, b, catalog) {
+  const pA = String(a.Publisher || "").trim(), pB = String(b.Publisher || "").trim();
+  const pubCmp = pA.localeCompare(pB, "ar");
+  if (pubCmp !== 0) return pubCmp;
+
+  const sA = String(a.Subject || "").trim(), sB = String(b.Subject || "").trim();
+  const subCmp = sA.localeCompare(sB, "ar");
+  if (subCmp !== 0) return subCmp;
+
+  const cat = catalog || (typeof A === "function" && A() && A().catalog) || {};
+  const gList = cat.grades || [];
+  const iA = gList.findIndex(g => g.label === a.Grade || g.name === a.Grade);
+  const iB = gList.findIndex(g => g.label === b.Grade || g.name === b.Grade);
+  const rA = iA >= 0 ? iA : 999, rB = iB >= 0 ? iB : 999;
+  if (rA !== rB) return rA - rB;
+  const gradeCmp = String(a.Grade || "").localeCompare(String(b.Grade || ""), "ar");
+  if (gradeCmp !== 0) return gradeCmp;
+
+  return String(a.Book_ID || "").localeCompare(String(b.Book_ID || ""), undefined, { numeric: true, sensitivity: "base" });
+}
+
 const Admin = {
   async load() {
     const r = await call("GET_ADMIN_DASHBOARD_DATA");
     if (!r.success) { toast(r.message, "danger"); return; }
+    (r.books || []).forEach(b => {
+      if (n(b.Cover_Price) > 0) {
+        const first = r2(n(b.Cover_Price) * (1 - n(b.Supplier_Discount_Pct) / 100));
+        b.Initial_Purchase_Price = first;
+        b.Volume_Discount_Share_Pct = 0;
+        b.Standard_Net_Cost = first;
+      } else {
+        b.Volume_Discount_Share_Pct = 0;
+      }
+    });
+    (r.books || []).sort((a, b) => bookSortComparator(a, b, r.catalog));
     APP.adm = r; store.set("cache", { t: "ADMIN", d: r, p: APP.phaseId });
     if (r.brand) Brand.set(r.brand);
     if (!APP.phaseId || !r.phases.find(p => p.Phase_ID === APP.phaseId)) {
@@ -223,12 +255,10 @@ on("statusMenu", async () => {
 
 // ============================================================ الكتب والأسعار
 function bookPrice(f) {
-  const sup = A().suppliers.find(s => s.Supplier_ID === f.supplierId) || {};
   const cover = n(f.coverPrice), sd = n(f.supplierDiscountPct);
-  const vd = f.volumeDiscountSharePct === "" || f.volumeDiscountSharePct === undefined ? n(sup.Volume_Discount_Pct) : n(f.volumeDiscountSharePct);
   const ed = f.empDiscountPct === "" || f.empDiscountPct === undefined ? n(A().settingsMap.UNIFIED_EMP_DISCOUNT_PCT) : n(f.empDiscountPct);
-  const first = r2(cover * (1 - sd / 100)), cost = r2(first - Math.round(first * vd) / 100), emp = ceil(cover * (1 - ed / 100));
-  return { first, cost, emp, margin: r2(emp - cost), vd, ed };
+  const first = r2(cover * (1 - sd / 100)), cost = first, emp = ceil(cover * (1 - ed / 100));
+  return { first, cost, emp, margin: r2(emp - cost), sd, ed };
 }
 /** عدد الحاجزين والنسخ لكل كتاب في المرحلة المختارة */
 function resCount() {
@@ -270,7 +300,7 @@ on("exportBookRes", id => { const { b } = maps(); exportCSV("حاجزو " + ((b[
 const BK_UI = {
   inlineMode: false,
   editingRow: null,
-  dirty: {}, // { bookId: { coverPrice, supplierDiscountPct, volumeDiscountSharePct, empDiscountPct, bookStatus } }
+  dirty: {}, // { bookId: { coverPrice, supplierDiscountPct, empDiscountPct, bookStatus } }
   quickOpen: false,
   qForm: { mode: "single", stage: "", grade: "4 ابتدائي", publisher: "", subject: "", bookPart: "شرح", schoolTypes: "حكومي", coverPrice: "", supplierDiscountPct: "" }
 };
@@ -280,7 +310,8 @@ function filteredBooksList() {
   return d.books.filter(x => (!q || (x.Book_ID + " " + x.Book_Name + " " + x.Grade + " " + x.Stage + " " + x.Subject + " " + x.Publisher + " " + (x.Book_Part || "")).toLowerCase().includes(q))
     && (!f.stage || x.Stage === f.stage)
     && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type))
-    && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st));
+    && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st))
+    .sort(bookSortComparator);
 }
 
 function rowDraftOf(x) {
@@ -288,7 +319,6 @@ function rowDraftOf(x) {
   return {
     coverPrice: dr && dr.coverPrice !== undefined ? dr.coverPrice : (x.Book_Status === "Pricing" && !n(x.Cover_Price) ? "" : x.Cover_Price),
     supplierDiscountPct: dr && dr.supplierDiscountPct !== undefined ? dr.supplierDiscountPct : x.Supplier_Discount_Pct,
-    volumeDiscountSharePct: dr && dr.volumeDiscountSharePct !== undefined ? dr.volumeDiscountSharePct : (x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct),
     empDiscountPct: dr && dr.empDiscountPct !== undefined ? dr.empDiscountPct : (x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct),
     bookStatus: dr && dr.bookStatus !== undefined ? dr.bookStatus : x.Book_Status
   };
@@ -626,7 +656,7 @@ on("qbSubmit", async () => {
     grade: targetGrades[0], grades: targetGrades, schoolTypes: qf.schoolTypes || "حكومي",
     publisher: qf.publisher, subject: qf.subject, bookPart: qf.bookPart || "",
     supplierId: (A().suppliers[0] || {}).Supplier_ID || "", bookStatus: "Available",
-    coverPrice: qf.coverPrice, supplierDiscountPct: qf.supplierDiscountPct
+    coverPrice: qf.coverPrice, supplierDiscountPct: qf.supplierDiscountPct, volumeDiscountSharePct: 0
   };
   const r = await call("SAVE_BOOK", payload, { block: true });
   if (r && r.success && targetGrades.length > 1 && !Array.isArray(r.books)) {
@@ -664,7 +694,7 @@ async function saveInlineBookRow(bookId, silent) {
     supplierId: b.Supplier_ID || (A().suppliers[0] || {}).Supplier_ID || "",
     bookStatus: dr.bookStatus === "Pricing" ? "Available" : (dr.bookStatus || "Available"),
     coverPrice: dr.coverPrice, supplierDiscountPct: dr.supplierDiscountPct,
-    volumeDiscountSharePct: dr.volumeDiscountSharePct, empDiscountPct: dr.empDiscountPct
+    volumeDiscountSharePct: 0, empDiscountPct: dr.empDiscountPct
   }, { block: !silent });
   if (r && r.success) delete BK_UI.dirty[bookId];
   return r;
@@ -1119,7 +1149,7 @@ async function openBookModal(id, cloneFromId) {
             ${[15, 20, 22, 25, 30].map(pct => `<button type="button" data-quick-disc="${pct}" class="qchip !px-2 !py-0.5 num">${pct}%</button>`).join("")}
           </div>
         </div>
-        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 items-end">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
           <div>
             <label class="label !text-xs" for="f_coverPrice">سعر الغلاف (ج.م)</label>
             <input id="f_coverPrice" name="coverPrice" type="number" inputmode="decimal" step="any" class="input !h-10 num font-bold text-slate-900" value="${esc(x.Cover_Price || "")}" placeholder="فارغ = جاري التسعير">
@@ -1129,14 +1159,10 @@ async function openBookModal(id, cloneFromId) {
             <input id="f_supplierDiscountPct" name="supplierDiscountPct" type="number" inputmode="decimal" step="any" class="input !h-10 num font-bold" value="${esc(x.Supplier_Discount_Pct || "")}" placeholder="%">
           </div>
           <div>
-            <label class="label !text-xs" for="f_volumeDiscountSharePct">خصم الكمية %</label>
-            <input id="f_volumeDiscountSharePct" name="volumeDiscountSharePct" type="number" inputmode="decimal" step="any" class="input !h-10 num" value="${esc(x.Volume_Discount_Share_Pct === undefined ? "" : x.Volume_Discount_Share_Pct)}" placeholder="من عقد المكتبة">
-          </div>
-          <div>
             <label class="label !text-xs" for="f_empDiscountPct">خصم الموظف %</label>
             <input id="f_empDiscountPct" name="empDiscountPct" type="number" inputmode="decimal" step="any" class="input !h-10 num" value="${esc(x.Emp_Discount_Pct === undefined ? "" : x.Emp_Discount_Pct)}" placeholder="الخصم الموحد">
           </div>
-          <div class="col-span-2 sm:col-span-1">
+          <div>
             <label class="label !text-xs" for="f_bookStatus">حالة الإتاحة</label>
             <select id="f_bookStatus" name="bookStatus" class="input !h-10 !text-xs font-semibold">
               ${[["Available", "متاح للحجز"], ["Not_Yet_Printed", "لم يُطبع بعد (يقبل الحجز)"], ["Suspended", "موقوف مؤقتاً"], ["Discontinued", "ملغى"]].map(op => `<option value="${op[0]}" ${String(op[0]) === String(x.Book_Status === "Pricing" ? "Available" : (x.Book_Status || "Available")) ? "selected" : ""}>${op[1]}</option>`).join("")}
@@ -1150,7 +1176,7 @@ async function openBookModal(id, cloneFromId) {
   // قراءة كل قيم النموذج شاملة الحقول المخصصة داخل كتل HTML
   const readForm = form => {
     const out = {};
-    ["regMode", "grade", "schoolTypes", "publisher", "subject", "bookPart", "supplierId", "bookStatus", "coverPrice", "supplierDiscountPct", "volumeDiscountSharePct", "empDiscountPct"].forEach(k => {
+    ["regMode", "grade", "schoolTypes", "publisher", "subject", "bookPart", "supplierId", "bookStatus", "coverPrice", "supplierDiscountPct", "empDiscountPct"].forEach(k => {
       const el = form.elements[k]; if (el) out[k] = el.value;
     });
     return out;
@@ -1492,13 +1518,13 @@ async function openBookModal(id, cloneFromId) {
 
       const p = bookPrice(f), el = form.querySelector("#pricePv"), cpv = form.querySelector("#bookCodePv");
       const saving = r2(n(f.coverPrice) - p.emp);
-      if (el) el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-center">${[
-        ["بعد خصم الصنف", p.first, "text-slate-800"],
-        [`صافي التكلفة (كمية ${p.vd}%)`, p.cost, "text-slate-900"],
+      if (el) el.innerHTML = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">${[
+        [`صافي تكلفة الكتاب (خصم ${p.sd}%)`, p.cost, "text-slate-900"],
         [`سعر الموظف (خصم ${p.ed}%)`, p.emp, "text-brand-800"],
         ["وفر الموظف بالنسخة", saving > 0 ? saving : 0, "text-emerald-700"],
-        ["هامش المبادرة", p.margin, p.margin < 0 ? "text-rose-600" : "text-emerald-700"]
-      ].map(c => `<div class="rounded-xl bg-white/90 ring-1 ring-brand-100/80 px-2.5 py-2"><div class="text-[10.5px] text-slate-500 font-semibold">${c[0]}</div><div class="text-base font-bold num mt-0.5 ${c[2]}">${fmt(c[1])} <span class="text-[10px] font-normal text-slate-400">ج.م</span></div></div>`).join("")}</div>`;
+        ["هامش المبادرة للنسخة", p.margin, p.margin < 0 ? "text-rose-600" : "text-emerald-700"]
+      ].map(c => `<div class="rounded-xl bg-white/90 ring-1 ring-brand-100/80 px-2.5 py-2"><div class="text-[10.5px] text-slate-500 font-semibold">${c[0]}</div><div class="text-base font-bold num mt-0.5 ${c[2]}">${fmt(c[1])} <span class="text-[10px] font-normal text-slate-400">ج.م</span></div></div>`).join("")}</div>
+      <div class="mt-2.5 text-[11.5px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border-t border-brand-100/70 pt-2"><span class="flex items-center gap-1">${ic("info", "text-brand-600")} خصم الكمية (افتراضي 3%) يُحتسب على إجمالي كل فاتورة توريد كاملة عند الاستلام وليس على سعر الكتاب الفردي.</span><span class="text-slate-500">الغلاف: <b class="num font-bold text-slate-800">${fmt(f.coverPrice || 0)}</b> ج.م</span></div>`;
 
       if (cpv) {
         const pub = cleanCatItem(f.publisher === "__NEW__" ? extra.newPublisher : f.publisher);
@@ -1600,7 +1626,7 @@ async function openBookModal(id, cloneFromId) {
     bookStatus: fv.bookStatus || "Available",
     coverPrice: fv.coverPrice,
     supplierDiscountPct: fv.supplierDiscountPct,
-    volumeDiscountSharePct: fv.volumeDiscountSharePct,
+    volumeDiscountSharePct: 0,
     empDiscountPct: fv.empDiscountPct
   };
   if (extra.addedPubs.includes(pub)) payload.newPublisher = pub;
@@ -1625,7 +1651,7 @@ async function openBookModal(id, cloneFromId) {
         Book_ID: code, Book_Name: previewBookName(pub, sub, part, payload.schoolTypes), Stage: gObj.stage, Grade: gObj.label,
         Subject: sub, Publisher: pub, Supplier_ID: payload.supplierId, School_Types: payload.schoolTypes, Book_Part: part,
         Cover_Price: payload.coverPrice, Supplier_Discount_Pct: payload.supplierDiscountPct,
-        Volume_Discount_Share_Pct: payload.volumeDiscountSharePct, Emp_Discount_Pct: payload.empDiscountPct
+        Volume_Discount_Share_Pct: 0, Emp_Discount_Pct: payload.empDiscountPct
       }] }, { block: true });
       if (rImp && rImp.success) return { success: true, message: `تم حفظ الكتاب ${code} (${gObj.label}).`, book: { Book_ID: code, Grade: gObj.label } };
     }
@@ -1838,13 +1864,13 @@ Router.add("/a/suppliers", view => {
     + (d.suppliers.length ? `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">${d.suppliers.map(s => { const x = bal[s.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 }; const due = x.inv - x.claim - x.ret - x.paid;
       const isMain = s.Supplier_ID === mainId, hasMoves = !!bal[s.Supplier_ID];
       return `<article class="card card-pad ${isMain ? "ring-2 ring-brand-400" : ""}"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
-        <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم كمية ${fmt(s.Volume_Discount_Pct)}%</span></div>
+        <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم فاتورة التوريد ${fmt(s.Volume_Discount_Pct !== undefined && s.Volume_Discount_Pct !== "" ? s.Volume_Discount_Pct : 3)}%</span></div>
         <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div>
         <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" title="حذف المكتبة" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</div></article>`; }).join("")}</div>`
       : `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.")}</div>`);
 });
 on("supplierForm", async () => {
-  const v = await UI.form({ title: "مكتبة جديدة", fields: [{ name: "supplierName", label: "اسم المكتبة", required: true }, { name: "phone", label: "الهاتف", type: "tel", cols: 1 }, { name: "volumeDiscountPct", label: "خصم الكمية %", type: "number", cols: 1 }] });
+  const v = await UI.form({ title: "مكتبة جديدة", fields: [{ name: "supplierName", label: "اسم المكتبة", required: true }, { name: "phone", label: "الهاتف", type: "tel", cols: 1 }, { name: "volumeDiscountPct", label: "خصم الكمية على إجمالي الفاتورة % (افتراضي 3%)", type: "number", value: 3, cols: 1 }] });
   if (v) await act("SAVE_SUPPLIER", v);
 });
 on("supplierDel", id => {
@@ -1989,55 +2015,155 @@ Router.add("/a/receive", view => {
   if (noPhase(view)) return;
   const d = A(), sid = Q.sup || (d.suppliers[0] || {}).Supplier_ID, sup = d.suppliers.find(x => x.Supplier_ID === sid) || {};
   const snaps = {}; d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId).forEach(p => snaps[p.Book_ID] = n(p.Outstanding_Qty));
-  const books = d.books.filter(b => b.Supplier_ID === sup.Supplier_ID).sort((x, y) => (snaps[y.Book_ID] || 0) - (snaps[x.Book_ID] || 0));
+  const books = d.books.filter(b => b.Supplier_ID === sup.Supplier_ID)
+    .sort((x, y) => (snaps[y.Book_ID] || 0) - (snaps[x.Book_ID] || 0) || bookSortComparator(x, y, d.catalog));
   const canSubmit = can("SUBMIT_SUPPLIER_INVOICE");
-  view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", "أدخل ما وصل فعلياً: السليم يدخل المخزن، والتالف مطالبة على المكتبة، وما لم يُطبع يبقى مستحقاً")
-  + `<section class="card card-pad mb-4"><div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
-      <div class="col-span-2 lg:col-span-1"><label class="label">المكتبة</label><select class="input" data-change="pickSup">${d.suppliers.map(s => `<option value="${esc(s.Supplier_ID)}" ${s.Supplier_ID === sid ? "selected" : ""}>${esc(s.Supplier_Name)}</option>`).join("")}</select></div>
-      <div><label class="label">رقم فاتورة المكتبة</label><input id="siNo" class="input"></div>
-      <div><label class="label">التاريخ</label><input id="siDate" type="date" class="input" value="${new Date().toISOString().slice(0, 10)}"></div>
-      <div><label class="label">خصم الكمية %</label><input id="siVol" type="number" class="input num" value="${n(sup.Volume_Discount_Pct)}" data-input="recalcSI"></div>
-      <div><label class="label">الصافي بفاتورة المكتبة</label><input id="siStated" type="number" class="input num" placeholder="للمطابقة"></div></div></section>
-  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const o = snaps[b.Book_ID] || 0; return `<article class="card p-4 si-row" data-id="${esc(b.Book_ID)}" data-ord="${o}">
-      <div class="flex items-start justify-between gap-2"><div class="min-w-0"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name)}</h3><div class="text-[11.5px] text-slate-400">${esc(b.Book_ID)}</div></div>
-        <div class="text-left shrink-0"><div class="text-[11px] text-slate-500">المطلوب</div><div class="font-bold text-lg num">${o}</div></div></div>
+  const defVol = sup.Volume_Discount_Pct !== undefined && sup.Volume_Discount_Pct !== "" ? n(sup.Volume_Discount_Pct) : 3;
+
+  view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", "أدخل ما وصل فعلياً: السليم يدخل المخزن، والتالف مطالبة على المكتبة · خصم الكمية يُحتسب على إجمالي الفاتورة بنسبة ثابتة قابلة للتعديل")
+  + `<section class="card card-pad mb-4">
+      <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div class="col-span-2 lg:col-span-1"><label class="label">المكتبة</label><select class="input" data-change="pickSup">${d.suppliers.map(s => `<option value="${esc(s.Supplier_ID)}" ${s.Supplier_ID === sid ? "selected" : ""}>${esc(s.Supplier_Name)}</option>`).join("")}</select></div>
+        <div><label class="label">رقم فاتورة المكتبة</label><input id="siNo" class="input" placeholder="مثال: INV-2026/01"></div>
+        <div><label class="label">التاريخ</label><input id="siDate" type="date" class="input" value="${new Date().toISOString().slice(0, 10)}"></div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <label class="label !mb-0" for="siVol">خصم الكمية للفاتورة %</label>
+            <div class="flex items-center gap-1">
+              ${[0, 2, 3, 5].map(p => `<button type="button" class="qchip !px-1.5 !py-0.2 num text-[11px]" data-act="siVolPreset" data-v="${p}">${p}%</button>`).join("")}
+            </div>
+          </div>
+          <input id="siVol" type="number" step="any" min="0" max="100" class="input num font-bold text-brand-800" value="${defVol}" data-input="recalcSI">
+        </div>
+        <div><label class="label">الصافي بفاتورة المكتبة</label><input id="siStated" type="number" step="any" class="input num" placeholder="للمطابقة الحية" data-input="recalcSI"></div>
+      </div>
+      <div id="siDiffBadge" class="mt-3 flex items-center justify-end"></div>
+    </section>
+
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex items-center gap-2 flex-1 max-w-sm">
+        <div class="relative w-full">
+          <input id="siSearch" class="input input-sm !h-9 pr-8 text-xs" placeholder="بحث باسم الكتاب أو الكود أو الناشر…" data-input="siFilter">
+          <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${ic("search")}</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" class="btn btn-outline btn-xs" data-act="siFillReq">${ic("check-check")} مطابقة المطلوب لكل الكتب</button>
+        <button type="button" class="btn btn-outline btn-xs" data-act="siZeroReq">${ic("rotate-ccw")} تصفير السليم</button>
+      </div>
+    </div>
+
+  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const o = snaps[b.Book_ID] || 0; return `<article class="card p-4 si-row" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "")).toLowerCase())}">
+      <div class="flex items-start justify-between gap-2">
+        <div class="min-w-0">
+          <h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name)}</h3>
+          <div class="text-[11.5px] text-slate-500 flex items-center gap-2 mt-0.5"><code class="num font-bold text-brand-700">${esc(b.Book_ID)}</code>${b.Publisher ? `<span>· ${esc(b.Publisher)}</span>` : ""}${b.Grade ? `<span>· ${esc(b.Grade)}</span>` : ""}</div>
+        </div>
+        <div class="text-left shrink-0"><div class="text-[11px] text-slate-500 font-semibold">المطلوب</div><div class="font-bold text-lg num text-brand-800">${o}</div></div>
+      </div>
       <div class="grid grid-cols-4 gap-2 mt-3">
-        <div><label class="text-[11px] font-semibold text-emerald-700">سليم</label><input type="number" min="0" class="input input-sm num si-rec" value="${o}" data-input="recalcSI"></div>
-        <div><label class="text-[11px] font-semibold text-rose-600">تالف</label><input type="number" min="0" class="input input-sm num si-dmg" value="0" data-input="recalcSI"></div>
-        <div><label class="text-[11px] font-semibold text-slate-500">الغلاف</label><input type="number" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
-        <div><label class="text-[11px] font-semibold text-slate-500">خصم %</label><input type="number" class="input input-sm num si-disc" value="${n(b.Supplier_Discount_Pct)}" data-input="recalcSI"></div></div>
-      <div class="flex items-center justify-between mt-3 text-[12.5px]"><label class="flex items-center gap-2 text-slate-600"><input type="checkbox" class="w-4 h-4 accent-brand-700 si-np"> لم يُطبع بعد</label>
-        <span class="text-slate-500">الوحدة <b class="si-unit num text-slate-800"></b> · الإجمالي <b class="si-line num text-slate-800"></b></span><span class="si-var"></span></div></article>`; }).join("")}</div>`
+        <div><label class="text-[11px] font-semibold text-emerald-700">سليم</label><input type="number" min="0" class="input input-sm num font-bold text-emerald-800 si-rec" value="${o}" data-input="recalcSI"></div>
+        <div><label class="text-[11px] font-semibold text-rose-600">تالف</label><input type="number" min="0" class="input input-sm num font-bold text-rose-700 si-dmg" value="0" data-input="recalcSI"></div>
+        <div><label class="text-[11px] font-semibold text-slate-500">الغلاف</label><input type="number" step="any" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
+        <div><label class="text-[11px] font-semibold text-slate-500">خصم %</label><input type="number" step="any" class="input input-sm num si-disc" value="${n(b.Supplier_Discount_Pct)}" data-input="recalcSI"></div>
+      </div>
+      <div class="flex items-center justify-between mt-3 text-[12.5px] border-t border-slate-100 pt-2.5">
+        <label class="flex items-center gap-1.5 text-slate-600 text-xs font-semibold cursor-pointer"><input type="checkbox" class="w-4 h-4 accent-brand-700 si-np"> لم يُطبع بعد</label>
+        <div class="flex items-center gap-2 text-slate-500 text-xs">
+          <span>تكلفة النسخة: <b class="si-unit num text-slate-800 font-bold"></b></span>
+          <span>·</span>
+          <span>الإجمالي: <b class="si-line num text-brand-800 font-bold"></b></span>
+        </div>
+        <span class="si-var"></span>
+      </div></article>`; }).join("")}</div>`
     : `<div class="card">${UI.empty("truck", "لا توجد كتب لهذه المكتبة")}</div>`}
   <div class="sticky bottom-[calc(4.3rem+env(safe-area-inset-bottom))] md:bottom-4 z-20 mt-4">
-    <div class="card p-3.5 sm:p-4 shadow-lift flex flex-wrap items-center gap-x-6 gap-y-2">
-      <div class="text-[13px] text-slate-500">بعد خصم الأصناف <b id="siAfter" class="num text-slate-800"></b></div>
-      <div class="text-[13px] text-slate-500">خصم الكمية <b id="siVolAmt" class="num text-slate-800"></b></div>
-      <div class="text-[13px] text-rose-600">مطالبة تالف <b id="siDmg" class="num"></b></div>
-      <div class="flex-1 text-[15px] font-bold text-brand-800">الصافي <span id="siNet" class="num"></span></div>
+    <div class="card p-3.5 sm:p-4 shadow-lift flex flex-wrap items-center gap-x-6 gap-y-2 bg-white/95 backdrop-blur-sm ring-1 ring-brand-200">
+      <div class="text-[13px] text-slate-600">بعد خصم الأصناف: <b id="siAfter" class="num text-slate-900 font-bold"></b></div>
+      <div class="text-[13px] text-brand-700">خصم كمية الفاتورة (<span id="siVolPctLbl" class="num font-bold">${defVol}</span>%): <b id="siVolAmt" class="num font-bold"></b></div>
+      <div class="text-[13px] text-rose-600">مطالبة تالف: <b id="siDmg" class="num font-bold"></b></div>
+      <div class="flex-1 text-[15px] font-bold text-brand-800">الصافي المستحق للمكتبة: <span id="siNet" class="num text-lg"></span></div>
       ${canSubmit && books.length ? `<button class="btn btn-success" data-act="submitSI">${ic("clipboard-check")} اعتماد الفاتورة</button>` : ""}
     </div></div>
   <div class="h-4"></div>
   ${UI.section(`${ic("receipt", "text-brand-600")} فواتير المكتبة المسجلة`, "", UI.table([
-    { t: "المرجع", v: h => `<b>${esc(h.Internal_Ref_No)}</b><div class="text-[11.5px] text-slate-400">${esc(h.Supplier_Invoice_No)}</div>` }, { t: "المرحلة", v: "Phase_ID" }, { t: "التاريخ", cls: "num", v: h => esc(day(h.Invoice_Date)) },
-    { t: "بعد خصم الأصناف", cls: "num", v: h => fmt(h.Total_After_Item_Discount) }, { t: "خصم الكمية", cls: "num", v: h => fmt(h.Volume_Discount_Amount) }, { t: "الصافي", cls: "num", v: h => `<b>${fmt(h.Net_Payable_Amount)}</b>` },
-    { t: "تالف", cls: "num", v: h => fmt(h.Damaged_Claim_Amount) }, { t: "الحالة", v: h => esc(h.Status) + (n(h.Variance_Amount) ? ` ${pill("", "فرق " + fmt(h.Variance_Amount), "red")}` : "") }
+    { t: "المرجع", v: h => `<b>${esc(h.Internal_Ref_No)}</b><div class="text-[11.5px] text-slate-400">${esc(h.Supplier_Invoice_No)}</div>` },
+    { t: "المرحلة", v: "Phase_ID" },
+    { t: "التاريخ", cls: "num", v: h => esc(day(h.Invoice_Date)) },
+    { t: "بعد خصم الأصناف", cls: "num", v: h => fmt(h.Total_After_Item_Discount) },
+    { t: "خصم الكمية على الفاتورة", cls: "num", v: h => `${fmt(h.Volume_Discount_Amount)} <span class="text-[11px] text-brand-700 font-semibold">(${fmt(h.Volume_Discount_Pct !== undefined && h.Volume_Discount_Pct !== "" ? h.Volume_Discount_Pct : 3)}%)</span>` },
+    { t: "الصافي", cls: "num", v: h => `<b>${fmt(h.Net_Payable_Amount)}</b>` },
+    { t: "تالف", cls: "num", v: h => fmt(h.Damaged_Claim_Amount) },
+    { t: "الحالة", v: h => esc(h.Status) + (n(h.Variance_Amount) ? ` ${pill("", "فرق " + fmt(h.Variance_Amount), "red")}` : "") }
   ], d.supInvHeaders.slice().reverse(), { maxH: 420, emptyIcon: "receipt", empty: "لا فواتير مسجلة" }))}`;
   recalcSI();
 });
 on("pickSup", v => { Q.sup = v; Shell.rerender(); });
+on("siVolPreset", (v, btn) => {
+  const inp = $("#siVol");
+  if (inp) {
+    inp.value = btn.dataset.v;
+    recalcSI();
+  }
+});
+on("siFilter", v => {
+  const q = String(v || "").trim().toLowerCase();
+  $$(".si-row").forEach(el => {
+    const s = el.dataset.search || "";
+    el.classList.toggle("hidden", !!q && !s.includes(q));
+  });
+});
+on("siFillReq", () => {
+  $$(".si-row:not(.hidden)").forEach(el => {
+    const rec = el.querySelector(".si-rec"), dmg = el.querySelector(".si-dmg");
+    if (rec) rec.value = el.dataset.ord || "0";
+    if (dmg) dmg.value = "0";
+  });
+  recalcSI();
+});
+on("siZeroReq", () => {
+  $$(".si-row:not(.hidden)").forEach(el => {
+    const rec = el.querySelector(".si-rec"), dmg = el.querySelector(".si-dmg");
+    if (rec) rec.value = "0";
+    if (dmg) dmg.value = "0";
+  });
+  recalcSI();
+});
+
 function recalcSI() {
-  const vol = n(($("#siVol") || {}).value); let after = 0, dmgAmt = 0;
+  const vol = n(($("#siVol") || {}).value);
+  let after = 0, dmgAmt = 0;
   $$(".si-row").forEach(tr => {
     const g = c => n(tr.querySelector(c).value), rec = g(".si-rec"), dmg = g(".si-dmg"), cover = g(".si-cover"), disc = g(".si-disc"), ord = n(tr.dataset.ord);
-    const first = r2(cover * (1 - disc / 100)), unit = r2(first - Math.round(first * vol) / 100);
-    after += first * (rec + dmg); dmgAmt += unit * dmg;
-    tr.querySelector(".si-unit").textContent = fmt(unit); tr.querySelector(".si-line").textContent = fmt(unit * (rec + dmg));
+    const first = r2(cover * (1 - disc / 100));
+    const lineTotal = r2(first * (rec + dmg));
+    after += lineTotal;
+    dmgAmt += r2(first * dmg);
+    tr.querySelector(".si-unit").textContent = fmt(first) + " ج.م";
+    tr.querySelector(".si-line").textContent = fmt(lineTotal) + " ج.م";
     const v = rec + dmg - ord;
     tr.querySelector(".si-var").innerHTML = !ord && !rec && !dmg ? "" : v === 0 ? pill("EXACT") : pill("", (v > 0 ? "+" : "") + v, v < 0 ? "red" : "amber");
   });
-  after = r2(after); const va = Math.round(after * vol) / 100;
-  if ($("#siAfter")) { $("#siAfter").textContent = moneyTxt(after); $("#siVolAmt").textContent = moneyTxt(va); $("#siNet").textContent = moneyTxt(after - va); $("#siDmg").textContent = moneyTxt(dmgAmt); }
+  after = r2(after);
+  const va = r2(after * vol / 100);
+  const net = r2(after - va);
+  const stated = n(($("#siStated") || {}).value);
+  const diff = stated ? r2(stated - net) : 0;
+
+  if ($("#siAfter")) $("#siAfter").textContent = moneyTxt(after);
+  if ($("#siVolAmt")) $("#siVolAmt").textContent = moneyTxt(va);
+  if ($("#siVolPctLbl")) $("#siVolPctLbl").textContent = fmt(vol);
+  if ($("#siNet")) $("#siNet").textContent = moneyTxt(net);
+  if ($("#siDmg")) $("#siDmg").textContent = moneyTxt(dmgAmt);
+  if ($("#siDiffBadge")) {
+    if (!stated) {
+      $("#siDiffBadge").innerHTML = "";
+    } else if (Math.abs(diff) < 0.01) {
+      $("#siDiffBadge").innerHTML = `<span class="pill pill-green">${ic("check")} مطابقة تامة مع فاتورة المكتبة (${fmt(stated)} ج.م)</span>`;
+    } else {
+      $("#siDiffBadge").innerHTML = `<span class="pill pill-red">${ic("triangle-alert")} فرق مع فاتورة المكتبة: ${diff > 0 ? "+" : ""}${fmt(diff)} ج.م (المُدخل ${fmt(stated)} مقابل صافي محسوب ${fmt(net)})</span>`;
+    }
+  }
 }
 on("recalcSI", () => recalcSI());
 on("submitSI", async () => {

@@ -162,25 +162,24 @@ const FinancialEngine = {
   },
 
   /**
-   * هيكل تكلفة وسعر الكتاب:
-   * التكلفة = الغلاف × (1 − خصم الصنف) × (1 − خصم الكمية)  — خصم الكمية على صافي الفاتورة بعد خصم الأصناف
+   * هيكل تكلفة وسعر الكتاب الفردي:
+   * تكلفة الكتاب الفردي = الغلاف × (1 − خصم الصنف) فقط (بدون خصم كمية على الكتاب الفردي)
+   * خصم الكمية (3% افتراضياً وقابل للتعديل) يُحتسب على إجمالي فاتورة التوريد ككل وليس على كل كتاب بمفرده
    * سعر الموظف = ⌈ الغلاف × (1 − خصم الموظف) ⌉
    */
-  calculateBookPricing: function(coverPrice, supplierDiscPct, volumeDiscPct, empDiscPct) {
+  calculateBookPricing: function(coverPrice, supplierDiscPct, _volumeDiscPct, empDiscPct) {
     const cover = Util.num(coverPrice);
     const supDisc = Util.num(supplierDiscPct) / 100;
-    const volDisc = Util.num(volumeDiscPct) / 100;
     const empDisc = Util.num(empDiscPct) / 100;
     const initialPurchasePrice = this.roundCurrency(cover * (1 - supDisc));
-    const volumeDiscountAmountPerUnit = this.roundCurrency(initialPurchasePrice * volDisc);
-    const standardNetCost = this.roundCurrency(initialPurchasePrice - volumeDiscountAmountPerUnit);
+    const standardNetCost = initialPurchasePrice;
     const empSellingPrice = this.roundUpEmployeePrice(cover * (1 - empDisc));
     return {
       coverPrice: this.roundCurrency(cover),
       supplierDiscountPct: Util.num(supplierDiscPct),
       initialPurchasePrice: initialPurchasePrice,
-      volumeDiscountSharePct: Util.num(volumeDiscPct),
-      volumeDiscountPerUnit: volumeDiscountAmountPerUnit,
+      volumeDiscountSharePct: 0,
+      volumeDiscountPerUnit: 0,
       standardNetCost: standardNetCost,
       empDiscountPct: Util.num(empDiscPct),
       empSellingPrice: empSellingPrice,
@@ -498,7 +497,7 @@ function seedInitialData_() {
 
   if (DB_Engine.getAllRecords(S.SUPPLIERS).length === 0) {
     DB_Engine.insertRecordsBatch(S.SUPPLIERS, [
-      { Supplier_ID: "SUP-01", Supplier_Name: "مكتبة النور (تجريبي)", Contact_Person: "أ. محمود فوزي", Phone: "01099887766", Volume_Discount_Pct: 5, Return_Policy_Days: 30, Payment_Terms: "دفعات تحت الحساب والتصفية نهاية الموسم", Contract_Notes: "خصم كمية 5% على صافي الفاتورة بعد خصم الأصناف", Is_Active: true }
+      { Supplier_ID: "SUP-01", Supplier_Name: "مكتبة النور (تجريبي)", Contact_Person: "أ. محمود فوزي", Phone: "01099887766", Volume_Discount_Pct: 3, Return_Policy_Days: 30, Payment_Terms: "دفعات تحت الحساب والتصفية نهاية الموسم", Contract_Notes: "خصم كمية 3% على إجمالي الفاتورة بعد خصم الأصناف", Is_Active: true }
     ]);
   }
 
@@ -512,7 +511,7 @@ function seedInitialData_() {
       ["BK-302", "الامتحان - الفيزياء", "المرحلة الثانوية", "الصف الثالث الثانوي", "الفيزياء", "الامتحان", 280, 21]
     ];
     DB_Engine.insertRecordsBatch(S.BOOKS, sample.map(b => {
-      const p = FinancialEngine.calculateBookPricing(b[6], b[7], 5, 18);
+      const p = FinancialEngine.calculateBookPricing(b[6], b[7], 0, 18);
       return { Book_ID: b[0], Book_Name: b[1], Stage: b[2], Grade: b[3], Subject: b[4], Publisher: b[5], Supplier_ID: "SUP-01",
         Cover_Price: p.coverPrice, Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
         Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost, Emp_Discount_Pct: p.empDiscountPct,
@@ -699,16 +698,50 @@ const OperationsEngine = {
     return DB_Engine.getAllRecords(this.S().SUPPLIERS)[0] || null;
   },
 
-  /** ربط كل كتب الكتالوج بالمكتبة الرئيسية (يكتب ما يختلف فقط) */
+  /** ربط كل كتب الكتالوج بالمكتبة الرئيسية وإلغاء أي خصم كمية فردي من أسعار الكتب (يكتب ما يختلف فقط) */
   assignBooksToMainSupplier_: function() {
     const S = this.S(), main = this.mainSupplier_();
     if (!main) return 0;
     const id = Util.str(main.Supplier_ID);
     let n = 0;
     DB_Engine.getAllRecords(S.BOOKS).forEach(b => {
-      if (Util.str(b.Supplier_ID) !== id) { DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, { Supplier_ID: id }); n++; }
+      const upd = {};
+      if (Util.str(b.Supplier_ID) !== id) { upd.Supplier_ID = id; n++; }
+      if (Util.num(b.Cover_Price) > 0) {
+        const first = FinancialEngine.roundCurrency(Util.num(b.Cover_Price) * (1 - Util.num(b.Supplier_Discount_Pct) / 100));
+        if (Util.num(b.Volume_Discount_Share_Pct) !== 0) upd.Volume_Discount_Share_Pct = 0;
+        if (Math.abs(Util.num(b.Initial_Purchase_Price) - first) > 0.001) upd.Initial_Purchase_Price = first;
+        if (Math.abs(Util.num(b.Standard_Net_Cost) - first) > 0.001) upd.Standard_Net_Cost = first;
+      } else if (b.Volume_Discount_Share_Pct !== "" && b.Volume_Discount_Share_Pct !== 0 && b.Volume_Discount_Share_Pct !== undefined) {
+        upd.Volume_Discount_Share_Pct = "";
+      }
+      if (Object.keys(upd).length) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, upd);
     });
     return n;
+  },
+
+  /** ترتيب عرض الكتب حسب: الناشر ثم المادة ثم الصف الدراسي ثم الكود */
+  sortBooks_: function(booksList) {
+    if (!Array.isArray(booksList)) return [];
+    const grades = (this.catalogLists_ && this.catalogLists_().grades) || [];
+    const gOrder = {}; grades.forEach((g, i) => { gOrder[g.label] = i; });
+    return booksList.slice().sort((a, b) => {
+      const pA = Util.str(a.Publisher), pB = Util.str(b.Publisher);
+      const pubCmp = pA.localeCompare(pB, "ar");
+      if (pubCmp !== 0) return pubCmp;
+
+      const sA = Util.str(a.Subject), sB = Util.str(b.Subject);
+      const subCmp = sA.localeCompare(sB, "ar");
+      if (subCmp !== 0) return subCmp;
+
+      const rA = gOrder[a.Grade] !== undefined ? gOrder[a.Grade] : 999;
+      const rB = gOrder[b.Grade] !== undefined ? gOrder[b.Grade] : 999;
+      if (rA !== rB) return rA - rB;
+      const gCmp = Util.str(a.Grade).localeCompare(Util.str(b.Grade), "ar");
+      if (gCmp !== 0) return gCmp;
+
+      return Util.str(a.Book_ID).localeCompare(Util.str(b.Book_ID), undefined, { numeric: true });
+    });
   },
 
   /** هل الحجز مفتوح الآن؟ (الحالة Open وداخل نافذة التاريخ، أو تجاوز يدوي) */
@@ -886,7 +919,7 @@ const OperationsEngine = {
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department) },
-      books: books,
+      books: this.sortBooks_(books),
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
       myInvoices: DB_Engine.getAllRecords(S.EMP_INVOICES).filter(mine),
@@ -908,7 +941,11 @@ const OperationsEngine = {
       settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
-      books: (() => { const main = this.mainSupplier_(), mid = main ? Util.str(main.Supplier_ID) : ""; return DB_Engine.getAllRecords(S.BOOKS).map(b => mid && Util.str(b.Supplier_ID) !== mid ? Object.assign({}, b, { Supplier_ID: mid }) : b); })(),
+      books: (() => {
+        const main = this.mainSupplier_(), mid = main ? Util.str(main.Supplier_ID) : "";
+        const all = DB_Engine.getAllRecords(S.BOOKS).map(b => mid && Util.str(b.Supplier_ID) !== mid ? Object.assign({}, b, { Supplier_ID: mid }) : b);
+        return this.sortBooks_(all);
+      })(),
       phases: phases,
       resHeaders: DB_Engine.getAllRecords(S.RES_HEADER),
       resItems: resItems,
@@ -1489,8 +1526,7 @@ const OperationsEngine = {
       const sup = this.mainSupplier_(); // كل الكتب تتبع المكتبة الرئيسية المسجلة
       if (priced) Util.require(sup, "سجّل المكتبة الرئيسية أولاً من صفحة المكتبات.");
       const empPct = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? payload.empDiscountPct : getSettings_().UNIFIED_EMP_DISCOUNT_PCT;
-      const volPct = payload.volumeDiscountSharePct !== undefined && payload.volumeDiscountSharePct !== "" ? payload.volumeDiscountSharePct : (sup ? sup.Volume_Discount_Pct : 0);
-      const pricing = priced ? FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, volPct, empPct) : null;
+      const pricing = priced ? FinancialEngine.calculateBookPricing(payload.coverPrice, payload.supplierDiscountPct, 0, empPct) : null;
       const dispName = this.bookDisplayName_(publisher, subject, part, types);
       const buildBookObj = (id, gObj, prevStatus) => {
         const base = {
@@ -1503,7 +1539,7 @@ const OperationsEngine = {
           return Object.assign(base, {
             Supplier_ID: sup.Supplier_ID, Cover_Price: pricing.coverPrice,
             Supplier_Discount_Pct: pricing.supplierDiscountPct, Initial_Purchase_Price: pricing.initialPurchasePrice,
-            Volume_Discount_Share_Pct: pricing.volumeDiscountSharePct, Standard_Net_Cost: pricing.standardNetCost,
+            Volume_Discount_Share_Pct: 0, Standard_Net_Cost: pricing.standardNetCost,
             Emp_Discount_Pct: pricing.empDiscountPct, Emp_Selling_Price: pricing.empSellingPrice, Book_Status: status
           });
         }
@@ -1628,13 +1664,13 @@ const OperationsEngine = {
         res.rule = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? "السطر" : pubRule[pub] !== undefined ? pub : (def.supplierDiscountPct !== undefined && def.supplierDiscountPct !== "" ? "باقي الكتب" : "السابق");
         const disc = Util.num(discRaw);
         if (disc < 0 || disc >= 100) { res.error = "خصم المكتبة غير صحيح"; return; }
-        const pr = FinancialEngine.calculateBookPricing(cover, disc, sup.Volume_Discount_Pct, b.Emp_Discount_Pct !== "" && b.Emp_Discount_Pct !== undefined ? b.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
+        const pr = FinancialEngine.calculateBookPricing(cover, disc, 0, b.Emp_Discount_Pct !== "" && b.Emp_Discount_Pct !== undefined ? b.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
         Object.assign(res, { ok: true, oldCover: b.Cover_Price, cover: pr.coverPrice, disc: pr.supplierDiscountPct, cost: pr.standardNetCost, emp: pr.empSellingPrice, margin: pr.unitSurplusMargin, supplierId: supId, wasPricing: b.Book_Status === "Pricing" });
         if (pr.unitSurplusMargin < 0) res.warning = "يُباع بأقل من التكلفة";
         ok++;
         if (!payload.dryRun) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", id, {
           Supplier_ID: supId, Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct, Initial_Purchase_Price: pr.initialPurchasePrice,
-          Volume_Discount_Share_Pct: pr.volumeDiscountSharePct, Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+          Volume_Discount_Share_Pct: 0, Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
           Book_Status: b.Book_Status === "Pricing" ? "Available" : b.Book_Status });
       });
       const bad = results.filter(x => !x.ok).length;
@@ -1688,15 +1724,14 @@ const OperationsEngine = {
           return;
         }
         if (!sup) { errors.push("سطر " + (idx + 1) + ": مكتبة غير صحيحة"); return; }
-        const p = FinancialEngine.calculateBookPricing(inp.Cover_Price, inp.Supplier_Discount_Pct,
-          inp.Volume_Discount_Share_Pct !== undefined && inp.Volume_Discount_Share_Pct !== "" ? inp.Volume_Discount_Share_Pct : sup.Volume_Discount_Pct,
+        const p = FinancialEngine.calculateBookPricing(inp.Cover_Price, inp.Supplier_Discount_Pct, 0,
           inp.Emp_Discount_Pct !== undefined && inp.Emp_Discount_Pct !== "" ? inp.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
         if (map[id]) updated++; else { added++; byUpper[id.toUpperCase()] = id; }
         map[id] = {
           Book_ID: id, Book_Name: cand.Book_Name, Stage: inp.Stage || old.Stage || "", Grade: cand.Grade, Subject: cand.Subject,
           Publisher: cand.Publisher || "-", Supplier_ID: sup.Supplier_ID, Cover_Price: p.coverPrice,
           Supplier_Discount_Pct: p.supplierDiscountPct, Initial_Purchase_Price: p.initialPurchasePrice,
-          Volume_Discount_Share_Pct: p.volumeDiscountSharePct, Standard_Net_Cost: p.standardNetCost,
+          Volume_Discount_Share_Pct: 0, Standard_Net_Cost: p.standardNetCost,
           Emp_Discount_Pct: p.empDiscountPct, Emp_Selling_Price: p.empSellingPrice,
           School_Types: cand.School_Types, Book_Part: cand.Book_Part, Cover_URL: old.Cover_URL || "",
           Book_Status: inp.Book_Status || (old.Book_Status && old.Book_Status !== "Pricing" ? old.Book_Status : "Available")
@@ -1745,9 +1780,12 @@ const OperationsEngine = {
       Util.require(Util.str(payload.supplierName), "أدخل اسم المكتبة.");
       const supId = Util.str(payload.supplierId) || ("SUP-" + ("0" + (list.reduce((m, s) => Math.max(m, parseInt(String(s.Supplier_ID).replace(/\D/g, ""), 10) || 0), 0) + 1)).slice(-2));
       const existing = list.find(s => Util.str(s.Supplier_ID) === supId);
+      const volPct = payload.volumeDiscountPct !== undefined && payload.volumeDiscountPct !== ""
+        ? Util.num(payload.volumeDiscountPct)
+        : (existing && existing.Volume_Discount_Pct !== undefined && existing.Volume_Discount_Pct !== "" ? Util.num(existing.Volume_Discount_Pct) : 3);
       const obj = {
         Supplier_ID: supId, Supplier_Name: payload.supplierName, Contact_Person: payload.contactPerson || (existing ? existing.Contact_Person : "-"),
-        Phone: payload.phone || (existing ? existing.Phone : ""), Volume_Discount_Pct: Util.num(payload.volumeDiscountPct),
+        Phone: payload.phone || (existing ? existing.Phone : ""), Volume_Discount_Pct: volPct,
         Return_Policy_Days: Util.num(payload.returnPolicyDays) || (existing ? existing.Return_Policy_Days : 30),
         Payment_Terms: payload.paymentTerms || (existing ? existing.Payment_Terms : "-"),
         Contract_Notes: payload.contractNotes || (existing ? existing.Contract_Notes : ""), Is_Active: true
@@ -1878,6 +1916,7 @@ const OperationsEngine = {
   /**
    * الفاتورة تُثبَّت بالكمية المفوترة (سليم + تالف)، ويدخل المخزن السليم فقط،
    * ويُسجَّل التالف مطالبة على المكتبة تلقائياً.
+   * خصم الكمية (افتراضياً 3% وقابل للتعديل مع كل فاتورة) يُحتسب على إجمالي الفاتورة بعد خصم الأصناف وليس على كل كتاب بمفرده.
    */
   recordSupplierInvoiceAndStock: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
@@ -1894,11 +1933,13 @@ const OperationsEngine = {
 
       const books = {};
       DB_Engine.getAllRecords(S.BOOKS).forEach(b => books[Util.str(b.Book_ID)] = b);
-      const volPct = payload.volumeDiscountPct !== undefined && payload.volumeDiscountPct !== "" ? Util.num(payload.volumeDiscountPct) : Util.num(supplier.Volume_Discount_Pct);
+      const volPct = payload.volumeDiscountPct !== undefined && payload.volumeDiscountPct !== ""
+        ? Util.num(payload.volumeDiscountPct)
+        : (supplier.Volume_Discount_Pct !== undefined && supplier.Volume_Discount_Pct !== "" ? Util.num(supplier.Volume_Discount_Pct) : 3);
       const supInvId = "SINV-" + phaseId + "-" + new Date().getTime();
       const invDate = Util.str(payload.invoiceDate) || Util.today();
 
-      let gross = 0, afterFirst = 0, damagedClaim = 0, invoicedUnits = 0;
+      let gross = 0, afterFirst = 0, damagedAfterFirst = 0, invoicedUnits = 0;
       const lines = [], stockIn = [];
       (payload.items || []).forEach((ln, idx) => {
         const bId = Util.str(ln.bookId);
@@ -1910,12 +1951,10 @@ const OperationsEngine = {
         const cover = Util.num(ln.coverPrice) || Util.num(books[bId].Cover_Price);
         const disc = ln.itemDiscPct !== undefined && ln.itemDiscPct !== "" ? Util.num(ln.itemDiscPct) : Util.num(books[bId].Supplier_Discount_Pct);
         const unitFirst = FinancialEngine.roundCurrency(cover * (1 - disc / 100));
-        const unitVol = FinancialEngine.roundCurrency(unitFirst * volPct / 100);
-        const unitNet = FinancialEngine.roundCurrency(unitFirst - unitVol);
         const invoiced = rec + dmg;
         gross += cover * invoiced;
         afterFirst += unitFirst * invoiced;
-        damagedClaim += unitNet * dmg;
+        damagedAfterFirst += unitFirst * dmg;
         invoicedUnits += invoiced;
         let flag = "EXACT";
         if (invoiced === 0 && ord > 0) flag = ln.notPrinted ? "NOT_PRINTED" : "NOT_RECEIVED";
@@ -1926,11 +1965,11 @@ const OperationsEngine = {
         lines.push({
           Sup_Inv_Item_ID: supInvId + "-L" + (idx + 1), Sup_Inv_ID: supInvId, Book_ID: bId, Ordered_Qty: ord, Received_Qty: rec,
           Variance_Qty: invoiced - ord, Cover_Price_Invoiced: cover, Item_Discount_Pct_Invoiced: disc,
-          Unit_Price_After_First_Disc: unitFirst, Allocated_Volume_Disc_Per_Unit: unitVol, Actual_Unit_Net_Cost: unitNet,
-          Total_Line_Net_Cost: FinancialEngine.roundCurrency(unitNet * invoiced), Matching_Flag: flag,
+          Unit_Price_After_First_Disc: unitFirst, Allocated_Volume_Disc_Per_Unit: 0, Actual_Unit_Net_Cost: unitFirst,
+          Total_Line_Net_Cost: FinancialEngine.roundCurrency(unitFirst * invoiced), Matching_Flag: flag,
           Admin_Decision_Notes: Util.str(ln.notes), Damaged_Qty: dmg, Price_Mismatch: priceMismatch ? "مختلف عن الكتالوج" : ""
         });
-        if (rec > 0) stockIn.push(this.inventoryRow_(session, phaseId, bId, "IN_SUPPLY", rec, unitNet, supInvId, "توريد فاتورة " + supInvNo));
+        if (rec > 0) stockIn.push(this.inventoryRow_(session, phaseId, bId, "IN_SUPPLY", rec, unitFirst, supInvId, "توريد فاتورة " + supInvNo));
         if (ln.notPrinted && books[bId].Book_Status === "Available") {
           DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", bId, { Book_Status: "Not_Yet_Printed" });
         }
@@ -1940,7 +1979,7 @@ const OperationsEngine = {
       afterFirst = FinancialEngine.roundCurrency(afterFirst);
       const volAmt = FinancialEngine.roundCurrency(afterFirst * volPct / 100);
       const net = FinancialEngine.roundCurrency(afterFirst - volAmt);
-      damagedClaim = FinancialEngine.roundCurrency(damagedClaim);
+      const damagedClaim = FinancialEngine.roundCurrency(damagedAfterFirst * (1 - volPct / 100));
       const stated = payload.supplierStatedNet !== undefined && payload.supplierStatedNet !== "" ? Util.num(payload.supplierStatedNet) : "";
       const variance = stated === "" ? 0 : FinancialEngine.roundCurrency(stated - net);
       const header = {
@@ -1997,7 +2036,7 @@ const OperationsEngine = {
       if (flags) msg += " يوجد " + flags + " سطر به فروق (نقص/زيادة/لم يُطبع).";
       if (damagedClaim > 0) msg += " مطالبة تالف: " + damagedClaim + " ج.م.";
       if (header.Status === "Approved_With_Variance") msg += " تنبيه: صافي المكتبة يختلف عن حساب المنظومة بـ " + variance + " ج.م.";
-      return { success: true, message: msg, invoiceHeader: header };
+      return { success: true, message: msg, invoiceHeader: header, invoiceItems: lines };
     });
   },
 
