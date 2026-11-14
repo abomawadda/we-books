@@ -180,6 +180,13 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   const qBar = d.getElementById('quickBookPanel');
   check(qBar, 'quick entry bar opened above table');
   await click('[data-act="toggleQuickEntry"]');
+  // الشريط الجانبي القابل للطي + أزرار الأيقونات المختصرة (.act-ic) والعمود اللاصق (.col-act)
+  check(!d.getElementById('appShell').classList.contains('side-collapsed'), 'sidebar initially expanded');
+  await click('#sideToggleBtn');
+  check(d.getElementById('appShell').classList.contains('side-collapsed'), 'sidebar collapsed via toggleSide');
+  await click('#hdSideToggle');
+  check(!d.getElementById('appShell').classList.contains('side-collapsed'), 'sidebar re-expanded via header toggle');
+  check(d.querySelectorAll('#booksList .act-ic').length >= 3 && d.querySelector('#booksList .col-act'), 'icon-only action buttons (.act-ic) and sticky action column (.col-act) rendered');
 
 
   // دورة التوريد

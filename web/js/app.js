@@ -127,44 +127,50 @@ const Shell = {
   build() {
     const admin = APP.user.userType === "ADMIN";
     Shell.type = admin ? "ADMIN" : "EMP";
+    if (Shell.collapsed === undefined) Shell.collapsed = !!store.get("sideCollapsed");
     const u = APP.user;
     const side = admin
-      ? ADMIN_NAV.map(g => `${g.g ? `<div class="grp hidden lg:block px-3 pt-3 pb-1 text-[11px] font-semibold text-brand-300/70">${g.g}</div><div class="lg:hidden h-px bg-white/10 my-1 mx-2"></div>` : ""}${g.items.map(i => Shell.sideItem("/a/" + i[0], i[1], i[2])).join("")}`).join("")
+      ? ADMIN_NAV.map(g => `${g.g ? `<div class="grp hidden lg:block px-3 pt-3 pb-1 text-[11px] font-semibold text-brand-300/70">${g.g}</div><div class="grp-div lg:hidden h-px bg-white/10 my-1.5 mx-2"></div>` : ""}${g.items.map(i => Shell.sideItem("/a/" + i[0], i[1], i[2])).join("")}`).join("")
       : EMP_NAV.map(i => Shell.sideItem("/e/" + i[0], i[1], i[2])).join("");
     const bottom = admin
       ? ADMIN_BOTTOM.map(i => Shell.bottomItem("/a/" + i[0], i[1], i[2])).join("") + `<button class="bnav-item" data-act="moreMenu"><span class="bnav-ic">${ic("layout-grid", "text-[20px]")}</span>المزيد</button>`
       : EMP_NAV.map(i => Shell.bottomItem("/e/" + i[0], i[1], i[2])).join("");
+    const col = !!Shell.collapsed;
     $("#app").innerHTML = `
-    <div class="min-h-[100dvh] md:flex">
-      <aside class="no-print hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] w-[84px] lg:w-[264px] hero text-white">
-        <div class="flex items-center gap-3 px-4 lg:px-5 h-16 shrink-0">
-          ${Brand.logo("we", "w-11 h-11 mx-auto lg:mx-0")}
-          <div class="hidden lg:block min-w-0"><div class="font-display font-bold text-[14px] truncate">${esc(Brand.get().platform)}</div><div class="text-[11px] text-brand-200 truncate">${esc(Brand.get().org)} · ${admin ? "الإدارة" : "بوابة الموظف"}</div></div>
+    <div id="appShell" class="min-h-[100dvh] md:flex ${col ? "side-collapsed" : ""}">
+      <aside id="appSide" class="no-print hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] w-[84px] lg:w-[254px] hero text-white">
+        <div class="side-head flex items-center justify-between gap-2.5 px-3 lg:px-4 h-16 shrink-0 border-b border-white/10">
+          <div class="side-logo-wrap flex items-center gap-2.5 min-w-0">
+            ${Brand.logo("we", "w-10 h-10 mx-auto lg:mx-0 shrink-0")}
+            <div class="side-txt hidden lg:block min-w-0"><div class="font-display font-bold text-[13.5px] truncate">${esc(Brand.get().platform)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(Brand.get().org)} · ${admin ? "الإدارة" : "بوابة الموظف"}</div></div>
+          </div>
+          <button type="button" data-act="toggleSide" id="sideToggleBtn" class="side-toggle-btn hidden lg:inline-flex shrink-0" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
         </div>
-        <nav class="side-nav flex-1 overflow-y-auto px-2.5 lg:px-3 pb-2 space-y-0.5" aria-label="القائمة الرئيسية">${side}</nav>
+        <nav class="side-nav flex-1 overflow-y-auto px-2 lg:px-2.5 py-2 space-y-0.5" aria-label="القائمة الرئيسية">${side}</nav>
         <div class="p-2 border-t border-white/10">
-          <button data-act="userMenu" class="w-full flex items-center gap-3 rounded-xl p-2 hover:bg-white/10 transition">
-            ${UI.avatar(u.fullName, "w-10 h-10 text-sm mx-auto lg:mx-0")}
-            <div class="hidden lg:block text-right min-w-0 flex-1"><div class="text-sm font-semibold truncate">${esc(u.fullName)}</div><div class="text-[11px] text-brand-200 truncate">${esc(ar(u.role))}</div></div>
-            <span class="hidden lg:block text-brand-200">${ic("chevron-down")}</span>
+          <button data-act="userMenu" class="user-btn w-full flex items-center gap-2.5 rounded-xl p-2 hover:bg-white/10 transition" title="${esc(u.fullName)}">
+            ${UI.avatar(u.fullName, "w-9 h-9 text-xs mx-auto lg:mx-0 shrink-0")}
+            <div class="side-txt hidden lg:block text-right min-w-0 flex-1"><div class="text-[13px] font-semibold truncate">${esc(u.fullName)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(ar(u.role))}</div></div>
+            <span class="side-txt hidden lg:block text-brand-200">${ic("chevron-down")}</span>
           </button>
         </div>
       </aside>
 
       <div class="flex-1 min-w-0 flex flex-col">
-        <header class="no-print sticky top-0 z-30 bg-slate-50/85 backdrop-blur-xl border-b border-slate-200/60">
-          <div class="flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-6 lg:px-8 max-w-[1400px] w-full mx-auto">
+        <header class="no-print sticky top-0 z-30 bg-slate-50/90 backdrop-blur-xl border-b border-slate-200/70">
+          <div class="app-container flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-5 lg:px-6">
+            <button type="button" data-act="toggleSide" id="hdSideToggle" class="icon-btn hidden lg:inline-flex !w-9 !h-9 ring-1 ring-slate-200/80 bg-white text-slate-600 hover:text-brand-700" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية لتوسيع العرض"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
             ${Brand.logo("we", "md:hidden w-10 h-10")}
             <div class="min-w-0 flex-1"><div id="hdTitle" class="font-display font-bold text-slate-900 text-[15px] sm:text-lg leading-tight line-clamp-2"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
             <div id="phaseBox" class="shrink-0 ${admin ? "" : "hidden sm:block"}"></div>
-${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="السلة" title="السلة">${ic("shopping-cart")}<span id="cartBadge" class="hidden absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-brand-950 text-[10.5px] font-bold flex items-center justify-center num">0</span></a>`}
-                        <button data-act="refresh" class="icon-btn ${admin ? "" : "hidden sm:inline-flex"}" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
+            ${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="السلة" title="السلة">${ic("shopping-cart")}<span id="cartBadge" class="hidden absolute -top-0.5 -left-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-gold-400 text-brand-950 text-[10.5px] font-bold flex items-center justify-center num">0</span></a>`}
+            <button data-act="refresh" class="icon-btn ${admin ? "" : "hidden sm:inline-flex"}" aria-label="تحديث البيانات" title="تحديث">${ic("refresh-cw")}</button>
             <button data-act="notifs" class="icon-btn relative" aria-label="الإشعارات" title="الإشعارات">${ic("bell")}<span id="notifBadge" class="notif-dot hidden">0</span></button>
             <button data-act="userMenu" class="md:hidden" aria-label="الحساب">${UI.avatar(u.fullName, "w-10 h-10 text-sm")}</button>
             ${Brand.logo("union", "w-10 h-10")}
           </div>
         </header>
-        <main id="view" class="flex-1 w-full max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7 pb-nav md:pb-10"></main>
+        <main id="view" class="app-container flex-1 px-4 sm:px-5 lg:px-6 py-4 sm:py-6 pb-nav md:pb-10"></main>
       </div>
 
       <nav class="no-print md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/70 safe-b" aria-label="التنقل">
@@ -172,9 +178,21 @@ ${admin ? "" : `<a href="#/e/cart" class="icon-btn relative" aria-label="الس�
       </nav>
     </div>`;
   },
+  applySideState() {
+    const sh = $("#appShell");
+    if (!sh) return;
+    const col = !!Shell.collapsed;
+    sh.classList.toggle("side-collapsed", col);
+    const ico = ic(col ? "panel-right-open" : "panel-right-close");
+    const ttl = col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية لتوسيع العرض";
+    ["#sideToggleBtn", "#hdSideToggle"].forEach(sel => {
+      const b = $(sel);
+      if (b) { b.innerHTML = ico; b.title = ttl; }
+    });
+  },
   sideItem(path, icon, label) {
-    return `<a href="#${path}" data-path="${path}" class="nav-item flex-col lg:flex-row gap-1 lg:gap-3 h-auto lg:h-10 py-2 lg:py-0 text-center lg:text-right" title="${esc(label)}">
-      <span class="text-[20px] lg:text-[18px]">${ic(icon)}</span><span class="text-[10px] leading-tight lg:text-[14px] lg:leading-normal">${esc(label)}</span></a>`;
+    return `<a href="#${path}" data-path="${path}" class="nav-item flex-col lg:flex-row gap-1 lg:gap-2.5 h-auto lg:h-10 py-2 lg:py-0 text-center lg:text-right" title="${esc(label)}">
+      <span class="nav-ic text-[20px] lg:text-[18px] shrink-0">${ic(icon)}</span><span class="side-txt text-[10px] leading-tight lg:text-[13.5px] lg:leading-normal truncate">${esc(label)}</span></a>`;
   },
   bottomItem(path, icon, label) {
     return `<a href="#${path}" data-path="${path}" class="bnav-item"><span class="bnav-ic">${ic(icon, "text-[20px]")}</span>${esc(label)}</a>`;
@@ -235,6 +253,7 @@ async function logout(silent) {
 }
 
 // ---------------------------------------------------------------- أحداث عامة
+on("toggleSide", () => { Shell.collapsed = !Shell.collapsed; store.set("sideCollapsed", Shell.collapsed); Shell.applySideState(); });
 on("contact", t => openContact(t));
 on("loginTab", t => { Shell.loginTab = t; Shell.renderLogin(); });
 on("togglePass", (_, el) => { const i = $("#lgPass"); i.type = i.type === "password" ? "text" : "password"; el.innerHTML = ic(i.type === "password" ? "eye" : "eye-off"); });

@@ -328,38 +328,38 @@ function booksTable() {
   const totFree = list.reduce((s, x) => s + n(st[x.Book_ID] ? st[x.Book_ID].free : 0), 0);
 
   const footHtml = list.length ? `<tr>
-    <td class="text-slate-600">الإجمالي (${fmt(list.length)})</td>
-    <td class="text-xs text-slate-500">كتب مطابقة للبحث (${fmt(priced.length)} مسعّر)</td>
+    <td class="text-slate-600 whitespace-nowrap">الإجمالي (${fmt(list.length)})</td>
+    <td class="text-xs text-slate-500">كتب مطابقة (${fmt(priced.length)} مسعّر)</td>
     <td class="text-xs text-slate-500">—</td>
     <td class="text-xs text-slate-500">—</td>
-    <td class="num">${totResQ ? `${fmt(totResP)} حاجز · ${fmt(totResQ)} نسخة` : "0"}</td>
-    <td class="num text-slate-700" title="متوسط سعر الغلاف">${avgCover ? fmt(avgCover) : "—"}</td>
-    <td class="num text-slate-500">—</td>
-    <td class="num text-slate-700" title="متوسط صافي التكلفة">${avgCost ? fmt(avgCost) : "—"}</td>
-    <td class="num text-brand-800" title="متوسط سعر الموظف">${avgEmp ? fmt(avgEmp) : "—"}</td>
-    <td class="num ${avgMargin < 0 ? "text-rose-600" : "text-emerald-700"}" title="متوسط الهامش">${priced.length ? fmt(avgMargin) : "—"}</td>
-    <td class="num">${fmt(totOnHand)} / ${fmt(totFree)}</td>
-    <td></td>
+    <td class="num text-center whitespace-nowrap">${totResQ ? `${fmt(totResP)} | ${fmt(totResQ)} ن` : "0"}</td>
+    <td class="num text-center text-slate-700" title="متوسط سعر الغلاف">${avgCover ? fmt(avgCover) : "—"}</td>
+    <td class="num text-center text-slate-500">—</td>
+    <td class="num text-center text-slate-700" title="متوسط صافي التكلفة">${avgCost ? fmt(avgCost) : "—"}</td>
+    <td class="num text-center text-brand-800" title="متوسط سعر الموظف">${avgEmp ? fmt(avgEmp) : "—"}</td>
+    <td class="num text-center ${avgMargin < 0 ? "text-rose-600" : "text-emerald-700"}" title="متوسط الهامش">${priced.length ? fmt(avgMargin) : "—"}</td>
+    <td class="num text-center whitespace-nowrap">${fmt(totOnHand)} / ${fmt(totFree)}</td>
+    <td class="col-act"></td>
   </tr>` : "";
 
   const tbl = UI.table([
-    { t: "الكود", cls: "w-24", v: x => `<span class="inline-flex items-center justify-center rounded-lg px-2 py-1 text-xs font-bold num ring-1 ${stageTone(x.Stage || "")}">${esc(x.Book_ID)}</span>` },
-    { t: "الكتاب · الناشر · المادة", v: x => `<div class="flex items-center gap-2.5">${coverThumb(x)}<div class="min-w-0 flex-1">
-      <button class="text-right font-bold text-slate-900 hover:text-brand-700 hover:underline leading-snug block truncate max-w-[260px]" data-act="bookRes" data-id="${esc(x.Book_ID)}">${esc(x.Book_Name)}</button>
-      <div class="flex flex-wrap items-center gap-1 mt-1">
-        <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[11px] font-semibold">${ic("store", "!w-3 !h-3 text-slate-400")}${esc(x.Publisher || "—")}</span>
-        <span class="inline-flex items-center gap-1 rounded-md bg-brand-50/70 text-brand-800 px-1.5 py-0.5 text-[11px] font-semibold">${esc(x.Subject || "—")}</span>
-        ${x.Book_Part ? `<span class="inline-flex items-center rounded-md bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10.5px] font-semibold">${esc(x.Book_Part)}</span>` : ""}
+    { t: "الكود", cls: "w-20 whitespace-nowrap", v: x => `<span class="inline-flex items-center justify-center rounded-lg px-2 py-0.5 text-[11.5px] font-bold num ring-1 ${stageTone(x.Stage || "")}">${esc(x.Book_ID)}</span>` },
+    { t: "الكتاب · الناشر · المادة", v: x => `<div class="flex items-center gap-2">${coverThumb(x)}<div class="min-w-0 flex-1">
+      <button class="text-right font-bold text-slate-900 hover:text-brand-700 hover:underline leading-snug block truncate max-w-[230px]" data-act="bookRes" data-id="${esc(x.Book_ID)}" title="${esc(x.Book_Name)}">${esc(x.Book_Name)}</button>
+      <div class="flex flex-wrap items-center gap-1 mt-0.5">
+        <span class="inline-flex items-center gap-1 rounded-md bg-slate-100 text-slate-700 px-1.5 py-0.5 text-[10.5px] font-semibold">${esc(x.Publisher || "—")}</span>
+        <span class="inline-flex items-center rounded-md bg-brand-50/70 text-brand-800 px-1.5 py-0.5 text-[10.5px] font-semibold">${esc(x.Subject || "—")}</span>
+        ${x.Book_Part ? `<span class="inline-flex items-center rounded-md bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10px] font-semibold">${esc(x.Book_Part)}</span>` : ""}
       </div>
     </div></div>` },
-    { t: "الصف والمدرسة", v: x => `<div class="space-y-1">
+    { t: "الصف والمدرسة", cls: "whitespace-nowrap", v: x => `<div class="leading-tight">
       <div class="font-bold text-slate-800 text-xs">${esc(x.Grade)}</div>
-      <div class="flex flex-wrap items-center gap-1">
-        <span class="text-[10.5px] text-slate-400">${esc((x.Stage || "").replace("المرحلة ", ""))}</span>
-        <span class="inline-flex items-center rounded-md ring-1 ring-slate-200 bg-white px-1.5 py-0.2 text-[10.5px] font-semibold text-slate-600">${esc(x.School_Types || "حكومي")}</span>
+      <div class="flex items-center gap-1 mt-0.5">
+        <span class="text-[10px] text-slate-400">${esc((x.Stage || "").replace("المرحلة ", ""))}</span>
+        <span class="inline-flex items-center rounded ring-1 ring-slate-200 bg-white px-1 py-0 text-[10px] font-semibold text-slate-600">${esc(x.School_Types || "حكومي")}</span>
       </div>
     </div>` },
-    { t: "الحالة", v: x => {
+    { t: "الحالة", cls: "whitespace-nowrap", v: x => {
       const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
       const dr = rowDraftOf(x);
       if (inEd) {
@@ -369,56 +369,56 @@ function booksTable() {
       }
       return pill(x.Book_Status);
     } },
-    { t: "الحاجزون", cls: "num text-center", v: x => { const c = rcMap[x.Book_ID]; return c ? `<button class="inline-flex items-center gap-1 rounded-lg bg-brand-50/70 hover:bg-brand-100 text-brand-800 px-2 py-1 text-xs font-bold transition" data-act="bookRes" data-id="${esc(x.Book_ID)}">${ic("users", "!w-3.5 !h-3.5")} ${fmt(c.p)} <span class="text-slate-400 font-normal">|</span> ${fmt(c.q)} نسخة</button>` : `<span class="text-slate-300">0</span>`; } },
-    { t: "سعر الغلاف", cls: "num text-center", v: x => {
+    { t: "الحاجزون", cls: "num text-center whitespace-nowrap", v: x => { const c = rcMap[x.Book_ID]; return c ? `<button class="inline-flex items-center gap-1 rounded-lg bg-brand-50/70 hover:bg-brand-100 text-brand-800 px-1.5 py-0.5 text-[11.5px] font-bold transition" data-act="bookRes" data-id="${esc(x.Book_ID)}" title="${fmt(c.p)} حاجز · ${fmt(c.q)} نسخة">${ic("users", "!w-3 !h-3")} ${fmt(c.p)} <span class="text-slate-300 font-normal">|</span> ${fmt(c.q)}</button>` : `<span class="text-slate-300">0</span>`; } },
+    { t: "الغلاف", cls: "num text-center whitespace-nowrap", v: x => {
       const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
       const dr = rowDraftOf(x);
       if (inEd) {
         return `<input type="number" step="any" inputmode="decimal" class="tbl-inp" data-bk-inline="${esc(x.Book_ID)}" data-f="coverPrice" value="${esc(dr.coverPrice)}" placeholder="الغلاف">`;
       }
       return x.Book_Status === "Pricing" && !n(x.Cover_Price)
-        ? `<button type="button" class="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-2 py-0.5 text-xs font-semibold hover:bg-amber-100 transition" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط لإدخال السعر فوراً"` : ""}>جاري التسعير ${canEdit ? ic("pencil", "!w-3 !h-3") : ""}</button>`
-        : `<button type="button" class="font-bold text-slate-800 hover:text-brand-700 transition inline-flex items-center gap-1" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط للتعديل السريع بالجدول"` : ""}>${fmt(x.Cover_Price)}</button>`;
+        ? `<button type="button" class="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-1.5 py-0.5 text-[11px] font-semibold hover:bg-amber-100 transition" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط لإدخال السعر فوراً"` : ""}>تسعير ${canEdit ? ic("pencil", "!w-3 !h-3") : ""}</button>`
+        : `<button type="button" class="font-bold text-slate-800 hover:text-brand-700 transition inline-flex items-center gap-0.5" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط للتعديل السريع بالجدول"` : ""}>${fmt(x.Cover_Price)}</button>`;
     } },
-    { t: "خصم المكتبة", cls: "num text-center", v: x => {
+    { t: "خصم%", cls: "num text-center whitespace-nowrap", v: x => {
       const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
       const dr = rowDraftOf(x);
       if (inEd) {
-        return `<div class="inline-flex items-center gap-0.5"><input type="number" step="any" inputmode="decimal" class="tbl-inp !w-16" data-bk-inline="${esc(x.Book_ID)}" data-f="supplierDiscountPct" value="${esc(dr.supplierDiscountPct)}" placeholder="%"><span class="text-[11px] text-slate-400">%</span></div>`;
+        return `<div class="inline-flex items-center gap-0.5"><input type="number" step="any" inputmode="decimal" class="tbl-inp !w-14" data-bk-inline="${esc(x.Book_ID)}" data-f="supplierDiscountPct" value="${esc(dr.supplierDiscountPct)}" placeholder="%"></div>`;
       }
-      return `<span class="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">${fmt(x.Supplier_Discount_Pct)}%</span>`;
+      return `<span class="inline-flex items-center rounded-md bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold text-slate-700">${fmt(x.Supplier_Discount_Pct)}%</span>`;
     } },
-    { t: "التكلفة", cls: "num text-center", v: x => {
+    { t: "التكلفة", cls: "num text-center whitespace-nowrap", v: x => {
       const dr = rowDraftOf(x);
       const p = bookPrice(dr);
       const cost = BK_UI.dirty[x.Book_ID] ? p.cost : n(x.Standard_Net_Cost);
       return `<span data-bk-cost="${esc(x.Book_ID)}" class="font-semibold text-slate-700">${fmt(cost)}</span>`;
     } },
-    { t: "سعر الموظف", cls: "num text-center", v: x => {
+    { t: "للموظف", cls: "num text-center whitespace-nowrap", v: x => {
       const dr = rowDraftOf(x);
       const p = bookPrice(dr);
       const emp = BK_UI.dirty[x.Book_ID] ? p.emp : n(x.Emp_Selling_Price);
-      return `<b data-bk-emp="${esc(x.Book_ID)}" class="inline-flex items-center justify-center rounded-lg bg-brand-50 text-brand-900 px-2.5 py-0.5 font-bold">${fmt(emp)}</b>`;
+      return `<b data-bk-emp="${esc(x.Book_ID)}" class="inline-flex items-center justify-center rounded-lg bg-brand-50 text-brand-900 px-2 py-0.5 font-bold">${fmt(emp)}</b>`;
     } },
-    { t: "الهامش", cls: "num text-center", v: x => {
+    { t: "الهامش", cls: "num text-center whitespace-nowrap", v: x => {
       const dr = rowDraftOf(x);
       const p = bookPrice(dr);
       const m = BK_UI.dirty[x.Book_ID] ? p.margin : r2(n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost));
-      return `<span data-bk-margin="${esc(x.Book_ID)}" class="inline-flex items-center rounded-md px-1.5 py-0.5 text-xs font-bold ${m < 0 ? "bg-rose-50 text-rose-600 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}">${fmt(m)}</span>`;
+      return `<span data-bk-margin="${esc(x.Book_ID)}" class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[11.5px] font-bold ${m < 0 ? "bg-rose-50 text-rose-600 ring-1 ring-rose-200" : "bg-emerald-50 text-emerald-700"}">${fmt(m)}</span>`;
     } },
-    { t: "المخزن / حر", cls: "num text-center", v: x => {
+    { t: "المخزن", cls: "num text-center whitespace-nowrap", v: x => {
       const oh = st[x.Book_ID] ? st[x.Book_ID].onHand : 0, fr = st[x.Book_ID] ? st[x.Book_ID].free : 0;
-      return `<span class="text-xs font-semibold ${oh > 0 ? "text-slate-800" : "text-slate-400"}">${fmt(oh)} <span class="text-slate-300">/</span> <span class="${fr > 0 ? "text-emerald-700 font-bold" : ""}">${fmt(fr)}</span></span>`;
+      return `<span class="text-xs font-semibold ${oh > 0 ? "text-slate-800" : "text-slate-400"}">${fmt(oh)}<span class="text-slate-300 mx-0.5">/</span><span class="${fr > 0 ? "text-emerald-700 font-bold" : ""}">${fmt(fr)}</span></span>`;
     } },
-    { t: "إجراءات", actions: true, cls: "w-44", v: x => {
+    { t: "إجراءات", actions: true, cls: "w-28", v: x => {
       const hasUse = !!(rcMap[x.Book_ID] || (st[x.Book_ID] && st[x.Book_ID].onHand));
       const isRowEd = BK_UI.editingRow === x.Book_ID || !!BK_UI.dirty[x.Book_ID];
-      return `<div class="flex items-center justify-end gap-1">
-        ${canEdit && isRowEd ? `<button class="btn btn-primary btn-xs !px-2" data-act="bkSaveRow" data-id="${esc(x.Book_ID)}" title="حفظ التعديل السريع لهذا الكتاب">${ic("check")} حفظ</button>` : ""}
-        ${canEdit && !BK_UI.inlineMode && !isRowEd ? `<button class="btn btn-ghost btn-xs !px-2 text-brand-700 hover:bg-brand-50" data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="تعديل السعر والخصم مباشرة داخل السطر">${ic("SlidersHorizontal" in (window.ICONS || {}) ? "SlidersHorizontal" : "sliders-horizontal")}</button>` : ""}
-        ${canEdit ? `<button class="btn btn-outline btn-xs !px-2.5" data-act="bookForm" data-id="${esc(x.Book_ID)}" title="فتح لوحة التعديل الكاملة">${ic("pencil")} تعديل</button>
-        <button class="btn btn-ghost btn-xs !px-2 text-slate-600 hover:text-brand-800" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="إضافة نفس الكتاب لصف دراسي آخر أو سلسلة بكود جديد">${ic("package-plus")} نسخ لصف</button>` : ""}
-        ${!hasUse && can("DELETE_BOOK") ? `<button class="btn btn-ghost btn-xs !px-2 text-rose-600 hover:bg-rose-50" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب">${ic("trash-2")} حذف</button>` : ""}
+      return `<div class="inline-flex items-center justify-center gap-1">
+        ${canEdit && isRowEd ? `<button type="button" class="act-ic act-ic-save" data-act="bkSaveRow" data-id="${esc(x.Book_ID)}" title="حفظ التعديل السريع لهذا الكتاب" aria-label="حفظ">${ic("check")}</button>` : ""}
+        ${canEdit && !BK_UI.inlineMode && !isRowEd ? `<button type="button" class="act-ic act-ic-brand" data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="تعديل السعر والخصم مباشرة بالجدول" aria-label="تعديل السعر بالجدول">${ic("sliders-horizontal")}</button>` : ""}
+        ${canEdit ? `<button type="button" class="act-ic act-ic-edit" data-act="bookForm" data-id="${esc(x.Book_ID)}" title="تعديل بيانات الكتاب" aria-label="تعديل">${ic("pencil")}</button>
+        <button type="button" class="act-ic act-ic-copy" data-act="bookClone" data-id="${esc(x.Book_ID)}" title="نسخ الكتاب لصف دراسي آخر أو سلسلة بكود جديد" aria-label="نسخ لصف">${ic("copy")}</button>` : ""}
+        ${!hasUse && can("DELETE_BOOK") ? `<button type="button" class="act-ic act-ic-del" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف الكتاب" aria-label="حذف">${ic("trash-2")}</button>` : ""}
       </div>`;
     } }
   ], list, {
@@ -1761,7 +1761,7 @@ Router.add("/a/phases", view => {
         <div class="flex items-start justify-between gap-2"><div><div class="text-[11.5px] text-slate-400 num">${esc(p.Phase_ID)}</div><h3 class="font-bold text-slate-900 text-[16px]">${esc(p.Phase_Name)}</h3></div>${pill(st)}</div>
         <dl class="grid grid-cols-2 gap-2 mt-4">${UI.stat("الحجز من", esc(day(p.Start_DateTime)))}${UI.stat("الحجز إلى", esc(day(p.End_DateTime)))}${UI.stat("بداية التسليم", esc(day(p.Delivery_Start_Date)) || "—")}${UI.stat("الصفوف", esc(p.Allowed_Grades === "ALL" || !p.Allowed_Grades ? "الكل" : p.Allowed_Grades))}</dl>
         <div class="flex items-center justify-between mt-4 text-[13px] text-slate-500"><span>${fmt(new Set(its.map(i => i.Emp_ID)).size)} موظف · ${fmt(sum(its, "Requested_Qty"))} نسخة</span>
-          <div class="flex gap-1.5">${cur ? "" : `<button class="btn btn-ghost btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">عرض</button>`}${lockedBtn("SAVE_PHASE", `<button class="btn btn-outline btn-xs" data-act="phaseForm" data-id="${esc(p.Phase_ID)}">${ic("pencil")} تعديل</button>`)}${its.length ? "" : lockedBtn("DELETE_PHASE", `<button class="btn btn-ghost btn-xs text-rose-600" data-act="phaseDel" data-id="${esc(p.Phase_ID)}">${ic("trash-2")} حذف</button>`)}</div></div></article>`;
+          <div class="flex items-center gap-1.5">${cur ? "" : `<button class="btn btn-ghost btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">عرض</button>`}${lockedBtn("SAVE_PHASE", `<button class="act-ic act-ic-edit" data-act="phaseForm" data-id="${esc(p.Phase_ID)}" title="تعديل المرحلة" aria-label="تعديل المرحلة">${ic("pencil")}</button>`)}${its.length ? "" : lockedBtn("DELETE_PHASE", `<button class="act-ic act-ic-del" data-act="phaseDel" data-id="${esc(p.Phase_ID)}" title="حذف المرحلة" aria-label="حذف المرحلة">${ic("trash-2")}</button>`)}</div></div></article>`;
     }).join("")}</div>` : `<div class="card">${UI.empty("calendar-range", "لا توجد مراحل بعد", "", lockedBtn("SAVE_PHASE", `<button class="btn btn-primary mt-5" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>`))}</div>`);
 });
 on("phaseForm", async id => {
@@ -1840,7 +1840,7 @@ Router.add("/a/suppliers", view => {
       return `<article class="card card-pad ${isMain ? "ring-2 ring-brand-400" : ""}"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
         <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم كمية ${fmt(s.Volume_Discount_Pct)}%</span></div>
         <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div>
-        <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="btn btn-ghost btn-xs text-rose-600" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}">${ic("trash-2")} حذف</button>`)}</div></article>`; }).join("")}</div>`
+        <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" title="حذف المكتبة" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</div></article>`; }).join("")}</div>`
       : `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.")}</div>`);
 });
 on("supplierForm", async () => {
@@ -1911,7 +1911,7 @@ Router.add("/a/settings", view => {
       return `<div class="flex flex-wrap items-center gap-3 px-4 sm:px-5 py-3.5">
         <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(cleanDesc)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
         <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
-        ${can("SAVE_SETTING") ? `<button class="btn btn-outline btn-xs" data-act="editSetting" data-id="${esc(s.Setting_Key)}">${ic("pencil")} تعديل</button>` : ""}</div>`;
+        ${can("SAVE_SETTING") ? `<button class="act-ic act-ic-edit" data-act="editSetting" data-id="${esc(s.Setting_Key)}" title="تعديل الإعداد" aria-label="تعديل الإعداد">${ic("pencil")}</button>` : ""}</div>`;
     }).join("")}</section>`;
 });
 // ---------------- مصفوفة الصلاحيات (المدير يحدد ما يفعله كل دور)
@@ -2062,7 +2062,7 @@ function allocTable() {
     { t: "الأسبقية", cls: "num", v: i => `<span dir="ltr" class="text-xs">${esc(i.Priority_Timestamp)}</span>${n(i.Tranche_No) > 1 ? ` <span class="pill pill-gray">ش${esc(i.Tranche_No)}</span>` : ""}${i.Carried_From_Item_ID ? ` <span class="pill pill-blue">مُرحَّل</span>` : ""}` },
     { t: "محجوز", cls: "num", v: i => fmt(i.Requested_Qty) }, { t: "مخصص", cls: "num", v: i => `<b class="text-brand-800">${fmt(i.Allocated_Qty)}</b>` }, { t: "مُسلَّم", cls: "num", v: i => fmt(i.Delivered_Qty) },
     { t: "الحالة", v: i => pill(i.Allocation_Status) + (i.Unallocated_Reason ? `<div class="text-[11px] text-slate-400 mt-1">${esc(i.Unallocated_Reason)}</div>` : "") + (isTrue(i.Is_Manual_Exception) ? `<div class="mt-1">${pill("", "استثناء: " + i.Exception_Reason, "blue")}</div>` : "") },
-    { t: "", actions: true, v: i => can("MANUAL_ALLOCATION_OVERRIDE") ? `<button class="btn btn-outline btn-xs" data-act="override" data-id="${esc(i.Res_Item_ID)}">${ic("pencil")} تعديل التخصيص</button>` : "" }
+    { t: "", actions: true, v: i => can("MANUAL_ALLOCATION_OVERRIDE") ? `<button class="act-ic act-ic-edit" data-act="override" data-id="${esc(i.Res_Item_ID)}" title="تعديل التخصيص يدوياً" aria-label="تعديل التخصيص يدوياً">${ic("pencil")}</button>` : "" }
   ], items, { maxH: 680, emptyIcon: "list-ordered", empty: "لا توجد سطور" });
 }
 Router.add("/a/alloc", view => {
@@ -2126,7 +2126,7 @@ Router.add("/a/delivery", view => {
       { t: "النوع", v: x => x.Doc_Type === "EMP_DELIVERY" ? pill("", "تسليم", "green") : x.Doc_Type === "EMP_RETURN" ? pill("", "مرتجع موظف", "amber") : pill("", "مرتجع للمكتبة", "blue") },
       { t: "الطرف", v: "Party_ID" }, { t: "الكتاب", v: x => esc(bookName(b, x.Book_ID)) }, { t: "العدد", cls: "num", v: x => fmt(x.Qty) }, { t: "القيمة", cls: "num", v: x => fmt(x.Total_Amount_Impact) },
       { t: "التاريخ", cls: "num", v: x => esc(dt(x.Trans_Date)) }, { t: "المستلم / السبب", v: x => esc(x.Received_By || x.Return_Reason) },
-      { t: "", actions: true, v: x => `<button class="btn btn-ghost btn-xs" data-act="printDoc" data-id="${esc(x.Printed_Receipt_No)}">${ic("printer")} طباعة</button>` }
+      { t: "", actions: true, v: x => `<button class="act-ic act-ic-edit" data-act="printDoc" data-id="${esc(x.Printed_Receipt_No)}" title="طباعة المستند" aria-label="طباعة المستند">${ic("printer")}</button>` }
     ], docs, { maxH: 460, emptyIcon: "file-text", empty: "لا مستندات بعد" }));
 });
 on("qDel", v => { Q.del = v.trim(); rerenderList("delList", deliveryList); });
@@ -2256,13 +2256,15 @@ function finList() {
     { t: "الصافي", cls: "num", v: i => { const h = resHeaderOf(i.Res_ID), a = n(h.Invoice_Adjustment); return `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` + (a ? `<div class="text-[11px] ${a < 0 ? "text-emerald-600" : "text-amber-600"}" title="${esc(h.Adjustment_Reason)}">${a < 0 ? "خصم" : "إضافة"} ${fmt(Math.abs(a))}</div>` : ""); } }, { t: "المقدم", cls: "num", v: i => fmt(i.Down_Payment_Required) }, { t: "المسدد", cls: "num", v: i => `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>` },
     { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Balance) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Balance)}</b>` + (n(i.Credit_Balance) ? `<div class="text-emerald-600 text-[11px]">له ${fmt(i.Credit_Balance)}</div>` : "") },
     { t: "الخطة", v: i => esc(ar(i.Payment_Plan_Type)) + (n(i.Installments_Count) ? ` · ${i.Installments_Count}` : "") }, { t: "الحالة", v: i => pill(i.Invoice_Status) },
-    { t: "", actions: true, v: i => (n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
+    { t: "إجراءات", actions: true, v: i => `<div class="inline-flex items-center gap-1 whitespace-nowrap">`
+      + (n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
       + (n(i.Credit_Balance) && can("REFUND_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline btn-xs" data-act="refund" data-id="${esc(i.Emp_Inv_ID)}">${ic("undo-2")} رد الرصيد</button>` : "")
-      + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="btn btn-ghost btn-xs" data-act="changePlan" data-id="${esc(i.Res_ID)}">${ic("calendar-range")} الخطة</button>` : "")
-      + `<button class="btn btn-ghost btn-xs" data-act="printInvA" data-id="${esc(i.Emp_Inv_ID)}">${ic("printer")} الفاتورة</button>`
-      + (can("ADJUST_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("pencil")} تعديل</button>` : "")
-      + (can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-ghost btn-xs" data-act="resEdit" data-id="${esc(i.Emp_ID)}">${ic("notebook-pen")} الحجز</button>` : "")
-      + (can("DELETE_EMP_INVOICE") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}">${ic("trash-2")} حذف</button>` : "") }
+      + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="act-ic act-ic-copy" data-act="changePlan" data-id="${esc(i.Res_ID)}" title="تعديل خطة السداد" aria-label="تعديل خطة السداد">${ic("calendar-range")}</button>` : "")
+      + `<button class="act-ic act-ic-edit" data-act="printInvA" data-id="${esc(i.Emp_Inv_ID)}" title="طباعة الفاتورة" aria-label="طباعة الفاتورة">${ic("printer")}</button>`
+      + (can("ADJUST_EMP_INVOICE") ? `<button class="act-ic act-ic-brand" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}" title="تعديل الفاتورة (خصم/إضافة)" aria-label="تعديل الفاتورة">${ic("pencil")}</button>` : "")
+      + (can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="act-ic act-ic-edit" data-act="resEdit" data-id="${esc(i.Emp_ID)}" title="تعديل حجز الكتب" aria-label="تعديل حجز الكتب">${ic("notebook-pen")}</button>` : "")
+      + (can("DELETE_EMP_INVOICE") ? `<button class="act-ic act-ic-del" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}" title="حذف الفاتورة" aria-label="حذف الفاتورة">${ic("trash-2")}</button>` : "")
+      + `</div>` }
   ], invs, { maxH: 680, emptyIcon: "receipt", empty: "لا فواتير", emptySub: "تصدر فواتير الموظفين بعد تشغيل التوزيع." });
 }
 Router.add("/a/collect", view => {
@@ -2347,7 +2349,7 @@ Router.add("/a/cash", view => {
       { t: "الإيصال", v: p => `<b class="num">${esc(p.Receipt_No)}</b><div class="text-[11px] text-slate-400 num">${esc(dt(p.Payment_Date))}</div>` },
       { t: "الموظف", v: p => esc(empName(e, p.Emp_ID)) }, { t: "المبلغ", cls: "num", v: p => `<b class="${n(p.Amount) < 0 ? "text-sky-600" : "text-emerald-600"}">${fmt(p.Amount)}</b>` },
       { t: "الوسيلة", v: p => esc(ar(p.Payment_Method)) + (p.Transaction_Ref ? `<div class="text-[11px] text-slate-400">${esc(p.Transaction_Ref)}</div>` : "") }, { t: "المحصِّل", v: "Collected_By" },
-      { t: "", actions: true, v: p => isTrue(p.Is_Voided) ? pill("", "ملغى: " + (p.Void_Reason || ""), "red") : `<button class="btn btn-ghost btn-xs" data-act="printRcpt" data-id="${esc(p.Receipt_No)}">${ic("printer")} طباعة</button>` + (can("VOID_EMPLOYEE_PAYMENT") ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="voidRcpt" data-id="${esc(p.Receipt_No)}">${ic("ban")} إلغاء</button>` : "") }
+      { t: "إجراءات", actions: true, v: p => isTrue(p.Is_Voided) ? pill("", "ملغى: " + (p.Void_Reason || ""), "red") : `<div class="inline-flex items-center gap-1 whitespace-nowrap"><button class="act-ic act-ic-edit" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة الإيصال" aria-label="طباعة الإيصال">${ic("printer")}</button>` + (can("VOID_EMPLOYEE_PAYMENT") ? `<button class="act-ic act-ic-del" data-act="voidRcpt" data-id="${esc(p.Receipt_No)}" title="إلغاء الإيصال" aria-label="إلغاء الإيصال">${ic("ban")}</button>` : "") + `</div>` }
     ], pays, { maxH: 700, emptyIcon: "receipt", empty: "لا إيصالات" }))}
     <div class="space-y-4">
       ${UI.section(`${ic("calendar-check", "text-brand-600")} إقفال الخزينة اليومي`, "", `
@@ -2453,7 +2455,7 @@ function resTable() {
     { t: "السداد", v: r => esc(ar(r.h.Payment_Method_Selected)) + (n(r.h.Installment_Count) ? ` · ${r.h.Installment_Count} أقساط` : "") },
     { t: "للأقارب", v: r => r.rel.length ? r.rel.map(x => `<span class="pill pill-blue mb-0.5">${esc(x)}</span>`).join(" ") : `<span class="text-slate-300">—</span>` },
     { t: "آخر تعديل", v: r => `<div class="text-[12px] num">${esc(dt(r.h.Last_Modified_At))}</div>${r.h.Created_By ? `<div class="text-[11px] text-slate-400">أنشأته الإدارة: ${esc(r.h.Created_By)}</div>` : ""}` },
-    { t: "", actions: true, v: r => `<button class="btn btn-ghost btn-xs" data-act="printResA" data-id="${esc(r.h.Emp_ID)}">${ic("printer")}</button>` + (edit ? `<button class="btn btn-outline btn-xs" data-act="resEdit" data-id="${esc(r.h.Emp_ID)}">${ic("pencil")} تعديل</button>${r.h.Res_Status !== "Cancelled" && !r.delivered ? `<button class="btn btn-ghost btn-xs text-rose-600" data-act="resDel" data-id="${esc(r.h.Emp_ID)}">${ic("trash-2")} حذف</button>` : ""}` : "") }
+    { t: "إجراءات", actions: true, v: r => `<div class="inline-flex items-center gap-1 whitespace-nowrap"><button class="act-ic act-ic-edit" data-act="printResA" data-id="${esc(r.h.Emp_ID)}" title="طباعة طلب الحجز" aria-label="طباعة طلب الحجز">${ic("printer")}</button>` + (edit ? `<button class="act-ic act-ic-brand" data-act="resEdit" data-id="${esc(r.h.Emp_ID)}" title="تعديل الحجز" aria-label="تعديل الحجز">${ic("pencil")}</button>${r.h.Res_Status !== "Cancelled" && !r.delivered ? `<button class="act-ic act-ic-del" data-act="resDel" data-id="${esc(r.h.Emp_ID)}" title="حذف الحجز" aria-label="حذف الحجز">${ic("trash-2")}</button>` : ""}` : "") + `</div>` }
   ], rows, { maxH: 680, emptyIcon: "notebook-pen", empty: Q.res ? "لا نتائج للبحث" : "لا حجوزات في هذه المرحلة" });
 }
 Router.add("/a/res", view => {

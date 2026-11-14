@@ -198,11 +198,11 @@ const UI = {
     opts = opts || {};
     if (!rows.length) return opts.emptyHtml || UI.empty(opts.emptyIcon || "file-text", opts.empty || "لا توجد بيانات", opts.emptySub);
     const cell = (c, r) => { const v = typeof c.v === "function" ? c.v(r) : esc(r[c.v]); return v === undefined || v === null || v === "" ? `<span class="text-slate-300">—</span>` : v; };
-    const head = `<thead><tr>${cols.map(c => `<th class="${c.cls || ""}">${c.t}</th>`).join("")}</tr></thead>`;
+    const head = `<thead><tr>${cols.map(c => `<th class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${c.t}</th>`).join("")}</tr></thead>`;
     const body = `<tbody>${rows.map(r => {
       const rCls = typeof opts.rowCls === "function" ? opts.rowCls(r) : (opts.rowCls || "");
       const rAttr = typeof opts.rowAttr === "function" ? opts.rowAttr(r) : "";
-      return `<tr class="${rCls}" ${rAttr}>${cols.map(c => `<td class="${c.cls || ""}">${cell(c, r)}</td>`).join("")}</tr>`;
+      return `<tr class="${rCls}" ${rAttr}>${cols.map(c => `<td class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${cell(c, r)}</td>`).join("")}</tr>`;
     }).join("")}</tbody>`;
     const foot = opts.foot ? `<tfoot>${opts.foot}</tfoot>` : "";
     const tableHtml = `<div class="${opts.cardsOnMobile === false ? "" : "hidden lg:block"} overflow-auto rounded-2xl ring-1 ring-slate-200/90 bg-white shadow-soft" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="tbl ${opts.tblCls || ""}" ${opts.id ? `id="${opts.id}"` : ""}>${head}${body}${foot}</table></div>`;
