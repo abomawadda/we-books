@@ -51,8 +51,8 @@ td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
 .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 .sub { color: #6b6585; font-size: .86em; }
 td.code { font-size: .86em; color: #4c3d73; white-space: nowrap; direction: ltr; text-align: center; }
-td.info { font-size: .76em; color: #5b5478; line-height: 1.3; } td.info i { font-style: normal; color: #a39dbb; margin: 0 .6mm; }
-td.bk b { font-weight: 700; } td.bk .ben { font-size: .78em; color: #0369a1; font-weight: 700; }
+td.info { color: #2e2648; line-height: 1.35; } td.info i { font-style: normal; color: #a39dbb; margin: 0 .6mm; }
+td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; color: #0369a1; font-weight: 700; }
 .grp td { background: #f3eefa !important; color: #552c83; font-weight: 700; font-size: .92em; }
 .tot { margin-top: 3mm; display: grid; grid-template-columns: 1.15fr 1fr; gap: 3mm; align-items: start; }
 .sum .kv { padding: .9mm 0; border-bottom: 1px dashed #e4def0; }
@@ -112,14 +112,23 @@ td.bk b { font-weight: 700; } td.bk .ben { font-size: .78em; color: #0369a1; fon
   /** «الصف الرابع الابتدائي» ← «4 ابتدائي» لتوفير المساحة */
   shortGrade(v) { const ORD = { "الأول": 1, "الثاني": 2, "الثالث": 3, "الرابع": 4, "الخامس": 5, "السادس": 6 }; let t = String(v || "").replace(/^الصف\s+/, "");
     Object.keys(ORD).forEach(k => { t = t.replace(new RegExp("^" + k + "\\s+"), ORD[k] + " "); }); return t.replace(/\s+ال(ابتدائي|إعدادي|ثانوي)/, " $1"); },
-  infoCell(l) { const b = Doc.bk(l.code); const g = Doc.shortGrade(l.grade || b.Grade); const parts = [l.publisher || b.Publisher, l.subject || b.Subject, g].filter(Boolean); return `<td class="info">${parts.map(esc).join("<i>·</i>")}</td>`; },
-  bookCells(l, ben) { return `<td class="code num">${esc(l.code)}</td><td class="bk"><b>${esc(l.name)}</b>${ben && l.ben ? `<div class="ben">لـ ${esc(l.ben)}</div>` : ""}</td>${Doc.infoCell(l)}`; },
-  bookHead: `<th class="c" style="width:10%">الكود</th><th>الكتاب</th><th style="width:25%">الناشر · المادة · الصف</th>`,
+  /** أعمدة الكتاب بلا تكرار: الكود | الناشر | المادة · الجزء · الصف (+ المستفيد) */
+  bookCells(l, ben) {
+    const b = Doc.bk(l.code), pub = l.publisher || b.Publisher, subj = l.subject || b.Subject;
+    const parts = [subj, b.Book_Part, Doc.shortGrade(l.grade || b.Grade)].filter(Boolean);
+    const info = pub || subj ? parts.map(v => `<bdi>${esc(v)}</bdi>`).join("<i>·</i>") : esc(l.name);
+    return `<td class="code num">${esc(l.code)}</td><td class="bk"><b>${esc(pub || "—")}</b></td><td class="info">${info}${ben && l.ben ? `<div class="ben">لـ ${esc(l.ben)}</div>` : ""}</td>`;
+  },
+  bookHead: `<th class="c" style="width:11%">الكود</th><th style="width:22%">الناشر</th><th>المادة والصف</th>`,
+  /** الترتيب: الناشر الأشهر أولاً (الأكثر كتباً وحجزاً في الدليل)، ثم المادة */
+  pubRank() { const list = (APP.adm && APP.adm.books) || (APP.emp && APP.emp.books) || []; if (Doc._prSrc === list) return Doc._pr; const r = {}; list.forEach(b => { r[b.Publisher] = (r[b.Publisher] || 0) + 1 + n(b.Pop) * 3; }); Doc._prSrc = list; Doc._pr = r; return r; },
+  sortLines(lines) { const r = Doc.pubRank(), k = l => { const b = Doc.bk(l.code); return [l.publisher || b.Publisher || "", l.subject || b.Subject || ""]; };
+    return lines.slice().sort((x, y) => { const [px, sx] = k(x), [py, sy] = k(y); return (r[py] || 0) - (r[px] || 0) || px.localeCompare(py, "ar") || sx.localeCompare(sy, "ar"); }); },
   /** طلب حجز: d = {no,date,phase,status,emp:{name,id,dept,mobile},lines:[{code,name,grade,ben,qty,cover,price}],plan:{method,down,count,per,last}} */
   reservation(d) {
     // التجميع: حسب الابن وصفه (l.grp) إن وُجد، وإلا حسب المستفيد
     const gk = l => l.grp !== undefined ? l.grp : (l.ben || "");
-    const groups = {}; d.lines.forEach(l => (groups[gk(l)] = groups[gk(l)] || []).push(l));
+    const groups = {}; Doc.sortLines(d.lines).forEach(l => (groups[gk(l)] = groups[gk(l)] || []).push(l));
     const byGrp = d.lines.some(l => l.grp !== undefined);
     const keys = byGrp ? Object.keys(groups) : ["", ...Object.keys(groups).filter(Boolean)].filter(k => groups[k]);
     const cover = d.lines.reduce((s, l) => s + l.qty * n(l.cover), 0), net = d.lines.reduce((s, l) => s + l.qty * n(l.price), 0), cnt = d.lines.reduce((s, l) => s + l.qty, 0);
@@ -139,7 +148,7 @@ td.bk b { font-weight: 700; } td.bk .ben { font-size: .78em; color: #0369a1; fon
   },
   /** فاتورة: d = {no,date,phase,status,emp,lines:[{code,name,grade,ben,alloc,deliv,ret,price,cover}],adj,adjReason,paid,remaining,credit,down,method,schedule:[{label,due,amount,paid,rem,status}],payments:[{no,date,amount,method}]} */
   invoice(d) {
-    const lines = d.lines.filter(l => Math.max(l.alloc, l.deliv) - l.ret > 0);
+    const lines = Doc.sortLines(d.lines.filter(l => Math.max(l.alloc, l.deliv) - l.ret > 0));
     const gross = lines.reduce((s, l) => s + (Math.max(l.alloc, l.deliv) - l.ret) * n(l.price), 0), cover = lines.reduce((s, l) => s + (Math.max(l.alloc, l.deliv) - l.ret) * n(l.cover), 0);
     const net = Math.max(0, gross + n(d.adj));
     const st = { Paid_In_Full: ["مسددة بالكامل", "g"], Overdue: ["متأخرة", "r"], Partially_Paid: ["مسددة جزئياً", "a"], Unpaid: ["غير مسددة", "a"], Refund_Due: ["مستحق رد", "a"] }[d.status] || [ar(d.status), ""];
@@ -173,7 +182,7 @@ td.bk b { font-weight: 700; } td.bk .ben { font-size: .78em; color: #0369a1; fon
     let i = 0;
     return Doc.page(`${Doc.head(d.title, d.no)}
       <div class="meta"><div class="box"><h4>المستلم</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}</div><div class="box"><h4>المستند</h4>${Doc.kv("التاريخ", `<span class="num">${esc(String(d.date || "").slice(0, 16))}</span>`)}${Doc.kv("عدد الكتب", `<span class="num">${d.lines.reduce((s, l) => s + n(l.qty), 0)}</span>`)}</div></div>
-      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:8%">الكمية</th><th class="c" style="width:6%">✓</th></tr></thead><tbody>${d.lines.map(l => `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, true)}<td class="c num">${l.qty}</td><td class="c">☐</td></tr>`).join("")}</tbody></table>
+      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:8%">الكمية</th><th class="c" style="width:6%">✓</th></tr></thead><tbody>${Doc.sortLines(d.lines).map(l => `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, true)}<td class="c num">${l.qty}</td><td class="c">☐</td></tr>`).join("")}</tbody></table>
       ${d.note ? `<div class="note">${esc(d.note)}</div>` : ""}<div class="note">أقر باستلام الكتب الموضحة أعلاه بحالة سليمة.</div>
       <div class="sig"><div>توقيع المستلم</div><div>أمين المخزن</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A5"));
   },

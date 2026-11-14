@@ -24,7 +24,7 @@ const phaseItems = () => A().resItems.filter(i => i.Phase_ID === APP.phaseId && 
 const empName = (e, id) => (e[id] || {}).Full_Name || id;
 const bookName = (b, id) => (b[id] || {}).Book_Name || id;
 /** «الناشر · المادة · الصف» للكتاب في القوائم */
-const bookMeta = (b, id) => { const x = b[id] || {}; return [x.Publisher, x.Subject, Doc.shortGrade(x.Grade)].filter(Boolean).join(" · "); };
+const bookMeta = (b, id) => { const x = b[id] || {}, nm = String(x.Book_Name || ""); return [x.Publisher, x.Subject, x.Book_Part, Doc.shortGrade(x.Grade)].filter(v => v && !nm.includes(v)).join(" · "); };
 const bookSub = (b, id, extra) => `<div class="text-[11.5px] text-slate-500 truncate"><span class="num text-brand-700 font-semibold">${esc(id)}</span>${bookMeta(b, id) ? " · " + esc(bookMeta(b, id)) : ""}${extra || ""}</div>`;
 const noPhase = view => { if (APP.phaseId) return false; view.innerHTML = UI.empty("calendar-range", "لا توجد مراحل بعد", "ابدأ بإنشاء أول مرحلة حجز.", can("SAVE_PHASE") ? `<button class="btn btn-primary mt-5" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>` : ""); return true; };
 const lockedBtn = (action, html) => can(action) ? html : "";
