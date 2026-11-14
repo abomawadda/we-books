@@ -172,3 +172,65 @@ on("pplCsv", () => {
   if (PPL.tab === "skip") return PPL.skipped && PPL.skipped.rows ? exportCSV("أعضاء بياناتهم ناقصة", ["الرقم الوظيفي", "الاسم", "جهة العمل", "الناقص"], PPL.skipped.rows.map(r => [r.job_id, r.name, r.workplace, r.missing])) : toast("القائمة لم تُحمَّل بعد", "warning");
   exportCSV("لم يحجزوا", ["الرقم الوظيفي", "الاسم", "جهة العمل", "الموبايل"], nonBookers().map(e => [e.Emp_ID, e.Full_Name, e.Department, e.Mobile]));
 });
+
+// ---------------------------------------------------------------- تقارير المدير الإضافية
+REPORTS.unshift(["R00", "presentation", "تقرير المجلس", "صفحة واحدة بالأرقام الرئيسية للطباعة"]);
+REPORTS.push(["R15", "building-2", "ربحية الناشرين", "إيراد وتكلفة وهامش كل ناشر"], ["R16", "wand-sparkles", "ماذا لو؟", "أثر تغيير خصم الموظفين على النقابة"]);
+const WHATIF = { pct: null };
+/** مقاييس المرحلة: كل بند محجوز بسعر الكتاب الحالي (بنده إن ثُبِّت) */
+function phaseMoney() {
+  const { b } = maps(); let cover = 0, emp = 0, cost = 0, qty = 0, unpriced = 0;
+  const pub = {};
+  phaseItems().forEach(i => {
+    const bk = b[i.Book_ID] || {}, q = n(i.Net_Billable_Qty) || n(i.Requested_Qty), ep = n(i.Unit_Emp_Price) || n(bk.Emp_Selling_Price), cp = n(i.Unit_Cover_Price) || n(bk.Cover_Price), co = n(bk.Standard_Net_Cost);
+    if (!ep) { unpriced += q; return; }
+    qty += q; cover += q * cp; emp += q * ep; cost += q * co;
+    const p = pub[bk.Publisher || "غير محدد"] = pub[bk.Publisher || "غير محدد"] || { q: 0, cover: 0, emp: 0, cost: 0, books: new Set() };
+    p.q += q; p.cover += q * cp; p.emp += q * ep; p.cost += q * co; p.books.add(i.Book_ID);
+  });
+  return { cover, emp, cost, qty, unpriced, margin: emp - cost, savings: cover - emp, pub };
+}
+const _renderReport = renderReport;
+renderReport = async function () {
+  const sel = Rep.sel, area = $("#repArea");
+  if (!["R00", "R15", "R16"].includes(sel)) return _renderReport();
+  if (!A() || !area) return;
+  const M = phaseMoney(), ph = phaseObj(), d = A(), { e, b } = maps();
+  let h = "";
+  if (sel === "R00") {
+    const heads = d.resHeaders.filter(x => x.Phase_ID === APP.phaseId && x.Res_Status !== "Cancelled"), invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId);
+    const paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance"), exp = d.expenses.filter(x => x.Phase_ID === APP.phaseId).reduce((s, x) => s + n(x.Amount), 0);
+    const kids = {}; phaseItems().forEach(i => { const k = (b[i.Book_ID] || {}).Stage || "أخرى"; kids[k] = (kids[k] || 0) + n(i.Requested_Qty); });
+    const benef = new Set(phaseItems().map(i => i.Emp_ID + "|" + (i.Beneficiary || ""))).size;
+    const dep = {}; heads.forEach(x => { const k = (e[x.Emp_ID] || {}).Department || "غير محدد"; dep[k] = (dep[k] || 0) + 1; });
+    h = `<div class="text-center mb-4"><div class="text-[13px] text-slate-500">${esc(Brand.get().org || "")}</div><h3 class="text-xl font-bold text-slate-900">تقرير مبادرة الكتب المخفضة — ${esc(ph.Phase_Name || "")}</h3><div class="text-[12px] text-slate-500 num">حتى ${esc(dt(new Date().toISOString()))}</div></div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        ${UI.kpi("موظفون مستفيدون", fmt(heads.length), { icon: "users", foot: `${Math.round(heads.length / (d.employees.length || 1) * 100)}% من ${fmt(d.employees.length)} عضو` })}
+        ${UI.kpi("أبناء وأقارب مستفيدون", fmt(benef), { icon: "graduation-cap", tone: "blue" })}
+        ${UI.kpi("نسخ محجوزة", fmt(M.qty + M.unpriced), { icon: "book-open", tone: "gray", foot: M.unpriced ? `${fmt(M.unpriced)} نسخة بانتظار السعر` : "" })}
+        ${UI.kpi("وفّرها الموظفون", money(M.savings), { icon: "piggy-bank", tone: "green", foot: M.cover ? `${Math.round(M.savings / M.cover * 100)}% من سعر الغلاف` : "" })}
+      </div>
+      ${kvTable([["قيمة الكتب بسعر الغلاف", money(M.cover)], ["قيمتها بسعر الموظف", money(M.emp)], ["تكلفتها على النقابة (بعد خصم المكتبة)", money(M.cost)], ["هامش النقابة من الكتب", `<b class="${M.margin < 0 ? "text-rose-600" : "text-emerald-600"}">${money(M.margin)}</b>`], ["المصروفات", money(exp)], ["الصافي التقديري", `<b>${money(M.margin - exp)}</b>`], ["المحصَّل من الموظفين", money(paid)], ["المتبقي على الموظفين", money(rem)]])}
+      <div class="grid gap-4 md:grid-cols-2 mt-4">${UI.section("النسخ حسب المرحلة الدراسية", "", UI.bars(Object.keys(kids).map(k => ({ label: k, value: kids[k] }))))}
+        ${UI.section("أكثر جهات العمل مشاركة", "", UI.bars(Object.keys(dep).sort((x, y) => dep[y] - dep[x]).slice(0, 8).map(k => ({ label: k, value: dep[k], tone: "bg-sky-500" }))))}</div>`;
+  } else if (sel === "R15") {
+    const rows = Object.keys(M.pub).map(k => Object.assign({ k, m: M.pub[k].emp - M.pub[k].cost }, M.pub[k])).sort((x, y) => y.emp - x.emp);
+    h = `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${UI.kpi("إيراد الكتب", money(M.emp), { icon: "receipt" })}${UI.kpi("التكلفة", money(M.cost), { icon: "landmark", tone: "gray" })}${UI.kpi("الهامش", money(M.margin), { icon: "trending-up", tone: M.margin < 0 ? "red" : "green" })}${UI.kpi("ناشرون بخسارة", fmt(rows.filter(r => r.m < 0).length), { icon: "triangle-alert", tone: rows.some(r => r.m < 0) ? "red" : "green" })}</div>`
+      + UI.table([{ t: "الناشر", v: r => `<b>${esc(r.k)}</b><div class="text-[11px] text-slate-400">${fmt(r.books.size)} كتاب</div>` }, { t: "نسخ", cls: "num", v: r => fmt(r.q) }, { t: "بسعر الغلاف", cls: "num", v: r => fmt(Math.round(r.cover)) }, { t: "إيراد الموظفين", cls: "num", v: r => fmt(Math.round(r.emp)) }, { t: "التكلفة", cls: "num", v: r => fmt(Math.round(r.cost)) },
+        { t: "الهامش", cls: "num", v: r => `<b class="${r.m < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(Math.round(r.m))}</b>` }, { t: "النسبة", cls: "num", v: r => r.emp ? Math.round(r.m / r.emp * 100) + "%" : "—" }], rows, { empty: "لا حجوزات مسعّرة بعد", emptyIcon: "building-2" });
+  } else {
+    const cur = M.cover ? Math.round((1 - M.emp / M.cover) * 100) : n((A().settingsMap || {}).UNIFIED_EMP_DISCOUNT_PCT);
+    if (WHATIF.pct === null) WHATIF.pct = cur;
+    const nEmp = M.cover * (1 - WHATIF.pct / 100), nm = nEmp - M.cost;
+    h = `<p class="text-[13.5px] text-slate-600 mb-3">حرّك نسبة خصم الموظفين وشوف أثرها على الحجوزات الحالية (${fmt(M.qty)} نسخة مسعّرة). التكلفة على النقابة ثابتة = ${money(M.cost)}.</p>
+      <div class="card p-4 mb-4"><div class="flex items-center justify-between"><span class="font-semibold">خصم الموظف</span><b class="text-2xl num text-brand-800">${WHATIF.pct}%</b></div>
+        <input type="range" min="0" max="60" step="1" value="${WHATIF.pct}" class="w-full mt-3 accent-[#6a3aa0]" data-change="wfPct"><div class="text-[12px] text-slate-500 mt-1">الخصم الفعلي الحالي ≈ ${cur}%</div></div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">${UI.kpi("يدفعه الموظفون", money(nEmp), { icon: "wallet" })}${UI.kpi("يوفّرونه", money(M.cover - nEmp), { icon: "piggy-bank", tone: "green" })}
+        ${UI.kpi(nm >= 0 ? "فائض النقابة" : "تدعمه النقابة", `<span class="${nm < 0 ? "text-rose-600" : "text-emerald-600"}">${money(Math.abs(nm))}</span>`, { icon: nm < 0 ? "hand-coins" : "trending-up", tone: nm < 0 ? "red" : "green" })}
+        ${UI.kpi("الفرق عن الوضع الحالي", money(nm - M.margin), { icon: "scale", tone: "gray" })}</div>
+      <div class="text-[12px] text-slate-500 mt-3">أقصى خصم بلا دعم من النقابة ≈ <b class="num">${M.cover ? Math.floor((1 - M.cost / M.cover) * 100) : 0}%</b>. الأداة للتقدير فقط ولا تغيّر أي سعر.</div>`;
+  }
+  if (Rep.sel === sel && $("#repArea")) $("#repArea").innerHTML = h;
+};
+on("wfPct", v => { WHATIF.pct = n(v); renderReport(); });
+Rep.sel = "R00";
