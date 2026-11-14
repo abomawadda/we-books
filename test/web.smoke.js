@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/close.js', 'js/help.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/close.js', 'js/help.js', 'js/entry.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -45,6 +45,14 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await settle();
   check(d.getElementById('fEmp'), 'login screen rendered');
 
+  // بوابة الدخول: اختيار الفئة ثم تسجيل زائر
+  check(d.getElementById('lgPick') && d.querySelectorAll('[data-act="entryPick"]').length === 4, 'entry picker');
+  await click('[data-act="entryPick"][data-id="guest"]'); check(d.querySelector('[data-act="entryReg"]'), 'guest form');
+  await click('[data-act="entryReg"]'); fill('name', 'سامي علي حسن'); fill('nationalId', '29001011234567'); fill('mobile', '01099887766'); await ok(); await settle(); await settle(); await sleep(900);
+  check(w.location.hash.startsWith('#/e/') && /7000001/.test(d.body.textContent), 'guest registered + member id shown');
+  d.querySelectorAll('[data-close]').forEach(b => b.click()); await settle();
+  await w.eval('logout')(false); await settle(); await settle();
+  w.eval('Shell').loginTab = 'emp'; w.eval('Shell').renderLogin(); await settle();
   // دخول ببيانات خاطئة ← نافذة «مش قادر تدخل؟»
   d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '0000'; d.getElementById('lgMob').value = '01000000000';
   d.getElementById('fEmp').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle();

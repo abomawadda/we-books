@@ -200,7 +200,7 @@ const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
 const reply = (o: any, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } });
 
-async function handle(action: string, payload: any, token: string) {
+async function handle(action: string, payload: any, token: string, clientIp = '') {
   const rt = await runtime();
   if (action === 'LOGOUT') return { success: true };
   // المهمة اليومية (pg_cron): محمية بمفتاح في books.config لا يعرفه إلا قاعدة البيانات
@@ -257,6 +257,14 @@ async function handle(action: string, payload: any, token: string) {
     const url = `${base}/storage/v1/object/public/book-covers/${id}.${ext}?v=${Date.now()}`;
     return await save(url);
   }
+  // تسجيل ذاتي (زائر/معاش/تعهيد): 5 تسجيلات كحد أقصى لكل عنوان IP كل 15 دقيقة
+  if (action === 'REGISTER_MEMBER') {
+    const fk = 'REG:' + (clientIp || 'x');
+    if (await isLocked(fk)) return { success: false, message: 'تسجيلات كثيرة من نفس الجهاز. حاول بعد 15 دقيقة.' };
+    const res = await rt.run(store, action, rt.apiFn(action, payload, null));
+    if (res && res.success) { await registerFail(fk); res.sessionToken = await issue(res.user); }
+    return res;
+  }
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);
     if (await isLocked(fk)) return LOCKED;
@@ -275,6 +283,7 @@ Deno.serve(async (req: Request) => {
   await ready;
   if (req.method === 'GET' && new URL(req.url).searchParams.has('health')) { const h = await health(); return reply(h, h.success ? 200 : 503); }
   if (req.method !== 'POST') return reply({ success: true, service: 'we-books', version: (await runtime()).E.SYSTEM_CONFIG.VERSION, db: dbMode });
+  const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim();
   let body: any;
   try { body = JSON.parse(await req.text()); } catch { return reply({ success: false, message: 'طلب غير صالح.' }, 400); }
   if (!body || typeof body.action !== 'string') return reply({ success: false, message: 'طلب غير صالح.' }, 400);
@@ -283,7 +292,7 @@ Deno.serve(async (req: Request) => {
   const busy = (e: any) => e && (['53300', '57P03', '57014', '40001', '40P01'].includes(e.code) || /too many clients|connection slots|max client|CONNECT_TIMEOUT/i.test(String(e.message || e.code)));
   try {
     for (let i = 0; ; i++) {
-      try { return reply(await handle(body.action, body.payload || {}, body.token)); }
+      try { return reply(await handle(body.action, body.payload || {}, body.token, ip)); }
       catch (e) { if (!busy(e) || i >= 8) throw e; await new Promise(r => setTimeout(r, Math.min(4000, 150 * 2 ** i) * (0.5 + Math.random()))); }
     }
   }

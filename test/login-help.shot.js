@@ -18,6 +18,10 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
   await p.goto('https://app.test/'); await p.waitForTimeout(700);
   const sg = await p.$('#spGo'); if (sg) { await sg.click({ force: true }); await p.waitForTimeout(500); }
   await p.screenshot({ path: path.join(OUT, 'login.png') });
+  await p.click('[data-act="entryPick"][data-id="guest"]'); await p.waitForTimeout(300); await p.screenshot({ path: path.join(OUT, 'login-guest.png') });
+  await p.click('[data-act="entryReg"]'); await p.waitForTimeout(500); await p.screenshot({ path: path.join(OUT, 'login-reg.png') });
+  await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+  await p.click('[data-act="entryPick"][data-id="pick"]'); await p.waitForTimeout(300); await p.click('[data-act="entryPick"][data-id="emp"]'); await p.waitForTimeout(300);
   await p.fill('#lgEmp', '1001'); await p.fill('#lgNat', '0000'); await p.fill('#lgMob', '01000000000'); await p.click('#fEmp button.btn-gold'); await p.waitForTimeout(900);
   await p.screenshot({ path: path.join(OUT, 'login-trouble.png') });
   await p.click('[data-go="faq"]', { force: true }); await p.waitForTimeout(1000); await p.screenshot({ path: path.join(OUT, 'faq.png') });
