@@ -464,6 +464,7 @@ function seedInitialData_() {
       st("REQUIRE_DOWN_PAYMENT_BEFORE_DELIVERY", true, "BOOLEAN", "منع التسليم قبل سداد المقدم (أو كامل القيمة للدفع الكامل)"),
       st("BLOCK_DELIVERY_IF_OVERDUE", true, "BOOLEAN", "منع التسليم لمن عليه أقساط متأخرة من مراحل سابقة"),
       st("EMP_RETURN_WINDOW_DAYS", 7, "NUMBER", "مدة قبول مرتجع الموظف بعد الاستلام (يوم)"),
+      st("PICKUP_SCHEDULE", "", "STRING", "مواعيد الاستلام (JSON: المكان والأيام وجهات العمل لكل موعد)"),
       st("CASH_ACCOUNT_HOLDER", "محمود العراقي", "STRING", "اسم صاحب المحفظة وحساب إنستاباي"),
       st("DEFICIT_BEARER", "أمين الصندوق", "STRING", "الجهة التي تتحمل العجز ويؤول إليها الفائض"),
       st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى"),
@@ -856,10 +857,11 @@ const OperationsEngine = {
         UNIFIED_EMP_DISCOUNT_PCT: settings.UNIFIED_EMP_DISCOUNT_PCT, MAX_INSTALLMENT_COUNT: settings.MAX_INSTALLMENT_COUNT,
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
-        ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5
+        ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5,
+        PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
-      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp) },
+      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department) },
       books: books,
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
@@ -1178,8 +1180,12 @@ const OperationsEngine = {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
       const key = Util.str(payload.key);
-      const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
+      let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
+      // إعدادات أُضيفت بعد التشغيل: تُنشأ عند أول حفظ
+      const LATE = { PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"] };
+      if (!row && LATE[key]) { row = { Setting_Key: key, Setting_Value: "", Data_Type: LATE[key][0], Description: LATE[key][1] }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       Util.require(row, "إعداد غير معروف: " + key);
+      if (key === "PICKUP_SCHEDULE" && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة المواعيد غير صحيحة."); } }
       DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", key, { Setting_Value: payload.value, Updated_At: Util.now(), Updated_By: Util.actor(session) });
       DB_Engine.logAudit(session.userId, session.role, "Settings", "SAVE_SETTING", key, { v: row.Setting_Value }, { v: payload.value });
       return { success: true, message: "تم حفظ الإعداد." };
