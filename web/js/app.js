@@ -92,7 +92,7 @@ const Shell = {
             <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
           </form>
           <p class="text-center text-xs text-brand-200/70 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
-          <div class="text-center mt-5 flex items-center justify-center gap-3 text-[12px]"><button type="button" data-act="contact" class="text-gold-300 font-semibold hover:underline">${ic("headset", "ml-1")} تواصل مع المسؤول</button></div>
+          <div class="text-center mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[12.5px]">${tab === "emp" ? `<button type="button" data-act="helpForm" class="text-gold-300 font-semibold hover:underline">${ic("key-round", "ml-1")} نسيت بياناتي / مش قادر أدخل</button><button type="button" data-act="faq" class="text-gold-300 font-semibold hover:underline">${ic("info", "ml-1")} أسئلة شائعة</button>` : ""}<button type="button" data-act="contact" class="text-gold-300 font-semibold hover:underline">${ic("headset", "ml-1")} تواصل مع المسؤول</button></div>
           ${Brand.get().credit ? `<p class="lg:hidden text-center text-[11px] text-brand-300/70 mt-4">${esc(Brand.get().credit)}</p>` : ""}
           <div class="text-center mt-4">${tab === "adm"
             ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-gold-300 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
