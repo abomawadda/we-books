@@ -80,9 +80,16 @@ const Shell = {
           <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-4" autocomplete="on">
             <div class="hidden lg:block"><h2 class="text-2xl font-bold text-white">أهلاً بك 👋</h2><p class="text-sm text-brand-200 mt-1">ادخل ببياناتك المسجلة في النقابة</p></div>
             <div><label class="label" for="lgEmp">الرقم الوظيفي</label><div class="input-icon">${ic("badge-check")}<input id="lgEmp" class="input" inputmode="numeric" autocomplete="username" required></div></div>
-            <div><label class="label" for="lgNat">آخر 4 أرقام من الرقم القومي</label><div class="input-icon">${ic("lock")}<input id="lgNat" class="input tracking-[.4em]" type="password" maxlength="4" inputmode="numeric" required></div></div>
+            <div><label class="label" for="lgNat">آخر 4 أرقام من الرقم القومي</label><div class="input-icon relative">${ic("lock")}<input id="lgNat" class="input tracking-[.4em] !pl-10" type="password" maxlength="4" inputmode="numeric" required><button type="button" data-act="toggleNatEye" class="absolute left-2 top-1/2 -translate-y-1/2 icon-btn w-8 h-8 text-brand-200/80 hover:text-white" aria-label="إظهار أو إخفاء الرقم">${ic("eye")}</button></div></div>
             <div><label class="label" for="lgMob">رقم الموبايل المسجل</label><div class="input-icon">${ic("smartphone")}<input id="lgMob" class="input" type="tel" inputmode="tel" dir="ltr" style="text-align:right" placeholder="01xxxxxxxxx" required></div></div>
-            <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول ${ic("arrow-right", "rotate-180")}</button>
+            <div class="flex items-center justify-between py-0.5 px-1 text-[13px] text-brand-100">
+              <label class="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" id="lgRemember" class="w-4 h-4 rounded border-white/30 bg-white/10 text-gold-400 focus:ring-gold-300 accent-[#f9b224]">
+                <span class="font-medium">تذكر بياناتي على هذا الجهاز</span>
+              </label>
+              <span class="text-[11px] text-brand-200/70">دخول أسرع بعدين</span>
+            </div>
+            <button class="btn btn-gold btn-lg w-full !text-brand-950 font-bold shadow-lift">دخول ${ic("arrow-right", "rotate-180")}</button>
           </form>
           <form id="fAdm" class="${tab === "adm" ? "" : "hidden"} space-y-4" autocomplete="on">
             <div><h2 class="text-xl font-bold text-white">لوحة الإدارة</h2><p class="text-sm text-brand-200 mt-1">المدير · مسؤول المبادرة · أمين الصندوق · أمين المخزن</p></div>
@@ -257,6 +264,7 @@ on("toggleSide", () => { Shell.collapsed = !Shell.collapsed; store.set("sideColl
 on("contact", t => openContact(t));
 on("loginTab", t => { Shell.loginTab = t; Shell.renderLogin(); });
 on("togglePass", (_, el) => { const i = $("#lgPass"); i.type = i.type === "password" ? "text" : "password"; el.innerHTML = ic(i.type === "password" ? "eye" : "eye-off"); });
+on("toggleNatEye", (_, el) => { const i = $("#lgNat"); if (!i) return; i.type = i.type === "password" ? "text" : "password"; el.innerHTML = ic(i.type === "password" ? "eye" : "eye-off"); });
 on("refresh", async (_, el) => { el.classList.add("animate-spin"); APP.settlement = null; await reloadData(); el.classList.remove("animate-spin"); });
 on("pickPhase", () => {
   const d = APP.user.userType === "ADMIN" ? APP.adm : APP.emp; if (!d) return;
