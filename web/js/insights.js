@@ -234,3 +234,64 @@ renderReport = async function () {
 };
 on("wfPct", v => { WHATIF.pct = n(v); renderReport(); });
 Rep.sel = "R00";
+
+// ---------------------------------------------------------------- «اسأل البيانات»: فلاتر جاهزة + تحليل الأسر
+const ASK = { dept: "", stage: "", grade: "", st: "booked" };
+const ASK_ST = [["booked", "حجزوا"], ["none", "لم يحجزوا"], ["down", "لم يسددوا المقدم"], ["waiting", "لهم نسخ في الانتظار"], ["ready", "كتبهم جاهزة ولم يستلموا"], ["done", "استلموا كل كتبهم"], ["owes", "عليهم رصيد"], ["rel", "حجزوا لأقارب"]];
+function askRows() {
+  const d = A(), { b } = maps(), items = phaseItems(), byEmp = {};
+  items.forEach(i => { (byEmp[i.Emp_ID] = byEmp[i.Emp_ID] || []).push(i); });
+  const inv = {}; d.empInvoices.filter(x => x.Phase_ID === APP.phaseId).forEach(x => { inv[x.Emp_ID] = x; });
+  return d.employees.filter(e => !ASK.dept || (e.Department || "غير محدد") === ASK.dept).map(e => {
+    let its = byEmp[e.Emp_ID] || [];
+    if (ASK.stage) its = its.filter(i => (b[i.Book_ID] || {}).Stage === ASK.stage);
+    if (ASK.grade) its = its.filter(i => (b[i.Book_ID] || {}).Grade === ASK.grade);
+    const v = inv[e.Emp_ID] || {}, req = its.reduce((s, i) => s + n(i.Requested_Qty), 0), al = its.reduce((s, i) => s + n(i.Allocated_Qty), 0), dl = its.reduce((s, i) => s + n(i.Delivered_Qty), 0);
+    return { e, its, req, al, dl, amt: its.reduce((s, i) => s + n(i.Requested_Qty) * (n(i.Unit_Emp_Price) || n((b[i.Book_ID] || {}).Emp_Selling_Price)), 0), inv: v,
+      down: Math.max(0, n(v.Down_Payment_Required) - n(v.Total_Paid_Amount)), rem: n(v.Remaining_Balance), rel: its.some(i => i.Beneficiary) };
+  }).filter(r => {
+    const any = (ASK.stage || ASK.grade) ? r.req > 0 : (byEmp[r.e.Emp_ID] || []).length > 0;
+    return { booked: any, none: !any && !(byEmp[r.e.Emp_ID] || []).length, down: any && r.inv.Emp_Inv_ID && r.down > 0, waiting: any && r.req > Math.max(r.al, r.dl), ready: r.al > r.dl, done: any && r.dl >= r.req, owes: r.rem > 0, rel: r.rel }[ASK.st];
+  });
+}
+function askBody() {
+  const rows = askRows();
+  return `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${UI.kpi("عدد الموظفين", fmt(rows.length), { icon: "users" })}${UI.kpi("النسخ", fmt(sum(rows, "req")), { icon: "book-open", tone: "blue" })}${UI.kpi("القيمة", money(sum(rows, "amt")), { icon: "receipt", tone: "gray" })}${UI.kpi("المتبقي عليهم", money(sum(rows, "rem")), { icon: "hand-coins", tone: "amber" })}</div>`
+    + UI.table([{ t: "الموظف", v: r => `<b>${empLink(r.e.Emp_ID, r.e.Full_Name)}</b><div class="text-[11px] text-slate-400 num">${esc(r.e.Emp_ID)} · ${esc(r.e.Department || "")}</div>` },
+      { t: "نسخ", cls: "num", v: r => fmt(r.req) }, { t: "مُسلَّم", cls: "num", v: r => fmt(r.dl) }, { t: "القيمة", cls: "num", v: r => fmt(Math.round(r.amt)) }, { t: "المقدم الباقي", cls: "num", v: r => r.down ? `<b class="text-rose-600">${fmt(r.down)}</b>` : "" }, { t: "المتبقي", cls: "num", v: r => fmt(r.rem) },
+      { t: "", actions: true, v: r => r.e.Mobile ? `<a class="btn btn-outline btn-xs !text-emerald-700" target="_blank" rel="noopener" href="${esc(Brand.waLink(r.e.Mobile, ""))}">${ic("message-circle")} واتساب</a>` : "" }], rows.slice(0, 400), { empty: "لا أحد يطابق هذا السؤال", emptyIcon: "search" });
+}
+function familyBox() {
+  const per = {}, grades = {}, rel = {}; let fam = 0, kids = 0;
+  A().employees.forEach(e => { let k = []; try { k = (JSON.parse(e.Kids_JSON || "{}").kids) || []; } catch (_) {} if (!k.length) return; fam++; kids += k.length;
+    const c = Math.min(k.length, 5); per[c] = (per[c] || 0) + 1; k.forEach(x => { if (x.grade) grades[x.grade] = (grades[x.grade] || 0) + 1; if (x.rel) rel[x.rel] = (rel[x.rel] || 0) + 1; }); });
+  if (!fam) return UI.empty("users", "لم يسجّل الموظفون أبناءهم بعد", "تظهر هنا بيانات الأسر بعد إضافة الأبناء من التطبيق.");
+  const gl = ((A().catalog || {}).grades || []), gName = c => (gl.find(g => g.code === c) || {}).label || c, ord = c => { const i = gl.findIndex(g => g.code === c); return i < 0 ? 99 : i; };
+  return `<div class="grid grid-cols-3 gap-2 mb-4">${UI.stat("أسر سجّلت أبناءها", fmt(fam))}${UI.stat("عدد الأبناء", fmt(kids))}${UI.stat("متوسط الأبناء", (Math.round(kids / fam * 10) / 10).toLocaleString("ar-EG"))}</div>
+    <div class="grid gap-4 md:grid-cols-2"><div><div class="label">عدد الأبناء في الأسرة</div>${UI.bars([1, 2, 3, 4, 5].filter(c => per[c]).map(c => ({ label: c === 5 ? "5 فأكثر" : c + (c === 1 ? " ابن" : " أبناء"), value: per[c] })))}</div>
+      <div><div class="label">الأبناء حسب الصف</div>${UI.bars(Object.keys(grades).sort((a, b) => ord(a) - ord(b)).map(g => ({ label: gName(g), value: grades[g], tone: "bg-sky-500" })))}</div></div>`;
+}
+Router.add("/a/ask", view => {
+  const d = A(), { b } = maps(), depts = [...new Set(d.employees.map(e => e.Department || "غير محدد"))].sort((x, y) => x.localeCompare(y, "ar"));
+  const stages = [...new Set(d.books.map(x => x.Stage).filter(Boolean))], grades = [...new Set(d.books.filter(x => !ASK.stage || x.Stage === ASK.stage).map(x => x.Grade).filter(Boolean))];
+  const sel = (k, opts, all) => `<select class="input input-sm !h-10" data-change="askF" data-id="${k}"><option value="">${all}</option>${opts.map(o => `<option value="${esc(o)}" ${ASK[k] === o ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`;
+  view.innerHTML = UI.pageHead("اسأل البيانات", "اختار السؤال من القوائم وهتطلع لك الإجابة والقائمة فوراً", `<button class="btn btn-outline btn-sm" data-act="askCsv">${ic("file-spreadsheet")} Excel</button>`)
+    + `<div class="card p-4 mb-4"><div class="text-[15px] font-bold text-slate-800 leading-loose">كم موظف
+      <select class="input input-sm !h-10 inline-block !w-auto mx-1" data-change="askF" data-id="st">${ASK_ST.map(s => `<option value="${s[0]}" ${ASK.st === s[0] ? "selected" : ""}>${s[1]}</option>`).join("")}</select></div>
+      <div class="grid gap-2 sm:grid-cols-3 mt-2">${sel("dept", depts, "من كل جهات العمل")}${sel("stage", stages, "كل المراحل الدراسية")}${sel("grade", grades, "كل الصفوف")}</div></div>
+    <div id="askBody">${askBody()}</div>
+    <div class="mt-6">${UI.section(`${ic("users", "text-brand-600")} تحليل الأسر`, "من بيانات الأبناء التي سجّلها الموظفون — تفيد في تخطيط كميات العام القادم", familyBox())}</div>`;
+});
+on("askF", (v, el) => { ASK[el.dataset.id] = v; if (el.dataset.id === "stage") ASK.grade = ""; Shell.rerender(); });
+on("askCsv", () => exportCSV("اسأل البيانات", ["الرقم", "الاسم", "جهة العمل", "الموبايل", "نسخ", "مسلم", "القيمة", "المقدم الباقي", "المتبقي"], askRows().map(r => [r.e.Emp_ID, r.e.Full_Name, r.e.Department, r.e.Mobile, r.req, r.dl, Math.round(r.amt), r.down, r.rem])));
+
+// ---------------------------------------------------------------- رقابة: العمليات الحساسة خلال 7 أيام (في لوحة القيادة)
+const SENSITIVE = { VOID_EMPLOYEE_PAYMENT: "إلغاء إيصال", DELETE_EMP_INVOICE: "حذف فاتورة", ADJUST_EMP_INVOICE: "تعديل فاتورة", MANUAL_ALLOCATION_OVERRIDE: "تخصيص يدوي استثنائي", SAVE_ROLE_PERMISSIONS: "تغيير الصلاحيات", REFUND_EMPLOYEE_CREDIT: "رد رصيد", RECORD_STOCK_ADJUSTMENT: "تسوية مخزن", CANCEL_UNDELIVERED_QTY: "إلغاء كميات", CUSTOMIZE_EMP_INSTALLMENTS: "تعديل أقساط" };
+function watchBox() { if (!can("GET_AUDIT_LOG")) return ""; setTimeout(loadWatch, 0); return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("shield-alert", "text-rose-500")} عمليات حساسة — آخر 7 أيام`, "إلغاء إيصالات وتعديل فواتير وصلاحيات… للمراجعة", `<div id="watchBody">${UI.skeleton(1)}</div>`, `<a href="#/a/audit" class="btn btn-ghost btn-sm">السجل ${ic("chevron-left")}</a>`)}</div>`; }
+async function loadWatch() {
+  const r = await call("GET_AUDIT_LOG", { days: 7, limit: 1000 }), el = $("#watchBody"); if (!el) return;
+  if (!r.success) { el.innerHTML = `<div class="text-sm text-slate-500">${esc(r.message || "")}</div>`; return; }
+  const rows = (r.entries || []).filter(a => SENSITIVE[a.action]);
+  el.innerHTML = rows.length ? `<ul class="divide-y divide-slate-100">${rows.slice(0, 8).map(a => `<li class="flex items-center gap-3 py-2"><span class="w-8 h-8 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">${ic("triangle-alert")}</span><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${esc(SENSITIVE[a.action])} <span class="text-slate-400 font-normal num">${esc(a.key || "")}</span></div><div class="text-[11.5px] text-slate-500 num">${esc(a.user || "")} · ${esc(dt(a.t))}</div></div></li>`).join("")}</ul>${rows.length > 8 ? `<div class="text-[12px] text-slate-500 mt-2">و${fmt(rows.length - 8)} عملية أخرى في السجل</div>` : ""}`
+    : `<div class="rounded-2xl bg-emerald-50 text-emerald-700 p-3 text-sm font-semibold flex items-center gap-2">${ic("shield-check")} لا عمليات حساسة هذا الأسبوع</div>`;
+}

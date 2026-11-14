@@ -173,6 +173,8 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/a/slots'); await click('[data-act="slAuto"]'); await ok(); check(w.eval('SL').sc.slots.length === 3, 'slots auto');
   await click('[data-act="slSave"]'); await settle(); await settle(); expectNoErrorToasts('slots save');
   check(/slots/.test(w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '') || (w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '').length > 10, 'schedule saved');
+  await go('/a/ask'); check(d.getElementById('askBody'), 'ask page');
+  for (const st of ['none', 'down', 'ready', 'owes', 'rel']) { w.eval('ASK').st = st; w.eval('Shell').rerender(); await settle(); check(d.getElementById('askBody'), 'ask ' + st); }
   // نظرة المدير: الشريط اليومي والجاهزية وفجوة التوريد ومتابعة الأعضاء
   await go('/a/dash'); check(/حجوزات جديدة اليوم/.test(d.getElementById('view').textContent), 'today strip');
   await go('/a/gap'); check(/فجوة التوريد/.test(d.getElementById('view').textContent) && d.querySelector('#gapList'), 'gap page');
