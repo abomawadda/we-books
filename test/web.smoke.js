@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/help.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -44,6 +44,13 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
 (async () => {
   await settle();
   check(d.getElementById('fEmp'), 'login screen rendered');
+
+  // دخول ببيانات خاطئة ← نافذة «مش قادر تدخل؟»
+  d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '0000'; d.getElementById('lgMob').value = '01000000000';
+  d.getElementById('fEmp').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle();
+  check(/مش قادر تدخل/.test(d.body.textContent) && d.querySelector('[data-go="helpForm"]'), 'login trouble dialog');
+  d.querySelector('[data-close]') && d.querySelectorAll('[data-close]').forEach(b => b.click()); await settle();
+  check(d.querySelector('[data-act="faq"]'), 'faq link on login');
 
   // ------------------------------------------------ الموظف
   d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '4512'; d.getElementById('lgMob').value = '01012345678';
