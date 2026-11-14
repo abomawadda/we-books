@@ -170,6 +170,9 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/a/supplier'); await click('[data-act="paySup"]'); fill('amount', '100'); fill('docRef', 'TR-1'); await ok(); expectNoErrorToasts('supplier payment');
 
   await go('/a/dday'); check(d.querySelector('[data-act="ddScan"]') && d.getElementById('ddLive'), 'dday scan + live');
+  await go('/a/slots'); await click('[data-act="slAuto"]'); await ok(); check(w.eval('SL').sc.slots.length === 3, 'slots auto');
+  await click('[data-act="slSave"]'); await settle(); await settle(); expectNoErrorToasts('slots save');
+  check(/slots/.test(w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '') || (w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '').length > 10, 'schedule saved');
   // نظرة المدير: الشريط اليومي والجاهزية وفجوة التوريد ومتابعة الأعضاء
   await go('/a/dash'); check(/حجوزات جديدة اليوم/.test(d.getElementById('view').textContent), 'today strip');
   await go('/a/gap'); check(/فجوة التوريد/.test(d.getElementById('view').textContent) && d.querySelector('#gapList'), 'gap page');

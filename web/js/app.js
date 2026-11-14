@@ -40,7 +40,7 @@ const ADMIN_NAV = [
   { g: "", items: [["dash", "layout-dashboard", "لوحة القيادة"]] },
   { g: "الإعداد", items: [["books", "library-big", "الكتب والأسعار"], ["phases", "calendar-range", "المراحل"], ["suppliers", "store", "المكتبات المتعاقدة"], ["employees", "users", "الموظفون"], ["people", "user-search", "متابعة الأعضاء"], ["settings", "sliders-horizontal", "الإعدادات"]] },
   { g: "دورة التوريد", items: [["res", "notebook-pen", "الحجوزات"], ["po", "clipboard-list", "الحصر وطلب التوريد"], ["receive", "truck", "فاتورة المكتبة والجرد"], ["alloc", "list-ordered", "التوزيع بالأسبقية"], ["gap", "scale", "فجوة التوريد"]] },
-  { g: "التسليم والتحصيل", items: [["dday", "scan-line", "يوم التسليم"], ["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
+  { g: "التسليم والتحصيل", items: [["dday", "scan-line", "يوم التسليم"], ["slots", "calendar-clock", "مواعيد الاستلام"], ["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
   { g: "الحسابات", items: [["supplier", "landmark", "حساب المكتبة"], ["expenses", "coins", "المصروفات والمخزن"]] },
   { g: "", items: [["reports", "chart-column", "التقارير والتصفية"], ["audit", "history", "سجل التعديلات"]] }
 ];
