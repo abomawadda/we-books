@@ -28,7 +28,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
       }
       return r.abort();
     });
-    await p.goto('https://app.test/'); await p.waitForTimeout(600);
+    await p.goto('https://app.test/'); await p.waitForTimeout(600); const sg = await p.$('#spGo'); if (sg) { await sg.click({ force: true }); await p.waitForTimeout(500); }
     await steps(p);
     await p.close();
   };

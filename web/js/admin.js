@@ -181,6 +181,7 @@ Router.add("/a/dash", view => {
       <span class="mt-2 text-[10.5px] sm:text-xs font-semibold leading-tight ${i <= cur ? "text-white" : "text-brand-300"}">${s[1]}</span></li>`).join("")}</ol>
   </section>
 
+  ${todayStrip()}${readinessBox()}${pricingPriority()}
   <div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
     ${UI.kpi("الموظفون الحاجزون", fmt(people), { icon: "users", tone: "brand", foot: `${fmt(d.employees.length)} موظف مسجل` })}
     ${UI.kpi("النسخ المحجوزة", fmt(req), { icon: "book-open", tone: "blue", foot: `مخصص ${fmt(al)} · مُسلَّم ${fmt(dl)}`, pct: req ? dl / req * 100 : 0 })}

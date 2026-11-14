@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -169,6 +169,12 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/a/expenses'); await click('[data-act="addExp"]'); fill('amount', '150'); fill('beneficiary', 'شركة نقل'); await ok(); expectNoErrorToasts('expense');
   await go('/a/supplier'); await click('[data-act="paySup"]'); fill('amount', '100'); fill('docRef', 'TR-1'); await ok(); expectNoErrorToasts('supplier payment');
 
+  // نظرة المدير: الشريط اليومي والجاهزية وفجوة التوريد ومتابعة الأعضاء
+  await go('/a/dash'); check(/حجوزات جديدة اليوم/.test(d.getElementById('view').textContent), 'today strip');
+  await go('/a/gap'); check(/فجوة التوريد/.test(d.getElementById('view').textContent) && d.querySelector('#gapList'), 'gap page');
+  await click('[data-act="gapF"][data-id="short"]'); check(d.querySelector('#gapList'), 'gap filter');
+  await go('/a/people'); check(/لم يحجزوا/.test(d.getElementById('view').textContent), 'people page');
+  await click('[data-act="pplTab"][data-id="skip"]'); await settle(); await settle(); check(!d.querySelector('#pplBody .skeleton'), 'skipped tab loads');
   // كل التقارير
   await go('/a/reports');
   for (const r of ['R14', 'R01', 'R02', 'R03', 'R04', 'R05', 'R06', 'R07', 'R08', 'R09', 'R10', 'R11', 'R12', 'R13']) {
