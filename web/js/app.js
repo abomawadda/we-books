@@ -130,7 +130,7 @@ const Shell = {
     if (Shell.collapsed === undefined) Shell.collapsed = !!store.get("sideCollapsed");
     const u = APP.user;
     const side = admin
-      ? ADMIN_NAV.map(g => `${g.g ? `<div class="grp hidden lg:block px-3 pt-3 pb-1 text-[11px] font-semibold text-brand-300/70">${g.g}</div><div class="grp-div lg:hidden h-px bg-white/10 my-1.5 mx-2"></div>` : ""}${g.items.map(i => Shell.sideItem("/a/" + i[0], i[1], i[2])).join("")}`).join("")
+      ? ADMIN_NAV.map(g => `${g.g ? `<div class="grp px-3 pt-3 pb-1 text-[11px] font-semibold text-brand-300/70">${g.g}</div><div class="grp-div hidden h-px bg-white/10 my-1.5 mx-2"></div>` : ""}${g.items.map(i => Shell.sideItem("/a/" + i[0], i[1], i[2])).join("")}`).join("")
       : EMP_NAV.map(i => Shell.sideItem("/e/" + i[0], i[1], i[2])).join("");
     const bottom = admin
       ? ADMIN_BOTTOM.map(i => Shell.bottomItem("/a/" + i[0], i[1], i[2])).join("") + `<button class="bnav-item" data-act="moreMenu"><span class="bnav-ic">${ic("layout-grid", "text-[20px]")}</span>المزيد</button>`
@@ -138,28 +138,28 @@ const Shell = {
     const col = !!Shell.collapsed;
     $("#app").innerHTML = `
     <div id="appShell" class="min-h-[100dvh] md:flex ${col ? "side-collapsed" : ""}">
-      <aside id="appSide" class="no-print hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] w-[84px] lg:w-[254px] hero text-white">
-        <div class="side-head flex items-center justify-between gap-2.5 px-3 lg:px-4 h-16 shrink-0 border-b border-white/10">
-          <div class="side-logo-wrap flex items-center gap-2.5 min-w-0">
-            ${Brand.logo("we", "w-10 h-10 mx-auto lg:mx-0 shrink-0")}
-            <div class="side-txt hidden lg:block min-w-0"><div class="font-display font-bold text-[13.5px] truncate">${esc(Brand.get().platform)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(Brand.get().org)} · ${admin ? "الإدارة" : "بوابة الموظف"}</div></div>
+      <aside id="appSide" class="no-print hidden md:flex flex-col shrink-0 sticky top-0 h-[100dvh] hero text-white">
+        <div class="side-head flex items-center justify-between gap-2.5 px-4 h-16 shrink-0 border-b border-white/10">
+          <div class="side-logo-wrap flex items-center gap-2.5 min-w-0 flex-1">
+            ${Brand.logo("we", "w-10 h-10 shrink-0")}
+            <div class="side-txt min-w-0 flex-1"><div class="font-display font-bold text-[13.5px] truncate">${esc(Brand.get().platform)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(Brand.get().org)} · ${admin ? "الإدارة" : "بوابة الموظف"}</div></div>
           </div>
-          <button type="button" data-act="toggleSide" id="sideToggleBtn" class="side-toggle-btn hidden lg:inline-flex shrink-0" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
+          <button type="button" data-act="toggleSide" id="sideToggleBtn" class="side-toggle-btn shrink-0" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
         </div>
-        <nav class="side-nav flex-1 overflow-y-auto px-2 lg:px-2.5 py-2 space-y-0.5" aria-label="القائمة الرئيسية">${side}</nav>
+        <nav class="side-nav flex-1 overflow-y-auto px-2.5 py-2 space-y-0.5" aria-label="القائمة الرئيسية">${side}</nav>
         <div class="p-2 border-t border-white/10">
           <button data-act="userMenu" class="user-btn w-full flex items-center gap-2.5 rounded-xl p-2 hover:bg-white/10 transition" title="${esc(u.fullName)}">
-            ${UI.avatar(u.fullName, "w-9 h-9 text-xs mx-auto lg:mx-0 shrink-0")}
-            <div class="side-txt hidden lg:block text-right min-w-0 flex-1"><div class="text-[13px] font-semibold truncate">${esc(u.fullName)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(ar(u.role))}</div></div>
-            <span class="side-txt hidden lg:block text-brand-200">${ic("chevron-down")}</span>
+            ${UI.avatar(u.fullName, "w-9 h-9 text-xs shrink-0")}
+            <div class="side-txt text-right min-w-0 flex-1"><div class="text-[13px] font-semibold truncate">${esc(u.fullName)}</div><div class="text-[10.5px] text-brand-200 truncate">${esc(ar(u.role))}</div></div>
+            <span class="side-txt text-brand-200 shrink-0">${ic("chevron-down")}</span>
           </button>
         </div>
       </aside>
 
       <div class="flex-1 min-w-0 flex flex-col">
-        <header class="no-print sticky top-0 z-30 bg-slate-50/90 backdrop-blur-xl border-b border-slate-200/70">
-          <div class="app-container flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-5 lg:px-6">
-            <button type="button" data-act="toggleSide" id="hdSideToggle" class="icon-btn hidden lg:inline-flex !w-9 !h-9 ring-1 ring-slate-200/80 bg-white text-slate-600 hover:text-brand-700" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية لتوسيع العرض"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
+        <header class="no-print sticky top-0 z-30 bg-slate-50/85 backdrop-blur-xl border-b border-slate-200/70">
+          <div class="app-container flex items-center gap-2 sm:gap-3 h-16 px-4 sm:px-6 lg:px-8">
+            <button type="button" data-act="toggleSide" id="hdSideToggle" class="icon-btn hidden md:inline-flex !w-9 !h-9 ring-1 ring-slate-200 bg-white text-slate-600 hover:text-brand-700 shrink-0" title="${col ? "توسيع القائمة الجانبية" : "طي القائمة الجانبية لتوسيع العرض"}" aria-label="طي أو توسيع القائمة الجانبية">${ic(col ? "panel-right-open" : "panel-right-close")}</button>
             ${Brand.logo("we", "md:hidden w-10 h-10")}
             <div class="min-w-0 flex-1"><div id="hdTitle" class="font-display font-bold text-slate-900 text-[15px] sm:text-lg leading-tight line-clamp-2"></div><div id="hdSub" class="text-[11.5px] text-slate-500 truncate"></div></div>
             <div id="phaseBox" class="shrink-0 ${admin ? "" : "hidden sm:block"}"></div>
@@ -170,7 +170,7 @@ const Shell = {
             ${Brand.logo("union", "w-10 h-10")}
           </div>
         </header>
-        <main id="view" class="app-container flex-1 px-4 sm:px-5 lg:px-6 py-4 sm:py-6 pb-nav md:pb-10"></main>
+        <main id="view" class="app-container flex-1 px-4 sm:px-6 lg:px-8 py-5 sm:py-7 pb-nav md:pb-10"></main>
       </div>
 
       <nav class="no-print md:hidden fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur-xl border-t border-slate-200/70 safe-b" aria-label="التنقل">
@@ -191,8 +191,8 @@ const Shell = {
     });
   },
   sideItem(path, icon, label) {
-    return `<a href="#${path}" data-path="${path}" class="nav-item flex-col lg:flex-row gap-1 lg:gap-2.5 h-auto lg:h-10 py-2 lg:py-0 text-center lg:text-right" title="${esc(label)}">
-      <span class="nav-ic text-[20px] lg:text-[18px] shrink-0">${ic(icon)}</span><span class="side-txt text-[10px] leading-tight lg:text-[13.5px] lg:leading-normal truncate">${esc(label)}</span></a>`;
+    return `<a href="#${path}" data-path="${path}" class="nav-item" title="${esc(label)}">
+      <span class="nav-ic text-[18px] shrink-0">${ic(icon)}</span><span class="side-txt text-[13.5px] truncate">${esc(label)}</span></a>`;
   },
   bottomItem(path, icon, label) {
     return `<a href="#${path}" data-path="${path}" class="bnav-item"><span class="bnav-ic">${ic(icon, "text-[20px]")}</span>${esc(label)}</a>`;

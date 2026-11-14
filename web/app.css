@@ -45,19 +45,24 @@
 .qchip{display:inline-flex;align-items:center;gap:.3rem;border-radius:.6rem;border:1px solid #e2e8f0;background:#f8fafc;padding:.22rem .55rem;font-size:11.5px;font-weight:600;color:#475569;cursor:pointer;transition:all .15s}
 .qchip:hover{border-color:#bd9fe0;background:#f6f2fb;color:#46256b}
 .qchip.active{border-color:#66369d;background:#66369d;color:#fff;box-shadow:0 1px 3px rgba(102,54,157,.25)}
-#appSide{transition:width .22s cubic-bezier(.4,0,.2,1);box-shadow:-4px 0 24px -8px rgba(16,8,32,.25)}
+#appSide{width:264px;min-width:264px;max-width:264px;transition:width .22s cubic-bezier(.4,0,.2,1),min-width .22s cubic-bezier(.4,0,.2,1),max-width .22s cubic-bezier(.4,0,.2,1);box-shadow:-4px 0 24px -8px rgba(16,8,32,.25)}
+#appSide .side-nav .nav-item{display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:.65rem;height:2.4rem;padding:0 .75rem;border-radius:.6rem;font-size:13.5px;text-align:right}
 .side-toggle-btn{display:inline-flex;align-items:center;justify-content:center;width:2rem;height:2rem;border-radius:.55rem;color:rgba(236,227,247,.85);background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);transition:all .15s}
 .side-toggle-btn:hover{background:rgba(255,255,255,.18);color:#fff}
-@media (min-width:1024px){
-  .side-collapsed #appSide{width:76px!important}
-  .side-collapsed .side-txt,.side-collapsed .grp{display:none!important}
-  .side-collapsed .grp-div{display:block!important}
-  .side-collapsed #appSide .side-head{justify-content:center;padding-left:.5rem;padding-right:.5rem}
-  .side-collapsed #appSide .side-logo-wrap{display:none!important}
-  .side-collapsed #appSide .side-nav{padding-left:.45rem;padding-right:.45rem}
-  .side-collapsed #appSide .nav-item{justify-content:center;padding-left:0;padding-right:0;height:2.6rem;border-radius:.65rem;position:relative}
-  .side-collapsed #appSide .nav-item .nav-ic{font-size:19px}
-  .side-collapsed #appSide .user-btn{justify-content:center;padding:.35rem}
-}
+.side-collapsed #appSide{width:76px!important;min-width:76px!important;max-width:76px!important}
+.side-collapsed #appSide .side-txt,.side-collapsed #appSide .grp{display:none!important}
+.side-collapsed #appSide .grp-div{display:block!important}
+.side-collapsed #appSide .side-head{justify-content:center!important;padding-left:.5rem!important;padding-right:.5rem!important}
+.side-collapsed #appSide .side-logo-wrap{display:none!important}
+.side-collapsed #appSide .side-nav{padding-left:.45rem!important;padding-right:.45rem!important}
+.side-collapsed #appSide .side-nav .nav-item{justify-content:center!important;padding-left:0!important;padding-right:0!important;height:2.6rem!important;border-radius:.65rem!important;gap:0!important}
+.side-collapsed #appSide .side-nav .nav-ic{font-size:19px!important}
+.side-collapsed #appSide .user-btn{justify-content:center!important;padding:.35rem!important;gap:0!important}
 .app-container{max-width:1620px;width:100%;margin-left:auto;margin-right:auto}
 .side-collapsed .app-container{max-width:100%}
+.\!w-9{width:2.25rem!important}.\!w-14{width:3.5rem!important}.\!h-11{height:2.75rem!important}.\!mb-0{margin-bottom:0!important}.\!p-0\.5{padding:.125rem!important}.\!py-0\.5{padding-top:.125rem!important;padding-bottom:.125rem!important}.\!py-1{padding-top:.25rem!important;padding-bottom:.25rem!important}.\!text-\[11px\]{font-size:11px!important}.\!text-rose-600{color:#e11d48!important}
+.gap-0\.5{gap:.125rem}.mx-0\.5{margin-left:.125rem;margin-right:.125rem}.my-1\.5{margin-top:.375rem;margin-bottom:.375rem}.mb-2\.5{margin-bottom:.625rem}.mb-3\.5{margin-bottom:.875rem}.pb-2\.5{padding-bottom:.625rem}.mr-1\.5{margin-right:.375rem}
+.max-w-\[230px\]{max-width:230px}.min-w-\[14rem\]{min-width:14rem}.max-h-52{max-height:13rem}.max-h-\[48vh\]{max-height:48vh}.max-h-\[50vh\]{max-height:50vh}.col-span-3{grid-column:span 3/span 3}.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border-width:0}
+@media (min-width:640px){.sm\:col-span-3{grid-column:span 3/span 3}.sm\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}.sm\:grid-cols-\[1\.2fr_1fr_0\.7fr_auto\]{grid-template-columns:1.2fr 1fr 0.7fr auto}}
+@media (min-width:768px){.md\:inline-flex{display:inline-flex}.md\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.md\:grid-cols-5{grid-template-columns:repeat(5,minmax(0,1fr))}}
+@media (min-width:1024px){.lg\:inline-flex{display:inline-flex}.lg\:grid-cols-7{grid-template-columns:repeat(7,minmax(0,1fr))}}
