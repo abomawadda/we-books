@@ -54,6 +54,7 @@ td.code { font-size: .86em; color: #4c3d73; white-space: nowrap; direction: ltr;
 td.info { color: #2e2648; line-height: 1.35; } td.info i { font-style: normal; color: #a39dbb; margin: 0 .6mm; }
 td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; color: #0369a1; font-weight: 700; }
 .grp td { background: #f3eefa !important; color: #552c83; font-weight: 700; font-size: .92em; }
+.tot-row td { background: #ede5f8 !important; color: #2e1650; border-top: 1.5px solid #6a3aa0; }
 .tot { margin-top: 3mm; display: grid; grid-template-columns: 1.15fr 1fr; gap: 3mm; align-items: start; }
 .sum .kv { padding: .9mm 0; border-bottom: 1px dashed #e4def0; }
 .sum .kv.big { border: 0; margin-top: 1mm; padding: 2mm 2.6mm; border-radius: 2mm; background: #3a2059; color: #fff; font-size: 1.12em; }
@@ -153,7 +154,16 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     const net = Math.max(0, gross + n(d.adj));
     const st = { Paid_In_Full: ["مسددة بالكامل", "g"], Overdue: ["متأخرة", "r"], Partially_Paid: ["مسددة جزئياً", "a"], Unpaid: ["غير مسددة", "a"], Refund_Due: ["مستحق رد", "a"] }[d.status] || [ar(d.status), ""];
     let i = 0;
-    const rows = lines.map(l => { const q = Math.max(l.alloc, l.deliv) - l.ret; return `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, true)}<td class="c num">${q}</td><td class="c num">${l.deliv - l.ret > 0 ? l.deliv - l.ret : "—"}</td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(q * n(l.price))}</b></td></tr>`; }).join("");
+    // تقسيم الفاتورة حسب الابن/المستفيد: صف عنوان (الاسم والصف والإجمالي الفرعي) ثم كتبه، وفي الآخر الإجمالي
+    const qOf = l => Math.max(l.alloc, l.deliv) - l.ret, grp = {}, order = [];
+    lines.forEach(l => { const k = l.ben || ""; if (!grp[k]) { grp[k] = []; order.push(k); } grp[k].push(l); });
+    order.sort((a, b) => (a ? 1 : 0) - (b ? 1 : 0));
+    const split = order.length > 1 || (order.length === 1 && order[0]);
+    const gradeOf = ls => { const c = {}; ls.forEach(l => { const g = Doc.shortGrade(l.grade || Doc.bk(l.code).Grade); if (g) c[g] = (c[g] || 0) + 1; }); return Object.keys(c).sort((a, b) => c[b] - c[a])[0] || ""; };
+    const row = l => { const q = qOf(l); return `<tr><td class="c num">${++i}</td>${Doc.bookCells(l, false)}<td class="c num">${q}</td><td class="c num">${l.deliv - l.ret > 0 ? l.deliv - l.ret : "—"}</td><td class="l num">${Doc.money(l.price)}</td><td class="l num"><b>${Doc.money(q * n(l.price))}</b></td></tr>`; };
+    const rows = order.map(k => { const ls = grp[k], c = ls.reduce((a, l) => a + qOf(l), 0), v = ls.reduce((a, l) => a + qOf(l) * n(l.price), 0), g = gradeOf(ls);
+      return (split ? `<tr class="grp"><td colspan="8">${k ? "👦 " + esc(k) : "👤 العضو"}${g ? ` <span style="font-weight:600;opacity:.8">— ${esc(g)}</span>` : ""}<span style="float:left">${booksWord(c).replace(/^(\d+)/, '<span class="num">$1</span>')} · <span class="num">${Doc.money(v)}</span> ج.م</span></td></tr>` : "") + ls.map(row).join(""); }).join("")
+      + (split ? `<tr class="tot-row"><td colspan="4" style="text-align:right;font-weight:800">الإجمالي${order.length > 1 ? ` (${order.length} ${order.length > 2 ? "أفراد" : "فردين"})` : ""}</td><td class="c num"><b>${lines.reduce((a, l) => a + qOf(l), 0)}</b></td><td></td><td></td><td class="l num"><b>${Doc.money(gross)}</b></td></tr>` : "");
     const sched = (d.schedule || []).length ? `<table><thead><tr><th>القسط</th><th class="c">الاستحقاق</th><th class="l">القيمة</th><th class="l">المسدد</th><th class="c">الحالة</th></tr></thead><tbody>${d.schedule.map(s => `<tr><td>${esc(s.label)}</td><td class="c num">${esc(Doc.date(s.due))}</td><td class="l num">${Doc.money(s.amount)}</td><td class="l num">${Doc.money(s.paid)}</td><td class="c"><span class="badge ${s.status === "Paid" ? "g" : s.status === "Overdue" ? "r" : ""}">${esc(ar(s.status))}</span></td></tr>`).join("")}</tbody></table>` : "";
     return Doc.page(`${Doc.head("فاتورة بيع كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${st[1]}">${esc(st[0])}</span></div>`)}
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
