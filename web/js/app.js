@@ -42,7 +42,7 @@ const ADMIN_NAV = [
   { g: "دورة التوريد", items: [["res", "notebook-pen", "الحجوزات"], ["po", "clipboard-list", "الحصر وطلب التوريد"], ["receive", "truck", "فاتورة المكتبة والجرد"], ["alloc", "list-ordered", "التوزيع بالأسبقية"], ["gap", "scale", "فجوة التوريد"]] },
   { g: "التسليم والتحصيل", items: [["dday", "scan-line", "يوم التسليم"], ["slots", "calendar-clock", "مواعيد الاستلام"], ["delivery", "package-check", "التسليم والمرتجعات"], ["collect", "hand-coins", "التحصيل والفواتير"], ["cash", "banknote", "الإيصالات والخزينة"]] },
   { g: "الحسابات", items: [["supplier", "landmark", "حساب المكتبة"], ["expenses", "coins", "المصروفات والمخزن"]] },
-  { g: "", items: [["reports", "chart-column", "التقارير والتصفية"], ["ask", "search", "اسأل البيانات"], ["audit", "history", "سجل التعديلات"]] }
+  { g: "", items: [["reports", "chart-column", "التقارير والتصفية"], ["ask", "search", "اسأل البيانات"], ["audit", "history", "سجل التعديلات"], ["close", "lock", "إقرار نهاية الحملة"]] }
 ];
 const ADMIN_BOTTOM = [["dash", "layout-dashboard", "الرئيسية"], ["dday", "scan-line", "يوم التسليم"], ["collect", "hand-coins", "التحصيل"], ["reports", "chart-column", "التقارير"]];
 const navLabel = key => { for (const g of ADMIN_NAV) for (const i of g.items) if ("/a/" + i[0] === key) return i[2]; const e = EMP_NAV.find(x => "/e/" + x[0] === key); return e ? e[2] : ""; };

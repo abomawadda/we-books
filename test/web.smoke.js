@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/help.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/close.js', 'js/help.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -20,7 +20,7 @@ const dom = new JSDOM(html, {
     w.CSS = { escape: s => String(s).replace(/[^\w-]/g, c => '\\' + c) };
     w.scrollTo = () => {};
     w.open = () => { const d = new JSDOM('<!doctype html><html><head></head><body></body></html>').window; d.print = () => prints.push(d.document.body.textContent.slice(0, 60)); d.focus = () => {}; return d; };
-    w.URL.createObjectURL = () => 'blob:';
+    w.URL.createObjectURL = () => 'blob:'; w.URL.revokeObjectURL = () => {};
     w.HTMLAnchorElement.prototype.click = function () {};
     w.fetch = (url, opt) => !opt ? Promise.resolve({ json: () => Promise.resolve({ success: true, jobs: { SYNC_MEMBERS: { ok: true, last: "2026-11-12T00:00:00Z" } } }) }) : new Promise(res => setTimeout(() => { const t = ctx.__doPost({ postData: { contents: opt.body } }); res({ text: () => Promise.resolve(t) }); }, 1));
     w.addEventListener('error', ev => errors.push(ev.error || ev.message));
@@ -185,6 +185,8 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(/slots/.test(w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '') || (w.eval('APP').adm.settingsMap.PICKUP_SCHEDULE || '').length > 10, 'schedule saved');
   await go('/a/ask'); check(d.getElementById('askBody'), 'ask page');
   for (const st of ['none', 'down', 'ready', 'owes', 'rel']) { w.eval('ASK').st = st; w.eval('Shell').rerender(); await settle(); check(d.getElementById('askBody'), 'ask ' + st); }
+  await go('/a/close'); await settle(); await settle(); check(/قائمة الإغلاق/.test(view()), 'close page');
+  await click('[data-act="clArchive"]'); expectNoErrorToasts('archive');
   // نظرة المدير: الشريط اليومي والجاهزية وفجوة التوريد ومتابعة الأعضاء
   await go('/a/dash'); check(/حجوزات جديدة اليوم/.test(d.getElementById('view').textContent), 'today strip');
   await go('/a/gap'); check(/فجوة التوريد/.test(d.getElementById('view').textContent) && d.querySelector('#gapList'), 'gap page');

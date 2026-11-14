@@ -144,7 +144,7 @@ async function act(action, payload, confirmOpts) {
   return r;
 }
 /** حزمة الإدارة تُحمَّل عند دخول الإدارة فقط — الموظف على موبايل ضعيف لا يحمّل ~250 ك.ب لا يحتاجها */
-const ADMIN_BUNDLE = ["js/admin.js", "js/reports.js", "js/insights.js", "js/admin-pickup.js"];
+const ADMIN_BUNDLE = ["js/admin.js", "js/reports.js", "js/insights.js", "js/admin-pickup.js", "js/close.js"];
 let adminBundleP = null;
 function loadAdminBundle() {
   if (typeof Admin !== "undefined") return Promise.resolve();
