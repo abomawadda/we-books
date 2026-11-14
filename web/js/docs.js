@@ -46,7 +46,7 @@ tfoot td { background: #f3eefa !important; font-weight: 700; border-top: 1.2px s
 /* كثافة تتكيف مع عدد الصفوف: قليلة ← مريحة، كثيرة ← مضغوطة */
 .page.roomy { --pad-y: 2.6mm; } .page.roomy td { font-size: 1.04em; }
 .page.dense { --pad-y: .9mm; font-size: ${A4 ? "9.6pt" : "7.6pt"}; line-height: 1.4; } .page.dense .sub { font-size: .8em; } .page.dense .sig { padding-top: 4mm; }
-.page.xdense { --pad-y: .5mm; font-size: ${A4 ? "8.6pt" : "6.9pt"}; line-height: 1.3; } .page.xdense .sub { display: none; } .page.xdense .meta { gap: 1.5mm; } .page.xdense .box { padding: 1.2mm 2mm; }
+.page.xdense { --pad-y: .5mm; font-size: ${A4 ? "8.6pt" : "6.9pt"}; line-height: 1.3; } .page.xdense .sub { display: none; } .page.xdense .meta { gap: 1.5mm; } .page.xdense .box { padding: 1.2mm 2mm; } .page.xdense .strip div { padding: .4mm 1.2mm; } .page.xdense .sig { padding-top: 3mm; } .page.xdense .grp td { padding-top: .4mm; padding-bottom: .4mm; }
 td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
 .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 .sub { color: #6b6585; font-size: .86em; }
@@ -107,6 +107,8 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
   },
   foot(no) { const b = Brand.get(); return `<div class="ft"><span>${esc(no)} · صدر إلكترونياً ${esc(Doc.now())}</span><span>${esc(b.credit || b.platform)}${b.phone ? " · " + esc(b.phone) : ""}</span></div>`; },
   /** فئة الكثافة حسب عدد الصفوف وحجم الصفحة */
+  /** كثافة صفوف الفاتورة: قليلة ← مريحة، كثيرة ← مضغوطة (لتبقى في صفحة A5 واحدة قدر الإمكان) */
+  invDensity(rows) { return rows <= 5 ? "roomy" : rows <= 9 ? "" : rows <= 15 ? "dense" : "xdense"; },
   density(rows, size) { const cap = size === "A4" ? [10, 22, 34] : [6, 12, 20]; return rows <= cap[0] ? "roomy" : rows <= cap[1] ? "" : rows <= cap[2] ? "dense" : "xdense"; },
   kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; },
   page(inner, wm, wmCls, dens) { return `<section class="page ${dens || ""}">${wm ? `<div class="wm ${wmCls || ""}">${esc(wm)}</div>` : ""}${inner}</section>`; },
@@ -174,19 +176,19 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       return (split ? `<tr class="grp"><td colspan="8">${k ? "👦 " + esc(k) : "👤 العضو"}${g ? ` <span style="font-weight:600;opacity:.8">— ${esc(g)}</span>` : ""}<span style="float:left">${booksWord(c).replace(/^(\d+)/, '<span class="num">$1</span>')} · <span class="num">${Doc.money(v)}</span> ج.م</span></td></tr>` : "") + ls.map(row).join(""); }).join("")
       + (split ? `<tr class="tot-row"><td colspan="4" style="text-align:right;font-weight:800">الإجمالي${order.length > 1 ? ` (${order.length} ${order.length > 2 ? "أفراد" : "فردين"})` : ""}</td><td class="c num"><b>${lines.reduce((a, l) => a + qOf(l), 0)}</b></td><td></td><td></td><td class="l num"><b>${Doc.money(gross)}</b></td></tr>` : "");
     // فاتورة قصيرة ← ملخص الإجماليات في شريط مضغوط لتكفي صفحة A5 واحدة؛ الطويلة تبقى بالتفصيل
-    const rowsCount = lines.length + (split ? order.length + 1 : 0), compact = rowsCount <= 18;
+    const rowsCount = lines.length + (split ? order.length + 1 : 0), compact = rowsCount <= 26;
     const sched = (d.schedule || []).length ? `<table><thead><tr><th>القسط</th><th class="c">الاستحقاق</th><th class="l">القيمة</th><th class="l">المسدد</th><th class="c">الحالة</th></tr></thead><tbody>${d.schedule.map(s => `<tr><td>${esc(s.label)}</td><td class="c num">${esc(Doc.date(s.due))}</td><td class="l num">${Doc.money(s.amount)}</td><td class="l num">${Doc.money(s.paid)}</td><td class="c"><span class="badge ${s.status === "Paid" ? "g" : s.status === "Overdue" ? "r" : ""}">${esc(ar(s.status))}</span></td></tr>`).join("")}</tbody></table>` : "";
     return Doc.page(`${Doc.head("فاتورة بيع كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${st[1]}">${esc(st[0])}</span></div>`)}
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
         <div class="box"><h4>الفاتورة</h4>${Doc.kv("تاريخ الإصدار", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("السداد", esc(Doc.methodAr(d.method)))}</div></div>
       <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">الكمية</th><th class="c" style="width:6%">سُلّم</th><th class="l" style="width:10%">السعر</th><th class="l" style="width:11%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="8" class="c sub">لا بنود</td></tr>`}</tbody></table>
-      ${compact ? Doc.sumStrip([["بسعر الغلاف", cover, "m"], ["قيمة الكتب", gross], ...(d.adj ? [[n(d.adj) < 0 ? "خصم" : "إضافة", d.adj]] : []), ["الصافي", net, "big"], ["المقدم المطلوب", d.down], ["المسدد", d.paid], ["المتبقي", d.remaining, n(d.remaining) ? "r" : "g"], ...(n(d.credit) ? [["مستحق الرد", d.credit, "g"]] : []), ["وفّرت", cover - net, "g"]],
-        esc(Doc.words(net)) + (d.adj ? ` · ${n(d.adj) < 0 ? "خصم" : "إضافة"}: ${esc(d.adjReason || "")}` : "")) : `
+      ${compact ? Doc.sumStrip([["بسعر الغلاف", cover, "m"], ["قيمة الكتب", gross], ["الصافي", net, "big"], ["المقدم المطلوب", d.down], ["المسدد", d.paid], ["المتبقي", d.remaining, n(d.remaining) ? "r" : "g"], ...(n(d.credit) ? [["مستحق الرد", d.credit, "g"]] : []), ["وفّرت", cover - net, "g"]],
+        esc(Doc.words(net))) : `
       <div class="tot"><div>${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>
         <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
           ${Doc.kv("المقدم المطلوب", `<span class="num">${Doc.money(d.down)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(d.paid)}</span>`)}<div class="kv" style="color:${n(d.remaining) ? "#be123c" : "#047857"}"><span>المتبقي</span><b class="num">${Doc.money(d.remaining)}</b></div>${n(d.credit) ? `<div class="kv save"><span>رصيد مستحق الرد</span><b class="num">${Doc.money(d.credit)}</b></div>` : ""}<div class="kv save"><span>وفّرت</span><b class="num">${Doc.money(cover - net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>`}
-      <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.density(lines.length, "A5"));
+      <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.invDensity(rowsCount));
   },
   /** إيصال: d = {no,date,emp,amount,method,ref,inv,net,remaining,collector,voided,voidReason} */
   receipt(d) {
