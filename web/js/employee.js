@@ -657,6 +657,11 @@ function bundles(list) {
         <span class="flex items-center justify-between mt-2"><span class="text-[12px] text-brand-100 num">${by[p].length} كتب · ${fmt(sum)} ج.م</span><span class="w-7 h-7 rounded-lg bg-gold-400 text-brand-950 flex items-center justify-center">${ic("plus")}</span></span></button>`; }).join("")}</div></section>`;
 }
 /** شريط سياق الحجز (لاصق أعلى الصفحة): يوضح للموظف دائمًا لمن يحجز الآن (الاسم + المرحلة/الصف) ويتيح التبديل بين الأبناء */
+/** شارة نوع المدرسة بلون مميز (أعلى الصف) حتى يعرف ولي الأمر بالضبط لمين وإيه بيحجز */
+function schoolTypeBadge(t) {
+  const m = { "حكومي": ["🏫", "عربي حكومي", "bg-sky-400 text-sky-950"], "لغات": ["🌐", "لغات / تجريبي", "bg-gold-400 text-brand-950"], "أزهر": ["🕌", "أزهري", "bg-emerald-400 text-emerald-950"] }[t || ""] || ["📚", "كل أنواع المدارس", "bg-white/20 text-white"];
+  return `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${m[2]}">${m[0]} ${m[1]}</span>`;
+}
 function ctxBar() {
   const ks = myKids(), f = Emp.filter;
   if (!ks.length || !Emp.open()) return "";
@@ -665,7 +670,7 @@ function ctxBar() {
   const cur = i >= 0 ? ks[i] : null;
   const who = cur
     ? `<span class="w-9 h-9 shrink-0 rounded-xl bg-white/15 flex items-center justify-center text-[20px]">${kidEmoji(cur)}</span>
-       <div class="min-w-0 flex-1"><div class="text-[11px] text-brand-200 leading-none">جارٍ الحجز الآن لـ</div>
+       <div class="min-w-0 flex-1"><div class="flex items-center gap-1.5 leading-none"><span class="text-[11px] text-brand-200">جارٍ الحجز الآن لـ</span>${schoolTypeBadge(cur.type)}</div>
        <div class="font-bold text-[15px] truncate">${esc(kidName(cur, i))}<span class="font-medium text-brand-100"> · ${esc(gradeTitle(cur.grade))}</span></div></div>`
     : `<div class="min-w-0 flex-1 text-[13px]">لم تحدد ابنًا للحجز — اختر من الأسماء</div>`;
   const pills = ks.length > 1 ? `<div class="scroll-x !mx-0 !px-0 mt-2 !pb-0">${ks.map((k, j) => { const on = j === i, c = kidCartCount(k);
