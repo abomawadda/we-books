@@ -261,7 +261,7 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
   if (action === 'RESET_OPERATIONAL_DATA') {
     const s: any = await verify(token);
     if (!s) return EXPIRED;
-    if (!(s.userType === 'ADMIN' && s.role === 'Admin')) return { success: false, message: 'هذه العملية للمدير فقط.' };
+    if (!(s.userType === 'ADMIN' && s.role === 'Admin' && String(s.userId) === 'USR-01')) return { success: false, message: 'هذه العملية لمدير المنظومة فقط.' };
     if (String(payload?.confirm || '') !== 'تصفير') return { success: false, message: 'اكتب كلمة «تصفير» للتأكيد.' };
     const name = 'records_backup_reset_' + new Date().toISOString().replace(/\D/g, '').slice(0, 14);
     await sql.unsafe(`create table books.${name} as select now() as backed_up_at, r.* from books.records r`);

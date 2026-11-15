@@ -2504,7 +2504,7 @@ Router.add("/a/settings", view => {
         <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
         ${can("SAVE_SETTING") ? `<button class="act-ic act-ic-edit" data-act="editSetting" data-id="${esc(s.Setting_Key)}" title="تعديل الإعداد" aria-label="تعديل الإعداد">${ic("pencil")}</button>` : ""}</div>`;
     }).join("")}</section>`
-    + (APP.user.role === "Admin" ? `<section class="card card-pad mt-6 border border-rose-200 bg-rose-50/40">
+    + (APP.user.role === "Admin" && APP.user.userId === "USR-01" ? `<section class="card card-pad mt-6 border border-rose-200 bg-rose-50/40">
       <h3 class="font-bold text-rose-700 flex items-center gap-2">${ic("triangle-alert")} منطقة الخطر · تصفير بيانات التشغيل</h3>
       <p class="text-[13px] text-slate-600 mt-1.5 leading-relaxed">يحذف نهائيًا: المراحل، الحجوزات، التوريدات، فواتير المكتبة والموظفين، الأقساط، الإيصالات والمدفوعات، المخزون، المصروفات، سجل التدقيق وإغلاقات الخزينة، ويُصفّر الترقيم. <b>يبقى:</b> الموظفون والكتب والأسعار والمكتبات والإعدادات والحسابات.</p>
       <button class="btn btn-danger btn-sm mt-3" data-act="resetOps">${ic("trash-2")} تصفير بيانات التشغيل</button></section>` : "");
