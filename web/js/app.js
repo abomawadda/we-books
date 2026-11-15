@@ -250,7 +250,7 @@ const Shell = {
 };
 
 async function logout(silent) {
-  if (APP.token && !silent) call("LOGOUT");
+  if (APP.token && !silent) { call("LOGOUT"); try { Offline.prune(); } catch (_) {} }
   APP.token = null; APP.user = null; APP.emp = null; APP.adm = null; APP.cart = {}; APP.phaseId = null;
   store.set("session", null); store.set("cache", null);
   while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true);
