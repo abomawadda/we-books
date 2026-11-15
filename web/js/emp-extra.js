@@ -72,7 +72,7 @@ function waitBox() {
   const bm = Emp.bookMap(), w = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
   if (!w.length) return "";
   const decided = w.every(i => i.Waitlist_Choice === "carry");
-  const list = w.map(i => { const b = bm[i.Book_ID] || {}; return `<li class="flex items-center gap-2 py-1.5"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0"></span><span class="flex-1"><b>${esc(b.Publisher || b.Book_Name || i.Book_ID)}</b> · ${esc(b.Subject || "")}${i.Beneficiary ? ` <span class="text-sky-700">(${esc(i.Beneficiary)})</span>` : ""}</span><span class="num text-slate-500">${fmt(n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)))}</span></li>`; }).join("");
+  const list = w.map(i => { const b = bm[i.Book_ID] || {}, g = Doc.shortGrade(b.Grade); return `<li class="flex items-center gap-2 py-1.5 min-w-0"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0"></span><span class="flex-1 min-w-0 truncate whitespace-nowrap"><b>${esc(b.Publisher || b.Book_Name || i.Book_ID)}</b> · ${esc(b.Subject || "")}${g ? ` · <span class="text-slate-500">${esc(g)}</span>` : ""}${i.Beneficiary ? ` · <span class="text-sky-700">${esc(i.Beneficiary)}</span>` : ""}</span><span class="num text-slate-500 shrink-0">${fmt(n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)))}</span></li>`; }).join("");
   return `<section class="card mb-4 ring-2 ring-sky-200 overflow-hidden"><div class="p-4">
     <div class="flex items-center gap-2 font-bold text-[15.5px] text-sky-900">⏳ كتب لسه موصلتش</div>
     <p class="text-[12.5px] text-slate-600 mt-1">مش داخلة في فاتورتك ومش هتدفع تمنها دلوقتي.</p>
