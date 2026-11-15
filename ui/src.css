@@ -269,3 +269,6 @@ input[type="number"], input[type="tel"], input[type="url"], input[type="password
 /* تبويبات الموبايل: يُخفى القسم غير النشط على الشاشات الصغيرة فقط */
 @media (max-width:1023px){.mt-off{display:none!important}}
 .wb-acts > div,.wb-acts > span{display:flex!important;flex-wrap:wrap!important;white-space:normal!important;justify-content:flex-end;gap:.375rem}
+
+/* جداول التقارير المجمّعة على الموبايل: حشو أقل ليتسع عمود الاسم */
+@media (max-width:640px){.tbl-grp th,.tbl-grp td{padding:.45rem .4rem!important}.tbl-grp th{font-size:10.5px!important}}
