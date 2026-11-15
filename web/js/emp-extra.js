@@ -599,3 +599,12 @@ _wrap("/e/orders", view => afterHead(view, feedbackCard()));
 
 // خطوات المعالج لمسار الحجز (funnel)
 _wrap("/e/wiz", () => { try { const st = WZ.step; Track.send(st === "review" ? "review" : st === "pay" ? "pay" : "wiz"); } catch (_) {} });
+
+// ---------------------------------------------------------------- الشعبة: تذكير الموظف بتحديد شعبة ابن الثانوي (علمي/أدبي/بكالوريا)
+function trackAskCard() {
+  const ks = myKids(), miss = ks.map((k, i) => ({ k, i })).filter(x => gradeTracks(x.k.grade).length && !x.k.track);
+  if (!miss.length) return "";
+  return `<section class="card p-4 mb-4 ring-1 ring-sky-200 bg-sky-50/50 flex items-center gap-3"><span class="text-[28px]">🎓</span><div class="flex-1 min-w-0"><b class="text-slate-900 text-[14.5px]">حدد شعبة ${miss.map(x => esc(kidName(x.k, x.i))).join(" و")}</b><div class="text-[12.5px] text-slate-600">علمي ولا أدبي ولا بكالوريا؟ عشان نعرضله كتب شعبته بس + الكتب المشتركة.</div></div><button class="btn btn-primary btn-sm" data-act="kidsEdit">حدّد</button></section>`;
+}
+_wrap("/e/home", view => afterHead(view, trackAskCard()));
+_wrap("/e/wiz", view => { if (WZ.step === "family") afterHead(view, trackAskCard()); });

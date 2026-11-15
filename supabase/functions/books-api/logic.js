@@ -155,7 +155,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
     { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
-    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
+    { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL", "Tracks"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request", "Feedback"] },
     { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request"] },
@@ -530,6 +530,7 @@ function seedInitialData_() {
       st("CASH_ACCOUNT_HOLDER", "محمود العراقي", "STRING", "اسم صاحب المحفظة وحساب إنستاباي"),
       st("PAY_INSTAPAY", "", "STRING", "عنوان/رقم إنستاباي لتحويل الأقساط (يظهر للموظف في «ادفع الآن»)"),
       st("PAY_WALLET", "", "STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"),
+      st("GRADE_TRACKS", "{\"2 ثانوي\":[\"علمي\",\"أدبي\",\"بكالوريا - طب وعلوم الحياة\",\"بكالوريا - هندسة وعلوم الحاسب\",\"بكالوريا - أعمال\",\"بكالوريا - آداب وفنون\"],\"3 ثانوي\":[\"علمي علوم\",\"علمي رياضة\",\"أدبي\",\"بكالوريا - طب وعلوم الحياة\",\"بكالوريا - هندسة وعلوم الحاسب\",\"بكالوريا - أعمال\",\"بكالوريا - آداب وفنون\"]}", "JSON", "شُعب كل صف (علمي/أدبي/بكالوريا…) — قابلة للتعديل"),
       st("PAY_INSTAPAY_LINK", "", "STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"),
       st("DEFICIT_BEARER", "أمين الصندوق", "STRING", "الجهة التي تتحمل العجز ويؤول إليها الفائض"),
       st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى"),
@@ -633,6 +634,7 @@ const ACTION_ACL = {
   BULK_IMPORT_BOOKS: ["Coordinator"],
   BULK_PRICE_BOOKS: ["Coordinator"],
   SET_BOOK_COVER: ["Coordinator"],
+  SET_BOOK_TRACKS: ["Coordinator"],
   SET_PUBLISHER_LOGO: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
@@ -723,6 +725,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_BOOK": return E.saveBook(session, payload);
       case "DELETE_BOOK": return E.deleteBook(session, payload);
       case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
+      case "SET_BOOK_TRACKS": return E.setBookTracks(session, payload);
       case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
       case "SET_PUBLISHER_LOGO": return E.setPublisherLogo(session, payload.publisher, payload.url);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
@@ -963,14 +966,15 @@ const OperationsEngine = {
     if (!o || !Array.isArray(o.kids)) return [];
     const labels = this.gradesList_().map(g => g.label), yrs = Math.max(0, this.schoolYear_() - Util.num(o.y || this.schoolYear_()));
     return o.kids.map(k => { const i = labels.indexOf(k.grade); if (!yrs || i < 0) return Object.assign({}, k, { promoted: 0 });
-      const j = i + yrs; return Object.assign({}, k, { grade: j < labels.length ? labels[j] : "", graduated: j >= labels.length, promoted: yrs }); });
+      const j = i + yrs, ng = j < labels.length ? labels[j] : "", tr = this.gradeTracks_()[ng] || [];
+      return Object.assign({}, k, { grade: ng, track: tr.indexOf(k.track) !== -1 ? k.track : "", graduated: j >= labels.length, promoted: yrs }); });
   },
   saveMyKids: function(empId, kids) {
     const S = this.S(), lists = SYSTEM_CONFIG.CATALOG, grades = this.gradesList_();
     Util.require(Array.isArray(kids) && kids.length <= 12, "الحد الأقصى 12 (أبناء وأقارب).");
     // rel = صلة القرابة لقريب (كتبه تُسجَّل باسمه كمستفيد)، وفارغة لأبناء الموظف
     const clean = kids.map(k => ({ name: Util.str(k.name).replace(/[|<>—]/g, " ").slice(0, 30), gender: k.gender === "g" ? "g" : "b",
-      grade: Util.str(k.grade), type: Util.str(k.type), rel: Util.str(k.rel).replace(/[|<>—]/g, " ").slice(0, 20) }));
+      grade: Util.str(k.grade), type: Util.str(k.type), track: Util.str(k.track).slice(0, 40), rel: Util.str(k.rel).replace(/[|<>—]/g, " ").slice(0, 20) }));
     clean.forEach((k, i) => Util.require(!k.rel || k.name, "اكتب اسم القريب رقم " + (i + 1) + "."));
     clean.forEach((k, i) => { Util.require(grades.some(g => g.label === k.grade), "اختر صف الابن رقم " + (i + 1) + "."); Util.require(!k.type || lists.SCHOOL_TYPES.indexOf(k.type) !== -1, "نوع مدرسة غير صحيح."); });
     const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === Util.str(empId));
@@ -1004,7 +1008,7 @@ const OperationsEngine = {
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5,
-        PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || "",
+        PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || "", GRADE_TRACKS: this.gradeTracks_(),
         EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || "", PAY_INSTAPAY_LINK: settings.PAY_INSTAPAY_LINK || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
@@ -1353,7 +1357,7 @@ const OperationsEngine = {
       const key = Util.str(payload.key);
       let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
       // إعدادات أُضيفت بعد التشغيل: تُنشأ عند أول حفظ
-      const LATE = { RESET_LOCKED: ["BOOLEAN", "قفل زر تصفير البيانات بعد الإطلاق"], PAY_INSTAPAY_LINK: ["STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"], PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
+      const LATE = { GRADE_TRACKS: ["JSON", "شُعب كل صف (علمي/أدبي/بكالوريا…) — قابلة للتعديل"], RESET_LOCKED: ["BOOLEAN", "قفل زر تصفير البيانات بعد الإطلاق"], PAY_INSTAPAY_LINK: ["STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"], PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
       if (!row && LATE[key]) { row = { Setting_Key: key, Setting_Value: "", Data_Type: LATE[key][0], Description: LATE[key][1] }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       Util.require(row, "إعداد غير معروف: " + key);
       if ((key === "PICKUP_SCHEDULE" || key === "BOOK_GRADES") && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة البيانات غير صحيحة."); } }
@@ -1428,7 +1432,28 @@ const OperationsEngine = {
     const st = getSettings_();
     const list = k => Util.str(st[k]).split(/[,،]/).map(x => x.trim()).filter(Boolean);
     return { grades: this.gradesList_(), schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
-      publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS") };
+      publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS"), tracks: this.gradeTracks_() };
+  },
+  /** شُعب كل صف من الإعداد GRADE_TRACKS (JSON: {"2 ثانوي": ["علمي","أدبي",...]}) — فارغ = الصف بلا شعب */
+  gradeTracks_: function() {
+    const v = getSettings_().GRADE_TRACKS; let o = v;
+    if (typeof v === "string") { try { o = JSON.parse(v || "{}"); } catch (e) { o = {}; } }
+    const out = {}; Object.keys(o || {}).forEach(g => { const l = (Array.isArray(o[g]) ? o[g] : []).map(x => Util.str(x)).filter(Boolean); if (l.length) out[g] = l; });
+    return out;
+  },
+  /** تحديد شُعب الكتب جماعياً: rows = [{bookId, tracks: ["علمي",...]}] — قائمة فارغة = مشترك لكل الشعب */
+  setBookTracks: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), rows = Array.isArray(payload.rows) ? payload.rows : [];
+      Util.require(rows.length && rows.length <= 1000, "لا توجد تعديلات.");
+      const books = DB_Engine.getAllRecords(S.BOOKS), ids = {}; books.forEach(b => { ids[Util.str(b.Book_ID)] = b; });
+      let n = 0;
+      rows.forEach(r => { const b = ids[Util.str(r.bookId)]; if (!b) return;
+        const t = (Array.isArray(r.tracks) ? r.tracks : []).map(x => Util.str(x).replace(/[،,]/g, " ").slice(0, 40)).filter(Boolean).join("،");
+        if (Util.str(b.Tracks) === t) return; DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", b.Book_ID, { Tracks: t }); n++; });
+      DB_Engine.logAudit(session.userId, session.role, "Catalog", "SET_BOOK_TRACKS", "BOOKS", null, { changed: n });
+      return { success: true, message: n ? "تم تحديث شُعب " + n + " كتاب" : "لا تغيير", changed: n };
+    });
   },
 
   /** كود جديد للكتاب: كود الصف + رقم تسلسلي فريد داخل الصف (P4-007) دون تكرار أي كود موجود */
