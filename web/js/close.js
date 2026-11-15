@@ -93,3 +93,30 @@ on("cancelRes", async v => {
   if (!f) return;
   await act("RESOLVE_CANCEL_REQUEST", { empId, phaseId, approve: ap === "1", note: f.note });
 });
+
+// ---------------------------------------------------------------- طلبات المرتجع + جرس الإدارة (إلغاء ومرتجع)
+const retReqs = () => A().resItems.filter(i => { try { const r = JSON.parse(i.Return_Request || "null"); return r && r.status === "Pending"; } catch (_) { return false; } });
+function retReqBox() {
+  const list = retReqs(); if (!list.length) return "";
+  const { e, b } = maps();
+  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("undo-2", "text-amber-500")} طلبات مرتجع (${fmt(list.length)})`, "الاعتماد يُدخل الكتاب المخزن ويخصم قيمته من فاتورة الموظف (الزيادة المدفوعة رصيد مستحق الرد)", `<ul class="divide-y divide-slate-100">${list.map(i => { const r = JSON.parse(i.Return_Request); return `<li class="flex flex-wrap items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(i.Emp_ID, empName(e, i.Emp_ID))} · ${esc(bookName(b, i.Book_ID))}</div><div class="text-[12px] text-slate-500"><b class="num">${fmt(r.qty)}</b> نسخة · ${r.condition === "DAMAGED" ? "فيه عيب" : "سليم"} · ${esc(r.reason)} · <span class="num">${esc(String(r.at).slice(0, 16))}</span></div></div>
+      <button class="btn btn-primary btn-xs" data-act="retRes" data-id="${esc(i.Res_Item_ID)}|1">${ic("check")} استلمت واعتمدت</button><button class="btn btn-outline btn-xs" data-act="retRes" data-id="${esc(i.Res_Item_ID)}|0">رفض</button></li>`; }).join("")}</ul>`)}</div>`;
+}
+on("retRes", async v => {
+  const [id, ap] = v.split("|");
+  const f = await UI.form({ title: ap === "1" ? "اعتماد المرتجع" : "رفض المرتجع", intro: ap === "1" ? "تأكد إنك استلمت الكتاب فعلاً. يُسجَّل إذن مرتجع ويدخل المخزن وتُخفَّض فاتورة الموظف." : "يبقى الكتاب مع الموظف وفاتورته كما هي.",
+    fields: [...(ap === "1" ? [{ name: "condition", label: "حالة الكتاب عند الاستلام", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "تالف (يُستبعد من المخزن)"]] }] : []), { name: "note", label: "ملاحظة للموظف (اختياري)" }], ok: ap === "1" ? "اعتماد" : "رفض" });
+  if (!f) return;
+  await act("RESOLVE_RETURN_REQUEST", { resItemId: id, approve: ap === "1", condition: f.condition, note: f.note });
+});
+const _notifAdm = Notif.list;
+Notif.list = function () {
+  const out = _notifAdm.call(Notif);
+  if (APP.adm && APP.user && APP.user.userType !== "EMPLOYEE") {
+    const c = cancelReqs().length, r = retReqs().length;
+    if (r) out.unshift({ id: "ret-" + r + "-" + retReqs().map(i => i.Res_Item_ID).join(",").length, icon: "undo-2", tone: "amber", title: `${r} طلب مرتجع بانتظارك`, body: "راجعها واعتمدها من لوحة القيادة", href: "#/a/dash" });
+    if (c) out.unshift({ id: "cancel-" + c + "-" + cancelReqs().map(h => h.Res_ID).join(",").length, icon: "x", tone: "red", title: `${c} طلب إلغاء من الموظفين`, body: "راجعها واعتمدها من لوحة القيادة", href: "#/a/dash" });
+  }
+  return out;
+};
+setTimeout(() => { try { Notif.badge(); } catch (_) {} }, 0);

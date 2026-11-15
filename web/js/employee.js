@@ -1002,6 +1002,7 @@ Router.add("/e/orders", view => {
           ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
           ${b.Book_Status === "Not_Yet_Printed" && al < req ? `<div class="mt-2.5 text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("clock", "mt-0.5 shrink-0")}<span>لم يُطبع من الناشر بعد — سيُخصَّص ويُسَلَّم فور وصوله من المكتبة</span></div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
+        ${typeof retLine === "function" ? retLine(i) : ""}
         </article>`;
       }).join("")}`).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>

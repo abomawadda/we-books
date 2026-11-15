@@ -577,6 +577,22 @@ fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad c
     assert.ok(rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp1.Emp_ID && i.Phase_ID === 'PH-01' && !String(i.Allocation_Status).startsWith('Cancelled') && i.Allocation_Status !== 'Carried_Forward').every(i => Number(i.Requested_Qty) <= Number(i.Delivered_Qty))); passed++;
   } else console.log('  (skip pending cancel)');
 }
+// طلب مرتجع بعد الاستلام ثم اعتماد الإدارة
+{
+  const it = rows(S.RES_ITEMS).find(i => Number(i.Delivered_Qty) - Number(i.Returned_Qty) > 0 && ['1001', '1002', '1003'].includes(i.Emp_ID));
+  if (it) {
+    const tok = it.Emp_ID === '1001' ? e1 : it.Emp_ID === '1002' ? e2 : e3, before = Number(it.Returned_Qty);
+    const cd = new Date(clock.now), p2 = x => String(x).padStart(2, '0'), nowTxt = cd.getFullYear() + '-' + p2(cd.getMonth() + 1) + '-' + p2(cd.getDate()) + ' ' + p2(cd.getHours()) + ':' + p2(cd.getMinutes()) + ':00';
+    rows(S.DELIVERY_RETURNS).filter(d => d.Doc_Type === 'EMP_DELIVERY' && d.Res_Item_ID === it.Res_Item_ID).forEach(d => ctx.__DB.updateRecordByPK(S.DELIVERY_RETURNS, 'Doc_ID', d.Doc_ID, { Trans_Date: nowTxt }));
+    const r = api('EMP_RETURN_REQUEST', { resItemId: it.Res_Item_ID, qty: 1, reason: 'مكرر' }, tok);
+    if (r.success) {
+      fail(api('EMP_RETURN_REQUEST', { resItemId: it.Res_Item_ID, qty: 1 }, tok), 'duplicate return request');
+      ok(api('RESOLVE_RETURN_REQUEST', { resItemId: it.Res_Item_ID, approve: true }, coord), 'admin approves return');
+      assert.strictEqual(Number(rows(S.RES_ITEMS).find(i => i.Res_Item_ID === it.Res_Item_ID).Returned_Qty), before + 1); passed++;
+    } else console.log('  (return window:', r.message, ')');
+  }
+  fail(api('EMP_RETURN_REQUEST', { resItemId: 'nope', qty: 1 }, e1), 'return on missing item');
+}
 console.log('\nALL PASSED:', passed, 'checks');
 
 

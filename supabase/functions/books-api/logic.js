@@ -158,7 +158,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request"] },
-    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice"] },
+    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
     { name: S.SUP_INV_HEADER, color: "#c2410c", headers: ["Sup_Inv_ID", "Internal_Ref_No", "Supplier_Invoice_No", "Supplier_ID", "Phase_ID", "Invoice_Date", "Gross_Total_Cover", "Total_After_Item_Discount", "Volume_Discount_Pct", "Volume_Discount_Amount", "Net_Payable_Amount", "Status", "Approved_By", "Approved_At", "Supplier_Stated_Net", "Variance_Amount", "Damaged_Claim_Amount"] },
@@ -612,6 +612,8 @@ const ACTION_ACL = {
   SAVE_MY_KIDS: ["EMPLOYEE"],
   WAITLIST_DECISION: ["EMPLOYEE", "Coordinator"],
   EMP_CANCEL_REQUEST: ["EMPLOYEE"],
+  EMP_RETURN_REQUEST: ["EMPLOYEE"],
+  RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
   CHANGE_PASSWORD: ADMIN_ROLES,
@@ -699,6 +701,8 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_MY_KIDS": return E.saveMyKids(session.empId, payload.kids);
       case "WAITLIST_DECISION": return E.waitlistDecision(session, payload);
       case "EMP_CANCEL_REQUEST": return E.empCancelRequest(session, payload);
+      case "EMP_RETURN_REQUEST": return E.empReturnRequest(session, payload);
+      case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
       case "CHANGE_PASSWORD": return AuthEngine.changePassword(session, payload.oldPassword, payload.newPassword);
@@ -993,7 +997,8 @@ const OperationsEngine = {
         MIN_DOWN_PAYMENT_PCT: settings.MIN_DOWN_PAYMENT_PCT, DEFAULT_INSTALLMENT_COUNT: settings.DEFAULT_INSTALLMENT_COUNT,
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5,
-        PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || ""
+        PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || "",
+        EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department) },
@@ -2407,6 +2412,47 @@ const OperationsEngine = {
       return { success: true, immediate: false, message: "طلب الإلغاء وصل للمسؤول ✅ — هيراجعه ويبلغك." };
     });
   },
+  /**
+   * طلب مرتجع من الموظف بعد الاستلام خلال مدة EMP_RETURN_WINDOW_DAYS: يُسجَّل معلّقاً على البند،
+   * ولا يمس المخزون أو الفاتورة إلا بعد اعتماد الإدارة (RESOLVE_RETURN_REQUEST ← نفس مسار المرتجع الرسمي).
+   */
+  empReturnRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), st = getSettings_(), empId = Util.str(session.empId);
+      const all = DB_Engine.getAllRecords(S.RES_ITEMS), it = all.find(i => Util.str(i.Res_Item_ID) === Util.str(payload.resItemId) && Util.str(i.Emp_ID) === empId);
+      Util.require(it, "البند غير موجود في حجزك.");
+      const can = Util.num(it.Delivered_Qty) - Util.num(it.Returned_Qty), q = parseInt(payload.qty, 10) || 0;
+      Util.require(can > 0, "الكتاب ده لسه ما استلمتهوش أو رجّعته قبل كده.");
+      Util.require(q > 0 && q <= can, "تقدر ترجّع لحد " + can + " نسخة.");
+      const cur = (() => { try { return JSON.parse(it.Return_Request || "null"); } catch (e) { return null; } })();
+      Util.require(!(cur && cur.status === "Pending"), "فيه طلب مرتجع للكتاب ده مستني المسؤول.");
+      const last = DB_Engine.getAllRecords(S.DELIVERY_RETURNS).filter(d => d.Doc_Type === "EMP_DELIVERY" && Util.str(d.Res_Item_ID) === Util.str(it.Res_Item_ID)).map(d => Util.str(d.Trans_Date)).sort().pop();
+      const win = Util.num(st.EMP_RETURN_WINDOW_DAYS) || 7;
+      if (last) Util.require((new Date() - Util.parseDate(last)) / 86400000 <= win, "مدة المرتجع (" + win + " أيام من الاستلام) خلصت — كلّم المسؤول.");
+      const reason = Util.str(payload.reason).slice(0, 200) || "بدون سبب";
+      DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", it.Res_Item_ID, { Return_Request: JSON.stringify({ qty: q, reason: reason, condition: payload.condition === "DAMAGED" ? "DAMAGED" : "GOOD", at: Util.now(), status: "Pending" }) });
+      DB_Engine.logAudit(empId, "Employee", "Returns", "EMP_RETURN_REQUEST", it.Res_Item_ID, null, { qty: q, reason: reason });
+      return { success: true, message: "طلب المرتجع وصل للمسؤول ✅ — هات الكتاب سليم وقت المراجعة." };
+    });
+  },
+  resolveReturnRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), it = DB_Engine.getAllRecords(S.RES_ITEMS).find(i => Util.str(i.Res_Item_ID) === Util.str(payload.resItemId));
+      Util.require(it, "البند غير موجود.");
+      const cur = (() => { try { return JSON.parse(it.Return_Request || "null"); } catch (e) { return null; } })();
+      Util.require(cur && cur.status === "Pending", "لا يوجد طلب مرتجع معلّق.");
+      let res = { success: true, message: "تم رفض طلب المرتجع." };
+      if (payload.approve) {
+        // نفس مسار المرتجع الرسمي: مخزون + مستند + تخفيض الفاتورة (الزيادة المدفوعة رصيد مستحق الرد)
+        res = this.recordBookReturn(session, { returnType: "EMP_RETURN", resItemId: it.Res_Item_ID, qty: cur.qty, reason: "طلب الموظف: " + cur.reason, condition: payload.condition || cur.condition, forceReason: session.role === "Admin" ? Util.str(payload.forceReason) : "" });
+        if (!res.success) return res;
+      }
+      DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", it.Res_Item_ID, { Return_Request: JSON.stringify(Object.assign(cur, { status: payload.approve ? "Approved" : "Rejected", by: Util.actor(session), resolvedAt: Util.now(), note: Util.str(payload.note).slice(0, 200) })) });
+      DB_Engine.logAudit(session.userId, session.role, "Returns", payload.approve ? "APPROVE_RETURN" : "REJECT_RETURN", it.Res_Item_ID, null, { qty: cur.qty, note: payload.note });
+      return res;
+    });
+  },
+
   /** إلغاء غير المُسلَّم من بنود الموظف في مرحلة (المخصص يتحرر لغيره، والفاتورة تُعاد حسابها؛ الزيادة المدفوعة تصبح رصيداً مستحق الرد) */
   applyEmpCancel_: function(empId, pid, note) {
     const S = this.S(), all = DB_Engine.getAllRecords(S.RES_ITEMS);
