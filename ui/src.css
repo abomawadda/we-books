@@ -138,11 +138,8 @@
   html, body { overflow-x: clip; }
 }
 
-/* منع الإزاحة الأفقية على كل المقاسات (سطح المكتب والتابلت): العناصر داخل grid/flex لا تتمدد بعرض محتواها،
-   وشرائط التمرير الأفقية (scroll-x) تبقى داخل حاويتها فلا تُوسّع الصفحة */
-html, body { overflow-x: clip; max-width: 100%; }
-#appShell, #appShell > div, #view { min-width: 0; max-width: 100%; }
-#view .grid > *, #view .flex > * { min-width: 0; }
-#view .scroll-x { max-width: 100%; min-width: 0; overscroll-behavior-x: contain; }
-#view .scroll-x > * { flex-shrink: 0; }
-@media (min-width: 768px) { .scroll-x { margin-left: 0; margin-right: 0; padding-left: 0; padding-right: 0; } }
+/* منع الإزاحة الأفقية: عمود 1fr في grid له حدّ أدنى = عرض المحتوى، فيتمدد بشريط scroll-x (قائمة السلاسل) ويُزيح الصفحة.
+   نُلغي الحدّ الأدنى لأبناء الـ grid ولحاوية المحتوى فتبقى الشرائط داخل حاويتها وتتمرر وحدها */
+#appShell > div, #view { min-width: 0; max-width: 100%; }
+#view [class*="grid"] > *, #view .scroll-x { min-width: 0; }
+#view .scroll-x { max-width: 100%; overscroll-behavior-x: contain; }
