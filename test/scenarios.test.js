@@ -519,6 +519,20 @@ for (let i = 0; i < adminData.books.length - 1; i++) {
 }
 passed++;
 
+// 13. عكس فاتورة توريد + تحديث سعر الكتالوج عند اختلاف السعر
+const freeInv = ok(api("SUBMIT_SUPPLIER_INVOICE", {
+  supplierId: mainSupId, phaseId: "PH-01", supplierInvoiceNo: "SINV-VOID-TEST", invoiceDate: "2027-01-12", volumeDiscountPct: 3,
+  items: [{ bookId: "BK-101", orderedQty: 0, receivedQty: 2, damagedQty: 0, coverPrice: 200, itemDiscPct: 20, updateCatalogPrice: true }]
+}, store), "submit inv for void");
+const dash1 = ok(api("GET_ADMIN_DASHBOARD_DATA", {}, store), "dash after catalog update");
+assert.strictEqual(dash1.books.find(b => b.Book_ID === "BK-101").Cover_Price, 200, "Catalog cover price updated");
+const voidOk = ok(api("VOID_SUPPLIER_INVOICE", { supInvId: freeInv.invoiceHeader.Sup_Inv_ID, reason: "خطأ إدخال" }, A), "void inv free");
+const dash2 = ok(api("GET_ADMIN_DASHBOARD_DATA", {}, A), "dash after void");
+assert.strictEqual(dash2.supInvHeaders.find(h => h.Sup_Inv_ID === freeInv.invoiceHeader.Sup_Inv_ID).Status, "Voided");
+// لا يُسمح بعكس فاتورة تم تخصيص كميتها
+fail(api("VOID_SUPPLIER_INVOICE", { supInvId: inv.invoiceHeader.Sup_Inv_ID, reason: "اختبار" }, A), "void allocated inv blocked", /تم تخصيص/);
+passed++;
+
 console.log('\nALL PASSED:', passed, 'checks');
 
 

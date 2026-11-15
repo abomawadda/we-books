@@ -2521,7 +2521,7 @@ on("resetOps", async () => {
 const PERM_ROLES = [["Coordinator", "مسؤول المبادرة", "مسؤول", " المبادرة"], ["Finance", "أمين الصندوق", "الصندوق", ""], ["Warehouse", "أمين المخزن", "المخزن", ""]];
 const PERM_GROUPS = [
   ["الحجوزات والكتب", [["SUBMIT_OR_UPDATE_RESERVATION", "إضافة/تعديل/حذف حجز موظف"], ["SAVE_BOOK", "إضافة وتعديل الكتب والأسعار"], ["DELETE_BOOK", "حذف كتاب من الكتالوج"], ["BULK_IMPORT_BOOKS", "استيراد الكتب"], ["BULK_IMPORT_EMPLOYEES", "استيراد/تحديث الموظفين"], ["SAVE_SUPPLIER", "المكتبات المتعاقدة"], ["DELETE_SUPPLIER", "حذف مكتبة"]]],
-  ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["DELETE_PHASE", "حذف مرحلة"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"]]],
+  ["المراحل والتوريد", [["SAVE_PHASE", "إنشاء وتعديل المراحل"], ["DELETE_PHASE", "حذف مرحلة"], ["SET_PHASE_STATUS", "فتح وإغلاق الحجز"], ["GENERATE_PO_SNAPSHOT", "تجميد الحصر وطلب التوريد"], ["CANCEL_PO_BACKORDER", "إلغاء نواقص المكتبة"], ["SUBMIT_SUPPLIER_INVOICE", "فاتورة المكتبة والجرد"], ["VOID_SUPPLIER_INVOICE", "عكس فاتورة مكتبة"]]],
   ["التوزيع والتسليم", [["RUN_ALLOCATION_ENGINE", "تشغيل التوزيع بالأسبقية"], ["MANUAL_ALLOCATION_OVERRIDE", "تعديل التوزيع يدوياً"], ["CARRY_WAITLIST_TO_PHASE", "ترحيل المنتظرين"], ["EXECUTE_BOOK_DELIVERY", "تسليم الكتب"], ["CANCEL_UNDELIVERED_QTY", "إلغاء كمية لم تُسلَّم"], ["RECORD_BOOK_RETURN", "مرتجعات الموظفين"], ["RECORD_STOCK_ADJUSTMENT", "تسويات المخزن"]]],
   ["الخزينة والفواتير", [["RECORD_EMPLOYEE_PAYMENT", "تحصيل وإصدار إيصال"], ["VOID_EMPLOYEE_PAYMENT", "إلغاء إيصال"], ["REFUND_EMPLOYEE_CREDIT", "رد رصيد لموظف"], ["CUSTOMIZE_EMP_INSTALLMENTS", "تعديل خطة الأقساط"], ["ADJUST_EMP_INVOICE", "تعديل الفاتورة (خصم/إضافة)"], ["DELETE_EMP_INVOICE", "حذف فاتورة"], ["RECORD_SUPPLIER_PAYMENT", "السداد للمكتبة"], ["RECORD_INITIATIVE_EXPENSE", "المصروفات"], ["CLOSE_CASH_DAY", "إقفال الخزينة اليومي"]]]
 ];
@@ -2603,7 +2603,7 @@ Router.add("/a/receive", view => {
   const totalOrd = books.reduce((s, b) => s + n((poMap[b.Book_ID] || {}).Outstanding_Qty), 0);
   const uniq = fn => [...new Set(books.map(fn).filter(Boolean))].sort((a, c) => String(a).localeCompare(String(c), "ar"));
   const pubs = uniq(b => b.Publisher), subjs = uniq(b => b.Subject), grades = uniq(b => b.Grade);
-  SI_STATE_FILTER = "all";
+  SI_STATE_FILTER = (books.some(b => n((poMap[b.Book_ID] || {}).Received_Qty_To_Date) > 0) && books.some(b => n((poMap[b.Book_ID] || {}).Outstanding_Qty) > 0)) ? "open" : "all";
 
   view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", `المرحلة: ${ph.Phase_Name || APP.phaseId} · تظهر فقط الكتب المطلوبة بأمر التوريد خلال هذه المرحلة`)
   + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
@@ -2635,7 +2635,7 @@ Router.add("/a/receive", view => {
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div class="flex flex-wrap items-center gap-1.5" id="siStateBar">
           ${[["all", "الكل", "siCntAll"], ["open", "متبقي للاستلام", "siCntOpen"], ["diff", "به فروق", "siCntDiff"], ["np", "لم يُطبع بعد", "siCntNp"], ["done", "مكتمل", "siCntDone"]].map(([k, lbl, cid]) =>
-            `<button type="button" class="chip !h-8 !px-3 !text-xs" data-act="siState" data-s="${k}" aria-pressed="${k === "all"}">${lbl} <span id="${cid}" class="num font-bold opacity-75">0</span></button>`).join("")}
+            `<button type="button" class="chip !h-8 !px-3 !text-xs" data-act="siState" data-s="${k}" aria-pressed="${k === SI_STATE_FILTER}">${lbl} <span id="${cid}" class="num font-bold opacity-75">0</span></button>`).join("")}
         </div>
         <div class="flex items-center gap-2">
           <button type="button" class="btn btn-outline btn-xs" data-act="siFillReq">${ic("check-check")} مطابقة المطلوب</button>
@@ -2666,7 +2666,7 @@ Router.add("/a/receive", view => {
       </div>
     </section>` : ""}
 
-  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const po = poMap[b.Book_ID] || {}, o = n(po.Outstanding_Qty), ordTot = n(po.Net_Order_To_Supplier_Qty), recTot = n(po.Received_Qty_To_Date); return `<article class="card p-4 si-row transition-all" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-pub="${esc(b.Publisher || "")}" data-subj="${esc(b.Subject || "")}" data-grade="${esc(b.Grade || "")}" data-status="${esc(po.Line_Status || "Open")}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "") + " " + (b.Grade || "")).toLowerCase())}">
+  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const po = poMap[b.Book_ID] || {}, o = n(po.Outstanding_Qty), ordTot = n(po.Net_Order_To_Supplier_Qty), recTot = n(po.Received_Qty_To_Date); return `<article class="card p-4 si-row transition-all" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-cat-cover="${n(b.Cover_Price)}" data-cat-disc="${n(b.Supplier_Discount_Pct)}" data-pub="${esc(b.Publisher || "")}" data-subj="${esc(b.Subject || "")}" data-grade="${esc(b.Grade || "")}" data-status="${esc(po.Line_Status || "Open")}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "") + " " + (b.Grade || "")).toLowerCase())}">
       <div class="flex items-start justify-between gap-2.5">
         <div class="min-w-0">
           <h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name)}</h3>
@@ -2688,6 +2688,10 @@ Router.add("/a/receive", view => {
         <div><label class="text-[11px] font-semibold text-rose-600">تالف</label><input type="number" min="0" class="input input-sm num font-bold text-rose-700 si-dmg" value="0" data-input="recalcSI"></div>
         <div><label class="text-[11px] font-semibold text-slate-500">قبل الخصم</label><input type="number" step="any" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
         <div><label class="text-[11px] font-semibold text-slate-500">خصم %</label><input type="number" step="any" class="input input-sm num si-disc" value="${n(b.Supplier_Discount_Pct)}" data-input="recalcSI"></div>
+      </div>
+      <div class="si-price-warn hidden mt-2.5 rounded-xl bg-rose-50 border border-rose-200 px-2.5 py-1.5 text-[11.5px] text-rose-800 space-y-1">
+        <div class="font-semibold flex items-center gap-1.5">${ic("triangle-alert", "shrink-0")} <span class="si-price-msg"></span></div>
+        <label class="inline-flex items-center gap-1.5 font-semibold text-rose-900 cursor-pointer"><input type="checkbox" class="w-3.5 h-3.5 accent-rose-600 si-upd-cat"> تحديث سعر الكتالوج بهذا السعر والخصم</label>
       </div>
       <div class="si-np-note hidden mt-2.5 rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-800 flex items-center gap-1.5">
         ${ic("clock", "shrink-0")} <span>تم تصفير التسليم إلى 0 — يبقى المطلوب (<b class="num">${o}</b>) وسيُرحَّل للمرحلة التالية</span>
@@ -2714,13 +2718,14 @@ Router.add("/a/receive", view => {
   <div class="h-4"></div>
   ${UI.section(`${ic("receipt", "text-brand-600")} فواتير المكتبة المسجلة (${esc(ph.Phase_Name || APP.phaseId)})`, "", UI.table([
     { t: "المرجع", v: h => `<b>${esc(h.Internal_Ref_No)}</b><div class="text-[11.5px] text-slate-400">${esc(h.Supplier_Invoice_No)}</div>` },
-    { t: "المرحلة", v: "Phase_ID" },
+    { t: "المكتبة", v: h => esc(((d.suppliers.find(x => x.Supplier_ID === h.Supplier_ID) || {}).Supplier_Name) || h.Supplier_ID) },
     { t: "التاريخ", cls: "num", v: h => esc(day(h.Invoice_Date)) },
     { t: "بعد خصم الأصناف", cls: "num", v: h => fmt(h.Total_After_Item_Discount) },
-    { t: "خصم الكمية على الفاتورة", cls: "num", v: h => `${fmt(h.Volume_Discount_Amount)} <span class="text-[11px] text-brand-700 font-semibold">(${fmt(h.Volume_Discount_Pct !== undefined && h.Volume_Discount_Pct !== "" ? h.Volume_Discount_Pct : 3)}%)</span>` },
+    { t: "خصم الكمية", cls: "num", v: h => `${fmt(h.Volume_Discount_Amount)} <span class="text-[11px] text-brand-700 font-semibold">(${fmt(h.Volume_Discount_Pct !== undefined && h.Volume_Discount_Pct !== "" ? h.Volume_Discount_Pct : 3)}%)</span>` },
     { t: "الصافي", cls: "num", v: h => `<b>${fmt(h.Net_Payable_Amount)}</b>` },
     { t: "تالف", cls: "num", v: h => fmt(h.Damaged_Claim_Amount) },
-    { t: "الحالة", v: h => esc(h.Status) + (n(h.Variance_Amount) ? ` ${pill("", "فرق " + fmt(h.Variance_Amount), "red")}` : "") }
+    { t: "الحالة", v: h => (h.Status === "Voided" ? pill("", "ملغاة", "red") : pill(h.Status)) + (n(h.Variance_Amount) ? ` ${pill("", "فرق " + fmt(h.Variance_Amount), "red")}` : "") },
+    { t: "", v: h => `<div class="flex items-center gap-1"><button class="btn btn-outline btn-xs" data-act="viewSupInv" data-id="${esc(h.Sup_Inv_ID)}">${ic("eye")} تفاصيل</button><button class="btn btn-ghost btn-xs" data-act="printSupInv" data-id="${esc(h.Sup_Inv_ID)}" title="طباعة PDF">${ic("printer")}</button></div>` }
   ], phaseInvs, { maxH: 420, emptyIcon: "receipt", empty: "لا فواتير مسجلة لهذه المرحلة" }))}`;
   recalcSI();
 });
@@ -2831,6 +2836,14 @@ function recalcSI() {
 
     tr.querySelector(".si-unit").textContent = fmt(first) + " ج.م";
     tr.querySelector(".si-line").textContent = fmt(lineTotal) + " ج.م";
+    const catCover = n(tr.dataset.catCover), catDisc = n(tr.dataset.catDisc);
+    const mismatch = Math.abs(cover - catCover) > 0.01 || Math.abs(disc - catDisc) > 0.01;
+    const pWarn = tr.querySelector(".si-price-warn"), pMsg = tr.querySelector(".si-price-msg");
+    if (pWarn) pWarn.classList.toggle("hidden", !mismatch);
+    if (pMsg && mismatch) {
+      const catCost = r2(catCover * (1 - catDisc / 100));
+      pMsg.textContent = `مختلف عن الكتالوج (${fmt(catCover)} · خصم ${fmt(catDisc)}% · تكلفة ${fmt(catCost)} ج.م ← ${fmt(first)} ج.م)`;
+    }
     const npNote = tr.querySelector(".si-np-note");
     if (npNote) npNote.classList.toggle("hidden", !np);
     tr.classList.toggle("ring-2", np);
@@ -2878,12 +2891,63 @@ on("recalcSI", () => recalcSI());
 on("submitSI", async () => {
   const items = [];
   $$(".si-row").forEach(tr => {
-    const it = { bookId: tr.dataset.id, orderedQty: n(tr.dataset.ord), receivedQty: n(tr.querySelector(".si-rec").value), damagedQty: n(tr.querySelector(".si-dmg").value), coverPrice: n(tr.querySelector(".si-cover").value), itemDiscPct: n(tr.querySelector(".si-disc").value), notPrinted: tr.querySelector(".si-np").checked };
+    const it = { bookId: tr.dataset.id, orderedQty: n(tr.dataset.ord), receivedQty: n(tr.querySelector(".si-rec").value), damagedQty: n(tr.querySelector(".si-dmg").value), coverPrice: n(tr.querySelector(".si-cover").value), itemDiscPct: n(tr.querySelector(".si-disc").value), notPrinted: tr.querySelector(".si-np").checked, updateCatalogPrice: !!(tr.querySelector(".si-upd-cat") || {}).checked };
     if (it.orderedQty || it.receivedQty || it.damagedQty) items.push(it);
   });
   if (!$("#siNo").value.trim()) return toast("أدخل رقم فاتورة المكتبة", "warning");
   await act("SUBMIT_SUPPLIER_INVOICE", { supplierId: Q.sup || (A().suppliers[0] || {}).Supplier_ID, phaseId: APP.phaseId, supplierInvoiceNo: $("#siNo").value.trim(), invoiceDate: $("#siDate").value, volumeDiscountPct: $("#siVol").value, supplierStatedNet: $("#siStated").value, items },
     { title: "اعتماد فاتورة المكتبة", message: "الاعتماد نهائي ولا يُعدَّل، ويُدخل السليم للمخزن. هل راجعت الجرد؟", ok: "اعتماد" });
+});
+function supInvData(id) {
+  const d = A(), h = d.supInvHeaders.find(x => x.Sup_Inv_ID === id); if (!h) return null;
+  const { b, s } = maps(), ph = d.phases.find(p => p.Phase_ID === h.Phase_ID) || {};
+  const lines = d.supInvItems.filter(x => x.Sup_Inv_ID === id).map(x => ({
+    code: x.Book_ID, name: bookName(b, x.Book_ID), ord: n(x.Ordered_Qty), rec: n(x.Received_Qty), dmg: n(x.Damaged_Qty),
+    cover: n(x.Cover_Price_Invoiced), disc: n(x.Item_Discount_Pct_Invoiced), unit: n(x.Unit_Price_After_First_Disc),
+    total: n(x.Total_Line_Net_Cost), flag: x.Matching_Flag, mismatch: x.Price_Mismatch
+  }));
+  return {
+    ref: h.Internal_Ref_No, no: h.Supplier_Invoice_No, date: h.Invoice_Date, phase: ph.Phase_Name || h.Phase_ID,
+    status: h.Status, supplier: (s[h.Supplier_ID] || {}).Supplier_Name || h.Supplier_ID,
+    volPct: h.Volume_Discount_Pct !== undefined && h.Volume_Discount_Pct !== "" ? n(h.Volume_Discount_Pct) : 3,
+    volAmt: n(h.Volume_Discount_Amount), afterFirst: n(h.Total_After_Item_Discount), net: n(h.Net_Payable_Amount),
+    damaged: n(h.Damaged_Claim_Amount), stated: n(h.Supplier_Stated_Net), variance: n(h.Variance_Amount), by: h.Approved_By, lines
+  };
+}
+on("printSupInv", id => {
+  const dt = supInvData(id); if (!dt) return;
+  Doc.show("فاتورة توريد " + dt.no, Doc.supplierInvoice(dt), { size: "A4", file: "فاتورة-توريد-" + dt.no });
+});
+on("viewSupInv", id => {
+  const d = A(), h = d.supInvHeaders.find(x => x.Sup_Inv_ID === id), dt = supInvData(id);
+  if (!h || !dt) return;
+  const body = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      ${UI.stat("المكتبة", esc(dt.supplier))}
+      ${UI.stat("المرجع الداخلي", `<span class="num">${esc(dt.ref)}</span>`)}
+      ${UI.stat("الصافي المستحق", `<span class="text-brand-800">${moneyTxt(dt.net)}</span>`)}
+      ${UI.stat("الحالة", h.Status === "Voided" ? pill("", "ملغاة", "red") : pill(h.Status))}
+    </div>
+    ${UI.table([
+      { t: "الكود", cls: "num", v: l => `<code>${esc(l.code)}</code>` },
+      { t: "الكتاب", v: l => `<b>${esc(l.name)}</b>${l.mismatch ? ` <span class="pill pill-amber">${esc(l.mismatch)}</span>` : ""}` },
+      { t: "مطلوب", cls: "num", v: l => fmt(l.ord) },
+      { t: "سليم", cls: "num", v: l => `<b class="text-emerald-700">${fmt(l.rec)}</b>` },
+      { t: "تالف", cls: "num", v: l => l.dmg ? `<b class="text-rose-600">${fmt(l.dmg)}</b>` : "—" },
+      { t: "قبل الخصم", cls: "num", v: l => fmt(l.cover) },
+      { t: "خصم %", cls: "num", v: l => fmt(l.disc) + "%" },
+      { t: "التكلفة", cls: "num", v: l => fmt(l.unit) },
+      { t: "الإجمالي", cls: "num", v: l => `<b>${fmt(l.total)}</b>` },
+      { t: "المطابقة", v: l => pill(l.flag) }
+    ], dt.lines, { maxH: 360, empty: "لا توجد بنود" })}`;
+  const foot = `<div class="flex flex-wrap items-center justify-between gap-2 w-full">
+      <div>${h.Status !== "Voided" && can("VOID_SUPPLIER_INVOICE") ? `<button class="btn btn-danger btn-sm" data-act="voidSupInv" data-id="${esc(id)}">${ic("rotate-ccw")} عكس وإلغاء الفاتورة</button>` : ""}</div>
+      <div class="flex items-center gap-2"><button class="btn btn-primary btn-sm" data-act="printSupInv" data-id="${esc(id)}">${ic("printer")} طباعة / PDF</button><button class="btn btn-ghost btn-sm" data-close>إغلاق</button></div>
+    </div>`;
+  UI.modal({ title: `فاتورة المكتبة ${dt.no}`, wide: true, body, foot });
+});
+on("voidSupInv", async id => {
+  const v = await UI.form({ title: "عكس وإلغاء فاتورة المكتبة", tone: "danger", intro: "سيتم إخراج الكمية السليمة من المخزن وإعادتها للمستحق بأمر التوريد وعكس القيد المالي للمكتبة (يُسمح فقط إذا لم تُوزَّع الكمية).", fields: [{ name: "reason", label: "سبب الإلغاء", required: true, placeholder: "مثال: خطأ في رقم الفاتورة أو نسبة خصم الكمية" }], ok: "تأكيد العكس" });
+  if (v) { UI.closeModal(); await act("VOID_SUPPLIER_INVOICE", { supInvId: id, reason: v.reason }); }
 });
 
 // ============================================================ التوزيع بالأسبقية

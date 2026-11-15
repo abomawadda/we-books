@@ -225,6 +225,22 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="note">• يُرجى الإشارة إلى رقم الأمر <span class="num">${esc(d.no)}</span> في فاتورة التوريد، مع فاتورة مفصلة بالأصناف والكميات.</div>
       <div class="sig"><div>مسؤول المبادرة</div><div>المدير المالي</div><div>استلام المورد</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A4"));
   },
+  /** فاتورة توريد مكتبة (A4): d = {ref,no,date,phase,status,supplier,volPct,volAmt,afterFirst,net,damaged,stated,variance,by,lines:[{code,name,ord,rec,dmg,cover,disc,unit,total,flag,mismatch}]} */
+  supplierInvoice(d) {
+    let i = 0;
+    const rows = d.lines.map(l => `<tr><td class="c num">${++i}</td><td class="code num">${esc(l.code)}</td><td><b>${esc(l.name)}</b>${l.mismatch ? ` <span class="badge a">سعر مختلف</span>` : ""}</td>
+      <td class="c num">${l.ord}</td><td class="c num"><b>${l.rec}</b></td><td class="c num">${l.dmg || "—"}</td>
+      <td class="l num">${Doc.money(l.cover)}</td><td class="c num">${Doc.money(l.disc)}%</td><td class="l num">${Doc.money(l.unit)}</td><td class="l num"><b>${Doc.money(l.total)}</b></td></tr>`).join("");
+    return Doc.page(`${Doc.head("فاتورة توريد وجرد", d.ref, `<div style="margin-top:1mm"><span class="badge ${d.status === "Voided" ? "r" : d.status === "Approved_With_Variance" ? "a" : "g"}">${esc(ar(d.status))}</span></div>`)}
+      <div class="meta"><div class="box"><h4>المكتبة</h4>${Doc.kv("الاسم", esc(d.supplier))}${Doc.kv("رقم فاتورة المكتبة", `<span class="num">${esc(d.no)}</span>`)}</div>
+        <div class="box"><h4>بيانات الاعتماد</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("التاريخ", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${d.by ? Doc.kv("المُعتمد", esc(d.by)) : ""}</div></div>
+      <table><thead><tr><th class="c" style="width:4%">#</th><th class="c" style="width:10%">الكود</th><th>الكتاب</th><th class="c" style="width:6%">مطلوب</th><th class="c" style="width:6%">سليم</th><th class="c" style="width:6%">تالف</th><th class="l" style="width:9%">قبل الخصم</th><th class="c" style="width:6%">خصم</th><th class="l" style="width:9%">التكلفة</th><th class="l" style="width:10%">الإجمالي</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      <div class="tot"><div>${n(d.variance) ? `<div class="note">• فرق مع صافي المكتبة (${Doc.money(d.stated)} ج.م): <b class="num">${Doc.money(d.variance)}</b> ج.م</div>` : ""}</div>
+        <div class="sum">${Doc.kv("بعد خصم الأصناف", `<span class="num">${Doc.money(d.afterFirst)}</span>`)}${Doc.kv(`خصم الكمية (${Doc.money(d.volPct)}%)`, `<span class="num">− ${Doc.money(d.volAmt)}</span>`)}${n(d.damaged) ? Doc.kv("مطالبة تالف", `<span class="num" style="color:#be123c">${Doc.money(d.damaged)}</span>`) : ""}<div class="kv big"><span>الصافي المستحق (ج.م)</span><b class="num">${Doc.money(d.net)}</b></div></div></div>
+      <div class="words">${esc(Doc.words(d.net))}</div>
+      <div class="sig"><div>أمين المخزن</div><div>المدير المالي</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.ref)}`, d.status === "Voided" ? "ملغاة" : "", "red", Doc.density(d.lines.length, "A4"));
+  },
 
 
   // ---------------------------------------------------------------- المعاينة والحفظ

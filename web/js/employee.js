@@ -111,6 +111,8 @@ function itemStage(i) {
   if (dl) return { step: 3, label: "استلمت جزءاً والباقي جاهز", tone: "green", icon: "package-check" };
   if (req && al >= req) return { step: 3, label: "جاهز للتسليم", tone: "green", icon: "package-check" };
   if (al) return { step: 3, label: "جزء جاهز والباقي في الطريق", tone: "amber", icon: "package-check" };
+  const bk = (Emp.bookMap && Emp.bookMap()[i.Book_ID]) || {};
+  if (bk.Book_Status === "Not_Yet_Printed") return { step: 1, label: "لم يُطبع من الناشر بعد", tone: "amber", icon: "clock" };
   if (["Delivering", "Completed"].includes(st)) return { step: 2, label: "بانتظار وصول كمية إضافية", tone: "amber", icon: "hourglass" };
   if (st === "Receiving") return { step: 2, label: "جاري الشحن", tone: "blue", icon: "truck" };
   if (["Closed", "Ordered"].includes(st)) return { step: 1, label: "جاري التجهيز", tone: "blue", icon: "boxes" };
@@ -919,6 +921,7 @@ Router.add("/e/orders", view => {
           </div>
           <div class="grid grid-cols-3 gap-2 mt-3.5 text-center">${[["حجزت", req, "text-slate-800"], ["جاهز للتسليم", Math.max(0, al - dl), "text-brand-700"], ["استلمت", dl, "text-emerald-600"]].map(x => `<div class="rounded-xl bg-slate-50 py-2"><div class="text-[11px] text-slate-500">${x[0]}</div><div class="font-bold num ${x[2]}">${x[1]}</div></div>`).join("")}</div>
           ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
+          ${b.Book_Status === "Not_Yet_Printed" && al < req ? `<div class="mt-2.5 text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("clock", "mt-0.5 shrink-0")}<span>لم يُطبع من الناشر بعد — سيُخصَّص ويُسَلَّم فور وصوله من المكتبة</span></div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
         </article>`;
       }).join("")}`).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}

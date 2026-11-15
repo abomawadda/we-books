@@ -631,6 +631,7 @@ const ACTION_ACL = {
   GENERATE_PO_SNAPSHOT: ["Coordinator"],
   CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"],
+  VOID_SUPPLIER_INVOICE: ["Finance"],
   RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"],
   MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"],
   CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
@@ -719,6 +720,7 @@ function callServerApi(action, payload, sessionToken) {
       case "GENERATE_PO_SNAPSHOT": return E.generatePurchaseOrderSnapshot(session, payload.phaseId);
       case "CANCEL_PO_BACKORDER": return E.cancelPoBackorder(session, payload);
       case "SUBMIT_SUPPLIER_INVOICE": return E.recordSupplierInvoiceAndStock(session, payload);
+      case "VOID_SUPPLIER_INVOICE": return E.voidSupplierInvoice(session, payload);
       case "RUN_ALLOCATION_ENGINE": return E.runAutoAllocationEngine(session, payload.phaseId);
       case "MANUAL_ALLOCATION_OVERRIDE": return E.manualAllocationOverride(session, payload);
       case "CARRY_WAITLIST_TO_PHASE": return E.carryWaitlistToPhase(session, payload);
@@ -1996,7 +1998,7 @@ const OperationsEngine = {
       const S = this.S();
       const phase = this.getPhase_(phaseId);
       Util.require(!this.isBookingOpen_(phase), "أغلق الحجز لهذه المرحلة أولاً قبل تجميد الحصر.");
-      const invs = DB_Engine.getAllRecords(S.SUP_INV_HEADER).filter(h => Util.str(h.Phase_ID) === Util.str(phaseId));
+      const invs = DB_Engine.getAllRecords(S.SUP_INV_HEADER).filter(h => Util.str(h.Phase_ID) === Util.str(phaseId) && h.Status !== "Voided");
       Util.require(invs.length === 0, "تم استلام فواتير على هذه المرحلة، ولا يمكن إعادة تجميد الحصر.");
       this.assignBooksToMainSupplier_();
 
@@ -2081,9 +2083,10 @@ const OperationsEngine = {
       const phase = this.getPhase_(phaseId);
       const supplier = DB_Engine.getAllRecords(S.SUPPLIERS).find(s => Util.str(s.Supplier_ID) === supplierId);
       Util.require(supplier, "المكتبة غير موجودة.");
-      const dup = DB_Engine.getAllRecords(S.SUP_INV_HEADER).find(h => Util.str(h.Supplier_ID) === supplierId && Util.str(h.Supplier_Invoice_No) === supInvNo);
+      const dup = DB_Engine.getAllRecords(S.SUP_INV_HEADER).find(h => Util.str(h.Supplier_ID) === supplierId && Util.str(h.Supplier_Invoice_No) === supInvNo && h.Status !== "Voided");
       Util.require(!dup, "فاتورة المكتبة رقم " + supInvNo + " مسجلة من قبل.");
 
+      const st = getSettings_();
       const books = {};
       DB_Engine.getAllRecords(S.BOOKS).forEach(b => books[Util.str(b.Book_ID)] = b);
       const volPct = payload.volumeDiscountPct !== undefined && payload.volumeDiscountPct !== ""
@@ -2125,6 +2128,13 @@ const OperationsEngine = {
         if (rec > 0) stockIn.push(this.inventoryRow_(session, phaseId, bId, "IN_SUPPLY", rec, unitFirst, supInvId, "توريد فاتورة " + supInvNo));
         if (ln.notPrinted && books[bId].Book_Status === "Available") {
           DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", bId, { Book_Status: "Not_Yet_Printed" });
+        }
+        if (ln.updateCatalogPrice && priceMismatch && cover > 0) {
+          const empPct = books[bId].Emp_Discount_Pct !== "" && books[bId].Emp_Discount_Pct !== undefined ? books[bId].Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT;
+          const pr = FinancialEngine.calculateBookPricing(cover, disc, 0, empPct);
+          DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", bId, {
+            Cover_Price: cover, Supplier_Discount_Pct: disc, Standard_Net_Cost: pr.standardNetCost, Emp_Selling_Price: pr.empSellingPrice
+          });
         }
       });
       Util.require(invoicedUnits > 0, "لا توجد كميات مفوترة في الفاتورة.");
@@ -2190,6 +2200,79 @@ const OperationsEngine = {
       if (damagedClaim > 0) msg += " مطالبة تالف: " + damagedClaim + " ج.م.";
       if (header.Status === "Approved_With_Variance") msg += " تنبيه: صافي المكتبة يختلف عن حساب المنظومة بـ " + variance + " ج.م.";
       return { success: true, message: msg, invoiceHeader: header, invoiceItems: lines };
+    });
+  },
+
+  /** عكس/إلغاء فاتورة توريد قبل توزيع مخزونها */
+  voidSupplierInvoice: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const supInvId = Util.str(payload.supInvId);
+      const reason = Util.str(payload.reason);
+      Util.require(supInvId, "حدد الفاتورة المطلوب عكسها.");
+      Util.require(reason, "أدخل سبب إلغاء/عكس الفاتورة.");
+      const header = DB_Engine.getAllRecords(S.SUP_INV_HEADER).find(h => Util.str(h.Sup_Inv_ID) === supInvId);
+      Util.require(header, "فاتورة المكتبة غير موجودة.");
+      Util.require(header.Status !== "Voided", "هذه الفاتورة ملغاة بالفعل.");
+
+      const items = DB_Engine.getAllRecords(S.SUP_INV_ITEMS).filter(i => Util.str(i.Sup_Inv_ID) === supInvId);
+      const resItems = DB_Engine.getAllRecords(S.RES_ITEMS).filter(i => !this.isCancelledItem_(i));
+      const snap = this.getStockSnapshot_(resItems);
+      const stockOut = [];
+      items.forEach(l => {
+        const rec = Util.num(l.Received_Qty);
+        if (rec <= 0) return;
+        const free = snap[Util.str(l.Book_ID)] ? snap[Util.str(l.Book_ID)].free : 0;
+        Util.require(free >= rec, "لا يمكن عكس الفاتورة: تم تخصيص أو تسليم جزء من الكمية الواردة للكتاب " + l.Book_ID + " (الحر بالمخزن " + free + " والمطلوب عكسه " + rec + ").");
+        stockOut.push(this.inventoryRow_(session, header.Phase_ID, l.Book_ID, "SUPPLIER_VOID", -rec, Util.num(l.Unit_Price_After_First_Disc), supInvId, "عكس فاتورة توريد " + header.Supplier_Invoice_No + ": " + reason));
+      });
+
+      const voidStamp = new Date().getTime();
+      const ledger = [{
+        Sup_Trans_ID: "SVOID-" + supInvId + "-" + voidStamp, Supplier_ID: header.Supplier_ID, Phase_ID: header.Phase_ID,
+        Trans_Date: Util.today(), Trans_Type: "INVOICE_VOID", Reference_ID: supInvId,
+        Debit_Amount: Util.num(header.Net_Payable_Amount), Credit_Amount: 0, Payment_Channel: "-",
+        Document_Ref: header.Supplier_Invoice_No, Recorded_By: Util.actor(session),
+        Notes: "عكس فاتورة توريد ملغاة (" + header.Internal_Ref_No + "): " + reason
+      }];
+      if (Util.num(header.Damaged_Claim_Amount) > 0) {
+        ledger.push({
+          Sup_Trans_ID: "SCVOID-" + supInvId + "-" + voidStamp, Supplier_ID: header.Supplier_ID, Phase_ID: header.Phase_ID,
+          Trans_Date: Util.today(), Trans_Type: "DAMAGE_CLAIM_VOID", Reference_ID: supInvId,
+          Debit_Amount: 0, Credit_Amount: Util.num(header.Damaged_Claim_Amount), Payment_Channel: "عكس مطالبة تالف",
+          Document_Ref: header.Supplier_Invoice_No, Recorded_By: Util.actor(session),
+          Notes: "عكس مطالبة تالف لفاتورة ملغاة: " + reason
+        });
+      }
+
+      DB_Engine.updateRecordByPK(S.SUP_INV_HEADER, "Sup_Inv_ID", supInvId, { Status: "Voided" });
+      if (stockOut.length) DB_Engine.insertRecordsBatch(S.INVENTORY, stockOut);
+      DB_Engine.insertRecordsBatch(S.SUP_LEDGER, ledger);
+
+      // إعادة الكمية المستلمة إلى المستحق في أمر التوريد
+      const po = DB_Engine.getAllRecords(S.PO_SNAPSHOT);
+      const phaseOrder = DB_Engine.getAllRecords(S.PHASES).map(p => Util.str(p.Phase_ID));
+      items.forEach(l => {
+        let qty = Util.num(l.Received_Qty);
+        if (qty <= 0) return;
+        const candidates = po.filter(p => Util.str(p.Book_ID) === Util.str(l.Book_ID) && Util.num(p.Received_Qty_To_Date) > 0)
+          .sort((a, b) => (Util.str(a.Phase_ID) === Util.str(header.Phase_ID) ? -1 : 0) - (Util.str(b.Phase_ID) === Util.str(header.Phase_ID) ? -1 : 0) || phaseOrder.indexOf(Util.str(b.Phase_ID)) - phaseOrder.indexOf(Util.str(a.Phase_ID)));
+        candidates.forEach(p => {
+          if (qty <= 0) return;
+          const giveBack = Math.min(qty, Util.num(p.Received_Qty_To_Date));
+          qty -= giveBack;
+          const recNew = Util.num(p.Received_Qty_To_Date) - giveBack;
+          const outNew = Util.num(p.Outstanding_Qty) + giveBack;
+          DB_Engine.updateRecordByPK(S.PO_SNAPSHOT, "PO_ID", p.PO_ID, {
+            Received_Qty_To_Date: recNew, Outstanding_Qty: outNew, Line_Status: outNew > 0 ? "Open" : p.Line_Status
+          });
+          p.Received_Qty_To_Date = recNew;
+          p.Outstanding_Qty = outNew;
+        });
+      });
+
+      DB_Engine.logAudit(session.userId, session.role, "Supplier_Invoices", "VOID_INVOICE", supInvId, header, { Status: "Voided", reason: reason });
+      return { success: true, message: "تم عكس الفاتورة " + header.Supplier_Invoice_No + " وإخراج كميتها من المخزن وإعادتها للمستحق بأمر التوريد." };
     });
   },
 
