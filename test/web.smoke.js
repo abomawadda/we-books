@@ -149,6 +149,8 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await closeAll();
   // الحاجزون لكتاب
   await go('/a/books'); await click('[data-act="bookRes"][data-id="BK-101"]');
+  check(/ملف الكتاب/.test(dialog().textContent) && /الحاجزون بالأسبقية/.test(dialog().textContent) && dialog().querySelectorAll('ol li').length >= 1, 'book file lists reservers by priority');
+  await click('[data-act="bookResList"][data-id="BK-101"]');
   check(/الحاجزون/.test(dialog().textContent) && dialog().querySelectorAll('#bookResList li').length >= 1, 'book reservers dialog lists employees');
   await click('[data-close]', dialog()); await settle();
   // كتاب جديد عبر النموذج

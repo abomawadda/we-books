@@ -39,7 +39,7 @@ Router.add("/a/reports", view => {
     </section></div>`;
   renderReport();
 });
-on("pickRep", v => { Rep.sel = v; Shell.rerender(); });
+on("pickRep", v => { Rep.sel = v; Rep.q = ""; Rep.sort = { k: -1, dir: 1 }; Shell.rerender(); });
 on("printRep", () => {
   $$("#repArea details[data-rg]").forEach(d => { repFill(d); d.open = true; });
   const c = $("#repArea").cloneNode(true);
@@ -175,3 +175,88 @@ function repFill(el) {
 }
 document.addEventListener("toggle", ev => { const el = ev.target; if (el && el.matches && el.matches("details[data-rg]") && el.open) repFill(el); }, true);
 on("repOpenAll", () => $$("#repArea details[data-rg]").forEach(d => { repFill(d); d.open = true; }));
+
+// ================================================================ (1) ترتيب + (2) بحث داخل أي تقرير — على الجهاز بالكامل بلا أي طلب للخادم
+Rep.q = ""; Rep.sort = { k: -1, dir: 1 };
+const repTxt = el => (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim();
+const repNum = t => { const m = String(t).replace(/,/g, "").match(/-?\d+(\.\d+)?/); return m ? +m[0] : NaN; };
+function repToolbar() {
+  const area = $("#repArea"); if (!area || area.querySelector(".rep-tools")) return;
+  const grp = !!area.querySelector("details[data-rg]"), th = area.querySelector("table thead") ? [...area.querySelector("table thead tr").children].map(repTxt) : [];
+  const opts = grp ? [["0", "الاسم"]].concat(((Rep._g && Rep._g.o.stats(Rep._g.g[Rep._g.keys[0]] || [])) || []).map((s, i) => [String(i + 1), s[0]])) : th.map((t, i) => [String(i), t]).filter(x => x[1]);
+  if (!grp && !area.querySelector("table")) return;
+  area.insertAdjacentHTML("afterbegin", `<div class="rep-tools no-print flex flex-wrap items-center gap-2 mb-3">
+    <div class="relative flex-1 min-w-[10rem]"><input class="input !h-10 !pr-9 text-[13.5px]" placeholder="ابحث باسم موظف أو كتاب…" data-rq value="${esc(Rep.q)}"><span class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">${ic("search")}</span></div>
+    ${opts.length ? `<select class="input !h-10 !w-auto text-[13px]" data-rs><option value="-1">ترتيب: الافتراضي</option>${opts.map(o => `<option value="${o[0]}" ${String(Rep.sort.k) === o[0] ? "selected" : ""}>ترتيب: ${esc(o[1])}</option>`).join("")}</select>
+    <button class="btn btn-outline !h-10 !px-3" data-rd title="عكس الترتيب" aria-label="عكس الترتيب">${Rep.sort.dir > 0 ? "↑" : "↓"}</button>` : ""}
+    <span class="text-[12px] text-slate-500 num" data-rc></span></div>`);
+  const tb = area.querySelector(".rep-tools");
+  tb.querySelector("[data-rq]").addEventListener("input", e => { Rep.q = e.target.value; repApply(); });
+  const rs = tb.querySelector("[data-rs]"); if (rs) rs.addEventListener("change", e => { Rep.sort.k = +e.target.value; repApply(); });
+  const rd = tb.querySelector("[data-rd]"); if (rd) rd.addEventListener("click", () => { Rep.sort.dir *= -1; rd.textContent = Rep.sort.dir > 0 ? "↑" : "↓"; repApply(); });
+  // الضغط على عنوان العمود (الكمبيوتر) يرتّب أيضاً
+  $$("table thead th", area).forEach((h, i) => { if (h.closest("details")) return; h.style.cursor = "pointer"; h.title = "اضغط للترتيب"; h.addEventListener("click", () => { Rep.sort.dir = Rep.sort.k === i ? -Rep.sort.dir : 1; Rep.sort.k = i; if (rs) rs.value = String(i); if (rd) rd.textContent = Rep.sort.dir > 0 ? "↑" : "↓"; repApply(); }); });
+  repApply();
+}
+function repApply() {
+  const area = $("#repArea"); if (!area) return;
+  const q = Rep.q.trim().toLowerCase(), { k, dir } = Rep.sort; let shown = 0, total = 0;
+  const cmp = (a, b) => { const na = repNum(a), nb = repNum(b); return (isNaN(na) || isNaN(nb) ? String(a).localeCompare(String(b), "ar") : na - nb) * dir; };
+  const groups = $$("details[data-rg]", area);
+  if (groups.length) {
+    const R = Rep._g, box = groups[0].parentElement;
+    const rowTxt = gi => { const l = R.g[R.keys[gi]]; return l._t || (l._t = l.map(x => [x.Emp_ID, x.Book_ID, x.Beneficiary, R.o.cols.map(c => String(c[1](x, 0)).replace(/<[^>]+>/g, " ")).join(" ")].join(" ")).join(" ").toLowerCase()); };
+    groups.forEach(g => { const gi = +g.dataset.rg, hit = !q || repTxt(g.querySelector("summary")).toLowerCase().includes(q) || rowTxt(gi).includes(q); g.hidden = !hit; total++; if (hit) shown++;
+      if (q && hit && !repTxt(g.querySelector("summary")).toLowerCase().includes(q)) { repFill(g); g.open = true; $$(".rg-body tbody tr", g).forEach(tr => { tr.hidden = !repTxt(tr).toLowerCase().includes(q); }); }
+      else $$(".rg-body tbody tr", g).forEach(tr => { tr.hidden = false; }); });
+    if (k >= 0) groups.slice().sort((a, b) => { const sa = R.o.stats(R.g[R.keys[+a.dataset.rg]]), sb = R.o.stats(R.g[R.keys[+b.dataset.rg]]);
+      return k === 0 ? cmp(R.o.title(R.keys[+a.dataset.rg]), R.o.title(R.keys[+b.dataset.rg])) : cmp((sa[k - 1] || [])[1], (sb[k - 1] || [])[1]); }).forEach(g => box.appendChild(g));
+  } else {
+    const tbody = area.querySelector("table tbody"), cards = area.querySelector(".lg\\:hidden.grid");
+    if (tbody) {
+      const rows = [...tbody.children], cs = cards ? [...cards.children] : [];
+      rows.forEach((tr, i) => { tr._i = i; });
+      const order = k >= 0 ? rows.slice().sort((a, b) => cmp(repTxt(a.children[k] || a), repTxt(b.children[k] || b))) : rows.slice().sort((a, b) => a._i - b._i);
+      order.forEach(tr => { tbody.appendChild(tr); const hit = !q || repTxt(tr).toLowerCase().includes(q); tr.hidden = !hit; total++; if (hit) shown++;
+        const c = cs[tr._i]; if (c) { cards.appendChild(c); c.hidden = !hit; } });
+    }
+  }
+  const rc = area.querySelector("[data-rc]"); if (rc) rc.textContent = q ? `${shown} من ${total}` : "";
+}
+new MutationObserver(() => { if (Router.current !== "/a/reports") return; const a = $("#repArea"); if (a && !a.querySelector(".rep-tools") && !a.querySelector(".skeleton")) repToolbar(); })
+  .observe(document.body, { childList: true, subtree: true });
+
+// ================================================================ (3) صورة المجموعة للمشاركة على واتساب
+const _repFill0 = repFill;
+repFill = function (el) {
+  _repFill0(el);
+  const body = el.querySelector(".rg-body"); if (!body || body.querySelector("[data-rgshot]")) return;
+  body.insertAdjacentHTML("beforeend", `<div class="no-print flex justify-end gap-2 p-2 border-t border-slate-100">${Rep.sel !== "R01" ? `<button class="btn btn-ghost btn-xs" data-act="bookFile" data-id="${esc(Rep._g.keys[+el.dataset.rg])}">${ic("book-open")} ملف الكتاب</button>` : ""}<button class="btn btn-soft btn-xs" data-rgshot="${el.dataset.rg}">${ic("download")} صورة للمشاركة</button></div>`);
+  body.querySelector("[data-rgshot]").addEventListener("click", () => {
+    const R = Rep._g, k = R.keys[+el.dataset.rg], tb = body.querySelector("table").cloneNode(true); $$("tr[hidden]", tb).forEach(r => r.remove());
+    const cur = REPORTS.find(r => r[0] === Rep.sel) || [];
+    const stats = R.o.stats(R.g[k]).map(s => `${s[0]} <b>${fmt(Math.round(s[1]))}</b>`).join(" · ");
+    Doc.show(R.o.title(k), Doc.page(`${Doc.head(cur[2] || "تقرير", "")}<h3 style="margin:2mm 0 1mm;font-size:13pt">${esc(R.o.title(k))}</h3><p class="sub" style="margin:0 0 2mm">${stats}${phaseObj().Phase_Name ? " · " + esc(phaseObj().Phase_Name) : ""}</p>${tb.outerHTML.replace(/class="[^"]*"/g, "")}${Doc.foot("")}`, "", "", "dense"), { file: (cur[0] || "rep") + "-" + k });
+  });
+};
+
+// ================================================================ (5) مقارنة المراحل
+REPORTS.push(["R17", "arrow-left-right", "مقارنة المراحل", "الحاجزون والنسخ والقيمة والتحصيل لكل مرحلة جنب بعض"]);
+const _renderReport0 = renderReport;
+renderReport = async function () {
+  if (Rep.sel !== "R17") return _renderReport0();
+  const d = A(), area = $("#repArea"); if (!area) return; const { b } = maps();
+  const ph = d.phases.slice(-4), live = i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > 0;
+  const m = ph.map(p => { const its = d.resItems.filter(i => i.Phase_ID === p.Phase_ID && live(i)), invs = d.empInvoices.filter(i => i.Phase_ID === p.Phase_ID), emps = new Set(its.map(i => i.Emp_ID)).size;
+    const val = its.reduce((s, i) => s + n(i.Requested_Qty) * n(i.Unit_Emp_Price), 0), net = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount");
+    const top = {}; its.forEach(i => { top[i.Book_ID] = (top[i.Book_ID] || 0) + n(i.Requested_Qty); });
+    return { p, emps, copies: sum(its, "Requested_Qty"), val, avg: emps ? val / emps : 0, kin: its.filter(i => i.Beneficiary).length, net, paid, pct: net ? Math.round(paid / net * 100) : 0, deliv: sum(its, "Delivered_Qty"),
+      top: Object.entries(top).sort((x, y) => y[1] - x[1]).slice(0, 3).map(x => bookName(b, x[0])) }; });
+  const rows = [["الحاجزون", x => fmt(x.emps)], ["النسخ المحجوزة", x => fmt(x.copies)], ["قيمة الحجز", x => money(x.val)], ["متوسط الأسرة", x => money(Math.round(x.avg))], ["حجوزات للأقارب", x => fmt(x.kin)],
+    ["صافي الفواتير", x => money(x.net)], ["المحصَّل", x => money(x.paid)], ["نسبة التحصيل", x => x.pct + "%"], ["المُسلَّم", x => fmt(x.deliv)], ["الأكثر طلباً", x => x.top.map(esc).join("<br>") || "—"]];
+  const delta = (k, i) => { if (!i) return ""; const a = m[i - 1][k], c = m[i][k]; if (!a) return ""; const p = Math.round((c - a) / a * 100); return p ? ` <span class="text-[10.5px] ${p > 0 ? "text-emerald-600" : "text-rose-600"}">${p > 0 ? "▲" : "▼"}${Math.abs(p)}%</span>` : ""; };
+  const keyOf = ["emps", "copies", "val", "avg", "kin", "net", "paid", "pct", "deliv"];
+  area.innerHTML = m.length < 2 ? UI.empty("arrow-left-right", "محتاج مرحلتين على الأقل للمقارنة") : `<div class="overflow-x-auto -mx-1"><table class="tbl tbl-grp w-full"><thead><tr><th class="w-full">البند</th>${m.map(x => `<th class="whitespace-nowrap text-center">${esc(x.p.Phase_Name || x.p.Phase_ID)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map((r, ri) => `<tr><td class="font-semibold">${r[0]}</td>${m.map((x, i) => `<td class="text-center num whitespace-nowrap text-[12.5px]">${r[1](x)}${keyOf[ri] ? delta(keyOf[ri], i) : ""}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+    <p class="text-[11.5px] text-slate-500 mt-2">▲▼ التغيّر مقارنة بالمرحلة اللي قبلها. آخر 4 مراحل.</p>`;
+};
