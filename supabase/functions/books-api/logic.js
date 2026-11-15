@@ -153,7 +153,7 @@ function getDatabaseSchemaDefinition_() {
   return [
     { name: S.SETTINGS, color: "#1e293b", headers: ["Setting_Key", "Setting_Value", "Data_Type", "Description", "Updated_At", "Updated_By"] },
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
-    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
+    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
@@ -376,7 +376,19 @@ const AuthEngine = {
   clearFails_: function(kind, id) { CacheService.getScriptCache().remove(this.throttleKey_(kind, id)); },
 
   /** دخول الموظف: الرقم الوظيفي + آخر 4 أرقام من الرقم القومي + الموبايل */
-  authenticateEmployee: function(empIdInput, natIdLast4Input, mobileInput) {
+  /** تصنيف العضو تلقائياً حسب بيانات MyNekaba أو رقم العضوية: emp | retiree | outsource | guest | deceased */
+  employeeCategory_: function(emp) {
+    const id = Util.str(emp && emp.Emp_ID);
+    const jt = Util.str(emp && emp.Job_Title);
+    const ms = Util.str(emp && emp.Member_State);
+    if (/^6\d{6}$/.test(id) || jt === "شركات التعهيد") return "outsource";
+    if (/^7\d{6}$/.test(id) || jt === "زائر") return "guest";
+    if (/^8\d{6}$/.test(id) || jt === "معاش" || ms === "معاش" || ms === "استقالة") return "retiree";
+    if (ms === "وفاة") return "deceased";
+    return "emp";
+  },
+
+  authenticateEmployee: function(empIdInput, natIdLast4Input, mobileInput, categoryInput) {
     const empId = Util.str(empIdInput);
     const nat4 = Util.str(natIdLast4Input).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
     const mobile = this.normalizeMobile(mobileInput);
@@ -393,10 +405,24 @@ const AuthEngine = {
     if (Util.str(emp.Employment_Status) !== "ساري") {
       return { success: false, message: "هذا الحساب موقوف. يرجى مراجعة إدارة المبادرة." };
     }
+    const actualCat = this.employeeCategory_(emp);
+    if (actualCat === "deceased") {
+      return { success: false, message: "هذا الحساب غير متاح للدخول." };
+    }
+    const reqCat = Util.str(categoryInput);
+    if (reqCat && reqCat !== actualCat) {
+      const CAT_LABEL = { emp: "المصرية للاتصالات", retiree: "معاش", outsource: "شركات التعهيد", guest: "زائر" };
+      return {
+        success: false,
+        wrongCategory: actualCat,
+        message: "هذا الحساب تابع لفئة «" + (CAT_LABEL[actualCat] || actualCat) + "» وليس «" + (CAT_LABEL[reqCat] || reqCat) + "». يرجى الدخول من البوابة الصحيحة."
+      };
+    }
     this.clearFails_("EMP", empId);
     const user = {
       userType: "EMPLOYEE", empId: empId, fullName: emp.Full_Name, department: emp.Department,
       jobTitle: emp.Job_Title, mobile: this.normalizeMobile(emp.Mobile),
+      category: actualCat, memberState: Util.str(emp.Member_State),
       installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed),
       maxCreditLimit: Util.num(emp.Max_Credit_Limit), role: "Employee"
     };
@@ -648,7 +674,7 @@ function callServerApi(action, payload, sessionToken) {
   try {
     ensureDatabaseInitialized_();
     DB_Engine.clearCache();
-    if (action === "LOGIN_EMPLOYEE") return AuthEngine.authenticateEmployee(payload.empId, payload.natIdLast4, payload.mobile);
+    if (action === "LOGIN_EMPLOYEE") return AuthEngine.authenticateEmployee(payload.empId, payload.natIdLast4, payload.mobile, payload.category);
     if (action === "LOGIN_ADMIN") return AuthEngine.authenticateAdmin(payload.username, payload.password);
     if (action === "LOGOUT") { AuthEngine.destroySession(sessionToken); return { success: true }; }
     if (action === "GET_PUBLIC_INIT_DATA") return OperationsEngine.getPublicInitData();
@@ -1868,6 +1894,7 @@ const OperationsEngine = {
         map[id] = {
           Emp_ID: id, Full_Name: Util.str(inp.Full_Name) || (old ? old.Full_Name : ""), National_ID_Last4: nat, Mobile: mob,
           Department: inp.Department || (old ? old.Department : ""), Job_Title: inp.Job_Title || (old ? old.Job_Title : ""),
+          Member_State: inp.Member_State || (old ? old.Member_State : ""),
           Employment_Status: inp.Employment_Status || (old ? old.Employment_Status : "ساري"),
           Installment_Allowed: inp.Installment_Allowed !== undefined ? inp.Installment_Allowed !== false : (old ? old.Installment_Allowed : true),
           Max_Credit_Limit: Util.num(inp.Max_Credit_Limit) || (old ? old.Max_Credit_Limit : ""),

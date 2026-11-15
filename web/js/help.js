@@ -45,12 +45,17 @@ function loginTrouble(msg) {
 }
 Shell.loginEmployee = async function () {
   const id = $("#lgEmp").value.trim(), nat = $("#lgNat").value.trim(), mob = $("#lgMob").value.trim();
+  const cat = Shell.loginTab || "emp";
   if (!id || !nat || !mob) return toast("اكتب الرقم الوظيفي وآخر 4 أرقام من القومي والموبايل", "warning");
-  const r = await call("LOGIN_EMPLOYEE", { empId: id, natIdLast4: nat, mobile: mob }, { block: true });
-  if (!r.success) { if (/إيقاف|المحاولات/.test(r.message || "")) return toast(r.message, "danger"); return loginTrouble(r.message); }
+  const r = await call("LOGIN_EMPLOYEE", { empId: id, natIdLast4: nat, mobile: mob, category: cat }, { block: true });
+  if (!r.success) {
+    if (r.wrongCategory) return toast(r.message, "warning");
+    if (/إيقاف|المحاولات/.test(r.message || "")) return toast(r.message, "danger");
+    return loginTrouble(r.message);
+  }
   const rem = $("#lgRemember");
   if (rem && rem.checked) {
-    try { localStorage.setItem("wb_remember", JSON.stringify({ empId: id, mobile: mob, category: Shell.loginTab || "emp" })); } catch (_) {}
+    try { localStorage.setItem("wb_remember", JSON.stringify({ empId: id, mobile: mob, category: cat })); } catch (_) {}
   } else {
     try { localStorage.removeItem("wb_remember"); } catch (_) {}
   }

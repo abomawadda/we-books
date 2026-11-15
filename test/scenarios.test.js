@@ -315,6 +315,24 @@ ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, g.sessionToken), 'guest portal works');
 fail(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'شركة أخرى' }), 'outsource company must be from list');
 const os1 = ok(api('REGISTER_MEMBER', { category: 'outsource', name: 'كريم سعد محمود', nationalId: '29001011234567', mobile: '01011114444', org: 'Tedata' }), 'outsource Tedata');
 assert.strictEqual(os1.newMemberId, '6000001'); passed++;
+// عزل البوابات: كل فئة تدخل من بوابتها فقط
+ok(api('LOGIN_EMPLOYEE', { empId: '1001', natIdLast4: '4512', mobile: '01012345678', category: 'emp' }), 'emp enters emp portal');
+fail(api('LOGIN_EMPLOYEE', { empId: '1001', natIdLast4: '4512', mobile: '01012345678', category: 'retiree' }), 'emp blocked from retiree portal', /المصرية للاتصالات/);
+ok(api('LOGIN_EMPLOYEE', { empId: '8000001', natIdLast4: '4560', mobile: '01155443322', category: 'retiree' }), 'retiree enters retiree portal');
+fail(api('LOGIN_EMPLOYEE', { empId: '8000001', natIdLast4: '4560', mobile: '01155443322', category: 'emp' }), 'retiree blocked from emp portal', /معاش/);
+fail(api('LOGIN_EMPLOYEE', { empId: '6000001', natIdLast4: '4567', mobile: '01011114444', category: 'guest' }), 'outsource blocked from guest portal', /شركات التعهيد/);
+ok(api('LOGIN_EMPLOYEE', { empId: '7000001', natIdLast4: '4567', mobile: '01099887766', category: 'guest' }), 'guest enters guest portal');
+ok(api('BULK_IMPORT_EMPLOYEES', { employeesArray: [
+  { Emp_ID: '9101', Full_Name: 'أحمد معاش نيكابا', National_ID_Last4: '1122', Mobile: '01022223333', Member_State: 'معاش', Employment_Status: 'ساري' },
+  { Emp_ID: '9102', Full_Name: 'سعيد استقالة نيكابا', National_ID_Last4: '3344', Mobile: '01022224444', Member_State: 'استقالة', Employment_Status: 'ساري' },
+  { Emp_ID: '9103', Full_Name: 'حسام وفاة نيكابا', National_ID_Last4: '5566', Mobile: '01022225555', Member_State: 'وفاة', Employment_Status: 'ساري' }
+] }, A), 'import mynekaba states');
+ok(api('LOGIN_EMPLOYEE', { empId: '9101', natIdLast4: '1122', mobile: '01022223333', category: 'retiree' }), 'mynekaba retiree enters retiree portal');
+fail(api('LOGIN_EMPLOYEE', { empId: '9101', natIdLast4: '1122', mobile: '01022223333', category: 'emp' }), 'mynekaba retiree blocked from emp portal', /معاش/);
+ok(api('LOGIN_EMPLOYEE', { empId: '9102', natIdLast4: '3344', mobile: '01022224444', category: 'retiree' }), 'mynekaba resigned enters retiree portal');
+fail(api('LOGIN_EMPLOYEE', { empId: '9102', natIdLast4: '3344', mobile: '01022224444', category: 'emp' }), 'mynekaba resigned blocked from emp portal', /معاش/);
+fail(api('LOGIN_EMPLOYEE', { empId: '9103', natIdLast4: '5566', mobile: '01022225555', category: 'emp' }), 'deceased blocked from emp');
+fail(api('LOGIN_EMPLOYEE', { empId: '9103', natIdLast4: '5566', mobile: '01022225555', category: 'retiree' }), 'deceased blocked from retiree');
 
 // 26) حذف مرحلة/مكتبة · تبعية الكتب للمكتبة الرئيسية · منع تكرار الكتاب عند التسجيل والتكويد
 const mainSupId = rows(S.SUPPLIERS)[0].Supplier_ID;

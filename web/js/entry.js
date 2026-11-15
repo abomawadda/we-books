@@ -138,7 +138,7 @@ Shell.renderLogin = function () {
   setTimeout(() => {
     try {
       const rem = JSON.parse(localStorage.getItem("wb_remember") || "null");
-      if (rem && rem.empId) {
+      if (rem && rem.empId && (rem.category || "emp") === t) {
         const empInp = $("#lgEmp"), mobInp = $("#lgMob"), remBox = $("#lgRemember");
         if (empInp && !empInp.value) empInp.value = rem.empId;
         if (mobInp && !mobInp.value) mobInp.value = rem.mobile || "";
