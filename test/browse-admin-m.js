@@ -23,18 +23,20 @@ at(2026, 11, 5, 10); sub('1002', [{ bookId: 'BK-101', qty: 2 }, { bookId: 'BK-20
 sub('1003', [{ bookId: 'BK-202', qty: 1 }, { bookId: 'BK-201', qty: 1 }], 'I');
 sub('1004', [{ bookId: 'BK-301', qty: 1 }, { bookId: 'BK-302', qty: 1 }], 'I');
 sub('1005', [{ bookId: 'BK-201', qty: 1 }, { bookId: 'BK-202', qty: 1 }]);
+if (!process.env.OPEN) {
 at(2027, 1, 2, 9);
 const po = api('GENERATE_PO_SNAPSHOT', { phaseId: 'PH-01' }, coord);
 api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'NOOR-1', invoiceDate: '2027-01-05', volumeDiscountPct: 5,
   items: po.snapshot.map(p => p.Book_ID === 'BK-201' ? { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: 0, coverPrice: 150, itemDiscPct: 20, notPrinted: true } : { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: p.Net_Order_To_Supplier_Qty, coverPrice: 0, itemDiscPct: 20 }) }, store);
 api('RUN_ALLOCATION_ENGINE', { phaseId: 'PH-01' }, coord);
 at(2027, 1, 7, 10);
-const inv = id => rows(S.EMP_INVOICES).find(i => i.Emp_ID === id);
+var inv = id => rows(S.EMP_INVOICES).find(i => i.Emp_ID === id);
 api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1001').Emp_Inv_ID, amount: inv('1001').Down_Payment_Required, paymentMethod: 'INSTAPAY', transactionRef: 'IP-50001' }, fin);
 api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1002').Emp_Inv_ID, amount: inv('1002').Net_Final_Invoice_Amount, paymentMethod: 'CASH' }, fin);
 api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1004').Emp_Inv_ID, amount: inv('1004').Down_Payment_Required, paymentMethod: 'WALLET', transactionRef: 'W-7001' }, fin);
 ['1001', '1002'].forEach(id => api('EXECUTE_BOOK_DELIVERY', { empId: id, phaseId: 'PH-01', receivedBy: 'الموظف' }, store));
-clock.now = new Date(2027, 0, 8, 10).getTime();
+}
+clock.now = process.env.OPEN ? new Date(2026, 10, 6, 10).getTime() : new Date(2027, 0, 8, 10).getTime();
 
 const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', W = +(process.argv[4] || 390);
 (async () => {
@@ -63,8 +65,9 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', W =
   await p.fill('#lgUser', 'admin'); await p.fill('#lgPass', 'Admin@2026'); await p.click('#fAdm button.btn-gold'); await p.waitForTimeout(1000);
   if (await p.$('input[name="old"]')) { await p.fill('input[name="old"]', 'Admin@2026'); await p.fill('input[name="nw"]', 'Admin@2026x'); await p.fill('input[name="nw2"]', 'Admin@2026x'); await p.click('[data-ok]'); await p.waitForTimeout(900); }
   await p.waitForTimeout(800);
-  for (const r of (process.argv[3] || 'res,collect,delivery,cash,alloc').split(',')) {
+  for (const r of (process.argv[3] || 'res,collect,delivery,cash,alloc').split(process.argv[3] && process.argv[3].includes('js:') ? '|' : ',')) {
     if (r.startsWith('act:')) { const [, act, id] = r.split(':'); await p.evaluate(([a, i]) => ACTIONS[a](i), [act, id]); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${act}-${id}.png`), fullPage: true }); await p.evaluate(() => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); }); continue; }
+    if (r.startsWith('js:')) { const [, name, code] = r.split('~'); await p.evaluate(c => eval(c), code); await p.waitForTimeout(1800); await p.screenshot({ path: path.join(OUT, 'am-js-' + name + '.png') }); continue; }
     if (r.startsWith('rep:')) { await p.evaluate(x => { Rep.sel = x; location.hash = '#/a/dash'; setTimeout(() => location.hash = '#/a/reports', 50); }, r.slice(4)); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${r.replace(':', '-')}.png`), fullPage: true }); continue; }
     await p.evaluate(h => location.hash = h, '#/a/' + r); await p.waitForTimeout(700);
     await p.screenshot({ path: path.join(OUT, `am-${r.replace(/\//g, '_')}.png`), fullPage: true });

@@ -612,7 +612,8 @@ const ADMIN_ROLES = ["Admin", "Coordinator", "Finance", "Warehouse"];
 // الصلاحيات لكل عملية. "EMPLOYEE" = بوابة الموظف فقط.
 const ACTION_ACL = {
   GET_EMPLOYEE_PORTAL_DATA: ["EMPLOYEE"],
-  SAVE_MY_KIDS: ["EMPLOYEE"],
+  SAVE_MY_KIDS: ["EMPLOYEE", "Coordinator"],
+  ADMIN_EMP_PORTAL: ["Coordinator"],
   WAITLIST_DECISION: ["EMPLOYEE", "Coordinator"],
   EMP_CANCEL_REQUEST: ["EMPLOYEE"],
   EMP_RETURN_REQUEST: ["EMPLOYEE"],
@@ -702,7 +703,8 @@ function callServerApi(action, payload, sessionToken) {
     const E = OperationsEngine;
     switch (action) {
       case "GET_EMPLOYEE_PORTAL_DATA": return E.getEmployeePortalData(session.empId, payload.phaseId);
-      case "SAVE_MY_KIDS": return E.saveMyKids(session.empId, payload.kids);
+      case "SAVE_MY_KIDS": { const kEmp = session.userType === "EMPLOYEE" ? session.empId : Util.str(payload.empId); Util.require(kEmp, "حدد الموظف."); return E.saveMyKids(kEmp, payload.kids); }
+      case "ADMIN_EMP_PORTAL": { Util.require(Util.str(payload.empId), "حدد الموظف."); return E.getEmployeePortalData(Util.str(payload.empId), payload.phaseId); }
       case "WAITLIST_DECISION": return E.waitlistDecision(session, payload);
       case "EMP_CANCEL_REQUEST": return E.empCancelRequest(session, payload);
       case "EMP_RETURN_REQUEST": return E.empReturnRequest(session, payload);
