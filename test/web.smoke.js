@@ -48,7 +48,9 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   // بوابة الدخول: اختيار الفئة ثم تسجيل زائر
   check(d.getElementById('lgPick') && d.querySelectorAll('[data-act="entryPick"]').length === 4, 'entry picker');
   await click('[data-act="entryPick"][data-id="guest"]'); check(d.querySelector('[data-act="entryReg"]'), 'guest form');
-  await click('[data-act="entryReg"]'); fill('name', 'سامي علي حسن'); fill('nationalId', '29001011234567'); fill('mobile', '01099887766'); await ok(); await settle(); await settle(); await sleep(900);
+  await click('[data-act="entryReg"]'); check(d.getElementById('fReg'), 'inline register form');
+  d.getElementById('regName').value = 'سامي علي حسن'; d.getElementById('regNat').value = '29001011234567'; d.getElementById('regMob').value = '01099887766';
+  d.getElementById('fReg').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle(); await sleep(900);
   check(w.location.hash.startsWith('#/e/') && /7000001/.test(d.body.textContent), 'guest registered + member id shown');
   d.querySelectorAll('[data-close]').forEach(b => b.click()); await settle();
   await w.eval('logout')(false); await settle(); await settle();

@@ -132,6 +132,14 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
   pubRank() { const list = (APP.adm && APP.adm.books) || (APP.emp && APP.emp.books) || []; if (Doc._prSrc === list) return Doc._pr; const r = {}; list.forEach(b => { r[b.Publisher] = (r[b.Publisher] || 0) + 1 + n(b.Pop) * 3; }); Doc._prSrc = list; Doc._pr = r; return r; },
   sortLines(lines) { const r = Doc.pubRank(), k = l => { const b = Doc.bk(l.code); return [l.publisher || b.Publisher || "", l.subject || b.Subject || ""]; };
     return lines.slice().sort((x, y) => { const [px, sx] = k(x), [py, sy] = k(y); return (r[py] || 0) - (r[px] || 0) || px.localeCompare(py, "ar") || sx.localeCompare(sy, "ar"); }); },
+  /** تنويه الكتب التي لم تصل (لا تدخل الفاتورة) وقرار العضو فيها */
+  waitNote(lines) {
+    const w = lines.filter(l => n(l.req) > Math.max(n(l.alloc), n(l.deliv)));
+    if (!w.length) return "";
+    const names = w.map(l => { const b = Doc.bk(l.code); return `${esc(b.Publisher || l.name)} ${esc(b.Subject || "")}${l.ben ? " (" + esc(l.ben) + ")" : ""}`; }).join("، ");
+    const ch = w.every(l => l.choice === "carry") ? "وافق العضو على ترحيلها للمرحلة التالية بأسبقيته." : "ستُضاف للمرحلة التالية بأسبقية الحجز، أو يُنهي العضو حجزه على المتاح.";
+    return `<div class="words" style="background:#f0f9ff;border-color:#bae6fd;color:#075985">⏳ كتب لم تصل بعد ولا تدخل هذه الفاتورة: ${names}. ${ch}</div>`;
+  },
   /** ملخص مضغوط في شبكة خلايا صغيرة: items = [[label, value, kind]] (kind: big|r|g|m) */
   sumStrip(items, words) {
     return `<div class="strip">${items.map(([l, v, k]) => `<div class="${k || ""}"><span>${esc(l)}</span><b class="num">${Doc.money(v)}</b></div>`).join("")}</div>${words ? `<div class="strip-w">${words}</div>` : ""}`;
@@ -182,6 +190,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
         <div class="box"><h4>الفاتورة</h4>${Doc.kv("تاريخ الإصدار", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("السداد", esc(Doc.methodAr(d.method)))}</div></div>
       <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">الكمية</th><th class="c" style="width:6%">سُلّم</th><th class="l" style="width:10%">السعر</th><th class="l" style="width:11%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="8" class="c sub">لا بنود</td></tr>`}</tbody></table>
+      ${Doc.waitNote(d.lines)}
       ${compact ? Doc.sumStrip([["قبل الخصم", cover, "m"], ["قيمة الكتب", gross], ["الصافي", net, "big"], ["المقدم المطلوب", d.down], ["المسدد", d.paid], ["المتبقي", d.remaining, n(d.remaining) ? "r" : "g"], ...(n(d.credit) ? [["مستحق الرد", d.credit, "g"]] : []), ["وفّرت", cover - net, "g"]],
         esc(Doc.words(net))) : `
       <div class="tot"><div>${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>

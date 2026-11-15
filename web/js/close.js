@@ -59,3 +59,22 @@ on("clClose", async () => {
   toast(r.success ? "اتقفلت المرحلة نهائياً ✅" : r.message, r.success ? "success" : "danger");
   if (r.success) { CL.st = null; await Admin.load(); }
 });
+
+// ---------------------------------------------------------------- قرار المدير في الكتب المنتظرة لموظف (ترحيل / إنهاء على المتاح)
+const _epBodyBase = epBody;
+epBody = function (id) {
+  const html = _epBodyBase(id);
+  if (!APP.phaseId || !can("WAITLIST_DECISION")) return html;
+  const ph = phaseObj(); if ((ph.Effective_Status || ph.Phase_Status) === "Open") return html;
+  const { b } = maps(), w = phaseItems().filter(i => i.Emp_ID === id && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+  if (!w.length) return html;
+  const ch = w.every(i => i.Waitlist_Choice === "carry") ? "وافق على الترحيل" : w.some(i => i.Waitlist_Choice) ? "قرار جزئي" : "لم يختر بعد";
+  return `<div class="mb-3 rounded-2xl bg-sky-50 ring-1 ring-sky-200 p-3 text-[13px]"><div class="flex items-center justify-between gap-2"><b class="text-sky-900">⏳ ${fmt(w.length)} كتاب لم يصل — ${esc(ch)}</b></div>
+    <div class="text-[12px] text-slate-600 mt-1">${w.map(i => esc(bookName(b, i.Book_ID)) + (i.Beneficiary ? " (" + esc(i.Beneficiary) + ")" : "")).join("، ")}</div>
+    <div class="flex flex-wrap gap-2 mt-2"><button class="btn btn-primary btn-xs" data-act="admWait" data-id="${esc(id)}|carry">${ic("arrow-left-right")} ترحيل للمرحلة التالية</button><button class="btn btn-outline btn-xs !text-rose-600" data-act="admWait" data-id="${esc(id)}|cancel">${ic("x")} إنهاء الحجز على المتاح</button></div></div>` + html;
+};
+on("admWait", async v => {
+  const [empId, choice] = v.split("|");
+  if (choice === "cancel" && !await UI.confirm({ title: "إنهاء الحجز على المتاح", message: "ستُلغى الكتب التي لم تصل من حجز هذا الموظف ولن تُرحَّل.", ok: "إنهاء", tone: "danger" })) return;
+  await act("WAITLIST_DECISION", { empId, choice, phaseId: APP.phaseId });
+});

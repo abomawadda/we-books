@@ -64,3 +64,29 @@ _wrap("/e/me", view => {
   let big = false; try { big = localStorage.getItem(BIG_KEY) === "1"; } catch (_) {}
   btn.insertAdjacentHTML("beforebegin", `<button data-act="bigText" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center text-[18px] font-bold">أ</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">خط أكبر</b><span class="text-[12px] text-slate-500">أسهل في القراءة</span></span><span class="w-11 h-6 rounded-full ${big ? "bg-emerald-500" : "bg-slate-200"} relative transition"><span class="absolute top-0.5 ${big ? "left-0.5" : "right-0.5"} w-5 h-5 rounded-full bg-white shadow"></span></span></button>`);
 });
+
+// ---------------------------------------------------------------- كتب لم تصل بعد: ترحيل أو إنهاء الحجز على المتاح
+function waitBox() {
+  const ph = (APP.emp || {}).activePhase || {};
+  if (ph.Booking_Open) return "";
+  const bm = Emp.bookMap(), w = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+  if (!w.length) return "";
+  const decided = w.every(i => i.Waitlist_Choice === "carry");
+  const list = w.map(i => { const b = bm[i.Book_ID] || {}; return `<li class="flex items-center gap-2 py-1.5"><span class="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0"></span><span class="flex-1"><b>${esc(b.Publisher || b.Book_Name || i.Book_ID)}</b> · ${esc(b.Subject || "")}${i.Beneficiary ? ` <span class="text-sky-700">(${esc(i.Beneficiary)})</span>` : ""}</span><span class="num text-slate-500">${fmt(n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)))}</span></li>`; }).join("");
+  return `<section class="card mb-4 ring-2 ring-sky-200 overflow-hidden"><div class="p-4">
+    <div class="flex items-center gap-2 font-bold text-[15.5px] text-sky-900">⏳ كتب لسه موصلتش</div>
+    <p class="text-[12.5px] text-slate-600 mt-1">مش داخلة في فاتورتك ومش هتدفع تمنها دلوقتي.</p>
+    <ul class="mt-2 text-[13.5px] divide-y divide-slate-100">${list}</ul>
+    ${decided ? `<div class="mt-3 rounded-xl bg-emerald-50 text-emerald-800 p-3 text-[13px] font-semibold">${ic("circle-check")} هتترحّل للمرحلة الجاية بأسبقيتك.</div>
+      <button class="btn btn-ghost btn-sm w-full mt-2 !text-rose-600" data-act="waitDecide" data-id="cancel">لا، أنهي حجزي على اللي وصل بس</button>`
+    : `<div class="grid gap-2 mt-3"><button class="btn btn-primary !h-12" data-act="waitDecide" data-id="carry">${ic("check")} رحّلها للمرحلة الجاية</button>
+      <button class="btn btn-outline !h-11" data-act="waitDecide" data-id="cancel">أنهي حجزي على اللي وصل بس</button></div>`}
+  </div></section>`;
+}
+on("waitDecide", async v => {
+  if (v === "cancel" && !await UI.confirm({ title: "إنهاء الحجز على المتاح", message: "الكتب اللي لسه موصلتش هتتلغي من حجزك ومش هتترحّل. متأكد؟", ok: "أيوه، ألغيها", tone: "danger" })) return;
+  const r = await call("WAITLIST_DECISION", { choice: v, phaseId: APP.phaseId }, { block: true });
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) await reloadData();
+});
+_wrap("/e/orders", view => afterHead(view, waitBox()));

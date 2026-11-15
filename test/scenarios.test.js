@@ -533,6 +533,23 @@ assert.strictEqual(dash2.supInvHeaders.find(h => h.Sup_Inv_ID === freeInv.invoic
 fail(api("VOID_SUPPLIER_INVOICE", { supInvId: inv.invoiceHeader.Sup_Inv_ID, reason: "اختبار" }, A), "void allocated inv blocked", /تم تخصيص/);
 passed++;
 
+// قرار الكتب المنتظرة (ترحيل / إنهاء على المتاح) من المدير
+{
+  { const ph0 = rows(S.PHASES).find(p => p.Phase_Status !== 'Open' && rows(S.RES_ITEMS).some(i => i.Phase_ID === p.Phase_ID && !String(i.Allocation_Status).startsWith('Cancelled')));
+    const it0 = ph0 && rows(S.RES_ITEMS).find(i => i.Phase_ID === ph0.Phase_ID && !String(i.Allocation_Status).startsWith('Cancelled'));
+    if (it0) ctx.__DB.updateRecordByPK(S.RES_ITEMS, 'Res_Item_ID', it0.Res_Item_ID, { Requested_Qty: Math.max(Number(it0.Allocated_Qty), Number(it0.Delivered_Qty)) + 1 }); }
+  const ri = rows(S.RES_ITEMS).filter(i => !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty)));
+  const ph = rows(S.PHASES).find(p => ri.some(i => i.Phase_ID === p.Phase_ID) && p.Phase_Status !== 'Open');
+  if (ph) {
+    const emp = ri.find(i => i.Phase_ID === ph.Phase_ID).Emp_ID;
+    ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'carry' }, coord), 'admin carry decision');
+    assert.ok(rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp && i.Phase_ID === ph.Phase_ID && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty))).every(i => i.Waitlist_Choice === 'carry')); passed++;
+    ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'cancel' }, coord), 'admin cancel decision');
+    assert.ok(!rows(S.RES_ITEMS).some(i => i.Emp_ID === emp && i.Phase_ID === ph.Phase_ID && !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty)))); passed++;
+    fail(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'carry' }, coord), 'nothing left to decide');
+  } else console.log('  (no waitlisted items to test decision)');
+}
+fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad choice rejected');
 console.log('\nALL PASSED:', passed, 'checks');
 
 
