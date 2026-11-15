@@ -261,3 +261,11 @@ input[type="number"], input[type="tel"], input[type="url"], input[type="password
   border-color: #f9b224 !important;
   box-shadow: 0 0 0 3px rgba(249, 178, 36, 0.35) !important;
 }
+
+/* أزرار الإجراءات داخل بطاقات الموبايل: أيقونة + اسم الإجراء (من aria-label) بلمسة أكبر */
+.wb-acts .act-ic{width:auto;height:2.25rem;padding:0 .65rem;gap:.3rem;border-radius:.7rem}
+.wb-acts .act-ic::after{content:attr(aria-label);font-size:11.5px;font-weight:600;white-space:nowrap}
+.wb-acts .btn{min-height:2.25rem}
+/* تبويبات الموبايل: يُخفى القسم غير النشط على الشاشات الصغيرة فقط */
+@media (max-width:1023px){.mt-off{display:none!important}}
+.wb-acts > div,.wb-acts > span{display:flex!important;flex-wrap:wrap!important;white-space:normal!important;justify-content:flex-end;gap:.375rem}

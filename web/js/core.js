@@ -251,7 +251,7 @@ const UI = {
         ${(() => { const pc = cols.find(c => /^المسدد/.test(String(c.t))); if (!pc || !hero) return ""; const num = v => +String(v).replace(/<[^>]+>/g, "").replace(/[^\d.\-]/g, "") || 0; const tot = num(hv), pd = num(cell(pc, r)); if (!(tot > 0)) return "";
           const pct = Math.max(0, Math.min(100, Math.round(pd / tot * 100))); return `<div class="mt-2.5 flex items-center gap-2"><div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full ${pct >= 100 ? "bg-emerald-500" : "bg-gradient-to-l from-brand-500 to-gold-400"}" style="width:${pct}%"></div></div><span class="text-[10.5px] font-bold num ${pct >= 100 ? "text-emerald-600" : "text-slate-500"}">${pct}%</span></div>`; })()}
         ${blocks.join("")}
-        ${act ? `<div class="flex flex-wrap items-center justify-end gap-1.5 mt-2.5 pt-2.5 border-t border-dashed border-slate-200">${cell(act, r)}</div>` : ""}</article>`;
+        ${act ? `<div class="wb-acts flex flex-wrap items-center justify-end gap-1.5 mt-2.5 pt-2.5 border-t border-dashed border-slate-200">${cell(act, r)}</div>` : ""}</article>`;
     });
     return tableHtml + `<div class="lg:hidden grid gap-2 sm:grid-cols-2">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
   },
