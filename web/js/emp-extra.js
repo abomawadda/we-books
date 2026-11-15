@@ -376,7 +376,23 @@ function payBreakdownHTML() {
       <div class="rounded-2xl p-3 text-white" style="background:linear-gradient(135deg,#6a3aa0,#3b1d63)"><div class="text-[11px] opacity-80">متوسط الفرد</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp / (kidsN || 1)))}</div><div class="text-[10.5px] opacity-80">${kidsN} ${kidsN > 2 ? "أفراد" : kidsN === 2 ? "فردين" : "فرد"}</div></div>
       <div class="rounded-2xl p-3 text-brand-950" style="background:linear-gradient(135deg,#fde08a,#f9b224)"><div class="text-[11px] opacity-80">قيمة الكتب</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp))}</div><div class="text-[10.5px] opacity-80 line-through num">${fmt(Math.round(cover))}</div></div>
     </div>
+    ${payMethodsHTML()}
     ${UI.section(`${ic("users", "text-brand-600")} تكلفة كل فرد`, "قيمة كتب كل ابن أو قريب في كل المراحل", `<div class="grid gap-2 sm:grid-cols-2">${kidCards}</div>`)}
     <div class="mt-4">${UI.section(`${ic("calendar-range", "text-brand-600")} مدفوعات كل مرحلة`, "", `<div class="grid grid-cols-2 gap-2">${phCards}</div>`)}</div><div class="h-4"></div>`;
 }
 _wrap("/e/pay", view => { const h = payBreakdownHTML(); if (!h) return; const kpis = view.querySelector(".grid.grid-cols-2.lg\\:grid-cols-4"); if (kpis) kpis.insertAdjacentHTML("afterend", h); else view.insertAdjacentHTML("beforeend", h); });
+
+/** تحليل السداد حسب الوسيلة + عدد الإيصالات + آخر سداد + متوسط الدفعة */
+function payMethodsHTML() {
+  const pays = (APP.emp.myPayments || []).filter(p => !isTrue(p.Is_Voided) && n(p.Amount) > 0);
+  if (!pays.length) return "";
+  const M = { CASH: ["💵", "نقدي", "#059669"], INSTAPAY: ["⚡", "إنستاباي", "#7c4bb6"], WALLET: ["📱", "محفظة", "#0ea5e9"], PAYROLL: ["🏢", "خصم من المرتب", "#f0930b"] };
+  const by = {}; pays.forEach(p => { const k = p.Payment_Method || "CASH"; (by[k] = by[k] || { sum: 0, cnt: 0 }); by[k].sum += n(p.Amount); by[k].cnt++; });
+  const total = pays.reduce((s, p) => s + n(p.Amount), 0), last = pays.slice().sort((a, b) => String(b.Payment_Date).localeCompare(String(a.Payment_Date)))[0];
+  const refunds = (APP.emp.myPayments || []).filter(p => !isTrue(p.Is_Voided) && n(p.Amount) < 0).reduce((s, p) => s - n(p.Amount), 0);
+  const cards = Object.keys(by).sort((a, b) => by[b].sum - by[a].sum).map(k => { const m = M[k] || ["💳", ar(k), "#64748b"], pct = Math.round(by[k].sum / total * 100);
+    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[22px]">${m[0]}</span><div class="flex-1 min-w-0"><div class="text-[12px] text-slate-500">${m[1]}</div><div class="font-bold num text-[17px]">${fmt(by[k].sum)} <span class="text-[11px] font-normal text-slate-500">ج.م</span></div></div></div>
+      <div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${m[2]}"></div></div>
+      <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>${pct}%</span><span>${by[k].cnt} ${by[k].cnt > 2 ? "إيصالات" : by[k].cnt === 2 ? "إيصالين" : "إيصال"}</span></div></div>`; }).join("");
+  return `<div class="mb-4">${UI.section(`${ic("wallet", "text-brand-600")} دفعت إزاي؟`, `${pays.length} إيصال · متوسط الدفعة ${fmt(Math.round(total / pays.length))} ج.م · آخر سداد ${esc(day(last.Payment_Date))}${refunds ? ` · رُدّ لك ${fmt(refunds)} ج.م` : ""}`, `<div class="grid grid-cols-2 gap-2">${cards}</div>`)}</div>`;
+}
