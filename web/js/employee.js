@@ -203,8 +203,9 @@ function carryNotice(ph) {
   const st = ph.Effective_Status || ph.Phase_Status;
   const carried = Emp.phaseItems().filter(i => i.Allocation_Status === "Carried_Forward").reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
   const pending = ["Receiving", "Delivering", "Completed"].includes(st) ? Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0) : 0;
-  if (pending > 0) return { qty: pending, text: `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد، وسيتم ترحيلها تلقائياً للمرحلة القادمة بأولوية الحجز.` };
-  if (carried > 0) return { qty: carried, text: `تنويه: تم ترحيل ${booksWord(carried)} المتبقية لك إلى المرحلة القادمة تلقائياً.` };
+  const chose = Emp.activeItems().filter(i => n(i.Requested_Qty) > n(i.Allocated_Qty)).every(i => i.Waitlist_Choice === "carry");
+  if (pending > 0) return { qty: pending, text: chose ? `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — وافقت على ترحيلها للمرحلة القادمة بأولوية الحجز.` : `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — اختار من «حجوزاتي»: ترحيلها للمرحلة القادمة أو إنهاء حجزك على المتاح.` };
+  if (carried > 0) return { qty: carried, text: `تنويه: تم ترحيل ${booksWord(carried)} المتبقية لك إلى المرحلة القادمة.` };
   return null;
 }
 
@@ -1020,7 +1021,7 @@ on("printInv", () => {
   const inv = Emp.invoice(), bm = Emp.bookMap(), r = APP.emp; if (!inv) return;
   const h = r.myReservations.find(x => x.Res_ID === inv.Res_ID) || {};
   Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, emp: docEmp(),
-    lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
+    lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, req: n(i.Requested_Qty), choice: i.Waitlist_Choice, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
     adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, down: inv.Down_Payment_Required,
     schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID });
 });

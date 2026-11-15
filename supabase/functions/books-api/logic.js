@@ -158,7 +158,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By"] },
-    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary"] },
+    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
     { name: S.SUP_INV_HEADER, color: "#c2410c", headers: ["Sup_Inv_ID", "Internal_Ref_No", "Supplier_Invoice_No", "Supplier_ID", "Phase_ID", "Invoice_Date", "Gross_Total_Cover", "Total_After_Item_Discount", "Volume_Discount_Pct", "Volume_Discount_Amount", "Net_Payable_Amount", "Status", "Approved_By", "Approved_At", "Supplier_Stated_Net", "Variance_Amount", "Damaged_Claim_Amount"] },
@@ -610,6 +610,7 @@ const ADMIN_ROLES = ["Admin", "Coordinator", "Finance", "Warehouse"];
 const ACTION_ACL = {
   GET_EMPLOYEE_PORTAL_DATA: ["EMPLOYEE"],
   SAVE_MY_KIDS: ["EMPLOYEE"],
+  WAITLIST_DECISION: ["EMPLOYEE", "Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
   CHANGE_PASSWORD: ADMIN_ROLES,
   GET_ADMIN_DASHBOARD_DATA: ADMIN_ROLES,
@@ -694,6 +695,7 @@ function callServerApi(action, payload, sessionToken) {
     switch (action) {
       case "GET_EMPLOYEE_PORTAL_DATA": return E.getEmployeePortalData(session.empId, payload.phaseId);
       case "SAVE_MY_KIDS": return E.saveMyKids(session.empId, payload.kids);
+      case "WAITLIST_DECISION": return E.waitlistDecision(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
       case "CHANGE_PASSWORD": return AuthEngine.changePassword(session, payload.oldPassword, payload.newPassword);
       case "GET_ADMIN_DASHBOARD_DATA": return E.getAdminDashboardFullData();
@@ -2339,7 +2341,9 @@ const OperationsEngine = {
           .sort((a, b) => String(a.Priority_Timestamp).localeCompare(String(b.Priority_Timestamp)) || String(a.Res_Item_ID).localeCompare(String(b.Res_Item_ID)))
           .forEach(r => {
             const want = Util.num(r.Requested_Qty);
-            const give = Math.min(want, pool);
+            // كتاب بلا سعر حتى الآن: لا يُخصَّص ولا يدخل الفاتورة، ويُعرض على الموظف ترحيله أو إلغاؤه
+            const unpriced = !Util.num(r.Unit_Emp_Price) && !Util.num((books[bId] || {}).Emp_Selling_Price);
+            const give = unpriced ? 0 : Math.min(want, pool);
             pool -= give;
             r.Allocated_Qty = give;
             if (give === want) { r.Allocation_Status = "Fully_Allocated"; r.Unallocated_Reason = ""; stats.full++; }
@@ -2347,7 +2351,7 @@ const OperationsEngine = {
               r.Allocation_Status = give > 0 ? "Partially_Allocated" : "Waitlisted";
               if (give > 0) stats.partial++; else stats.waiting++;
               const bk = books[bId] || {};
-              r.Unallocated_Reason = bk.Book_Status === "Not_Yet_Printed" ? "الكتاب لم يُطبع بعد"
+              r.Unallocated_Reason = unpriced ? "لم يصل بعد — يُضاف للمرحلة التالية" : bk.Book_Status === "Not_Yet_Printed" ? "الكتاب لم يُطبع بعد"
                 : (owed[bId] > 0 ? "بانتظار استكمال المكتبة للنواقص (حسب أسبقية الحجز)" : "نفدت الكمية الواردة (حسب أسبقية الحجز)");
             }
           });
@@ -2366,6 +2370,40 @@ const OperationsEngine = {
       }
       DB_Engine.logAudit(session.userId, session.role, "Allocation", "RUN_FIFO", phaseId, null, stats);
       return { success: true, message: "تم التوزيع بالأسبقية: مكتمل " + stats.full + " | جزئي " + stats.partial + " | انتظار " + stats.waiting + ". وتم تحديث فواتير الموظفين." };
+    });
+  },
+
+  /**
+   * قرار الموظف في الكتب التي لم تصل بعد (بعد قفل الحجز): ترحيلها للمرحلة التالية أو إنهاء الحجز على المتاح.
+   * لا يمس المخصص أو المسلَّم؛ الإلغاء يخفض المحجوز إلى ما خُصِّص له فعلاً.
+   */
+  waitlistDecision: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const isEmp = session.userType === "EMPLOYEE";
+      const S = this.S(), empId = Util.str(isEmp ? session.empId : payload.empId), choice = Util.str(payload.choice);
+      Util.require(empId, "حدد الموظف.");
+      Util.require(choice === "carry" || choice === "cancel", "اختيار غير معروف.");
+      const phase = this.getPhase_(payload.phaseId);
+      Util.require(!this.isBookingOpen_(phase), "الحجز لسه مفتوح — عدّل حجزك عادي.");
+      const all = DB_Engine.getAllRecords(S.RES_ITEMS);
+      const mine = all.filter(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === Util.str(phase.Phase_ID) && !this.isCancelledItem_(i)
+        && Util.num(i.Requested_Qty) > Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty)));
+      Util.require(mine.length, "مفيش كتب منتظرة في حجزك.");
+      mine.forEach(i => {
+        i.Waitlist_Choice = choice;
+        if (choice === "cancel") {
+          const before = Util.num(i.Requested_Qty);
+          i.Requested_Qty = Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty));
+          i.Allocation_Status = i.Requested_Qty === 0 ? "Cancelled_By_Employee" : (Util.num(i.Allocated_Qty) >= i.Requested_Qty ? "Fully_Allocated" : "Partially_Allocated");
+          i.Unallocated_Reason = "أنهى الموظف الحجز على المتاح (ألغى " + (before - i.Requested_Qty) + " نسخة لم تصل)";
+          DB_Engine.insertRecordsBatch(S.RES_AUDIT, [{ Log_ID: "RLOG-" + new Date().getTime() + "-" + i.Book_ID, Res_ID: i.Res_ID, Emp_ID: empId, Book_ID: i.Book_ID, Action_Type: "WAITLIST_CANCEL", Old_Qty: before, New_Qty: i.Requested_Qty, Priority_Timestamp_Applied: i.Priority_Timestamp, Action_Timestamp: Util.nowPrecise(), Rule_Applied: i.Unallocated_Reason }]);
+        } else i.Unallocated_Reason = "وافق الموظف على الترحيل للمرحلة التالية بأسبقيته";
+      });
+      DB_Engine.overwriteTableData(S.RES_ITEMS, all);
+      this.syncEmployeeInvoicesForPhase_(phase.Phase_ID);
+      DB_Engine.logAudit(isEmp ? empId : session.userId, isEmp ? "Employee" : session.role, "Allocation", "WAITLIST_DECISION", empId, null, { choice: choice, items: mine.length, by: isEmp ? "employee" : "admin" });
+      if (!isEmp) return { success: true, message: choice === "carry" ? "سُجّل ترحيل الكتب المنتظرة لهذا الموظف للمرحلة التالية." : "أُلغيت الكتب المنتظرة لهذا الموظف وانتهى حجزه على المتاح." };
+      return { success: true, message: choice === "carry" ? "تمام — الكتب دي هتترحّل للمرحلة الجاية بأسبقيتك 👍" : "تمام — أنهينا حجزك على الكتب اللي وصلت بس." };
     });
   },
 
@@ -2433,7 +2471,7 @@ const OperationsEngine = {
         added.push(Object.assign({}, i, {
           _rowIndex: undefined, Res_Item_ID: h.Res_ID + "-" + i.Book_ID + "-T" + no, Res_ID: h.Res_ID, Phase_ID: toId,
           Requested_Qty: unmet, Allocated_Qty: 0, Delivered_Qty: 0, Returned_Qty: 0, Net_Billable_Qty: 0, Total_Emp_Line_Amount: 0,
-          Allocation_Status: "Pending", Unallocated_Reason: "مُرحَّل من " + fromId + " بأسبقيته الأصلية", Is_Manual_Exception: false,
+          Allocation_Status: "Pending", Unallocated_Reason: "مُرحَّل من " + fromId + " بأسبقيته الأصلية", Is_Manual_Exception: false, Waitlist_Choice: "",
           Exception_By: "", Exception_Reason: "", Tranche_No: no, Carried_From_Item_ID: i.Res_Item_ID
         }));
         i.Requested_Qty = Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty));

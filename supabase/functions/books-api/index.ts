@@ -257,6 +257,20 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
     const url = `${base}/storage/v1/object/public/book-covers/${id}.${ext}?v=${Date.now()}`;
     return await save(url);
   }
+  // تصفير بيانات التشغيل: نسخة احتياطية كاملة من books.records أولاً (جدول مؤرَّخ مغلق)، ثم يُنفَّذ التصفير
+  if (action === 'RESET_OPERATIONAL_DATA') {
+    const s: any = await verify(token);
+    if (!s) return EXPIRED;
+    if (!(s.userType === 'ADMIN' && s.role === 'Admin')) return { success: false, message: 'هذه العملية للمدير فقط.' };
+    if (String(payload?.confirm || '') !== 'تصفير') return { success: false, message: 'اكتب كلمة «تصفير» للتأكيد.' };
+    const name = 'records_backup_reset_' + new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+    await sql.unsafe(`create table books.${name} as select now() as backed_up_at, r.* from books.records r`);
+    await sql.unsafe(`alter table books.${name} enable row level security`);
+    await sql.unsafe(`revoke all on books.${name} from public, anon, authenticated`);
+    const res = await rt.run(store, action, rt.apiFn(action, payload, s));
+    if (res && res.success) res.message = (res.message || '') + ' (نسخة احتياطية: ' + name + ')';
+    return res;
+  }
   // تسجيل ذاتي (زائر/معاش/تعهيد): 5 تسجيلات كحد أقصى لكل عنوان IP كل 15 دقيقة
   if (action === 'REGISTER_MEMBER') {
     const fk = 'REG:' + (clientIp || 'x');
