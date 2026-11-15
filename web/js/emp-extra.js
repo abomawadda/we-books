@@ -343,3 +343,40 @@ Router.add("/e/pay", view => {
   </div>`;
 });
 _wrap("/e/pay", view => { const b = backToOpenBar(); if (b) view.insertAdjacentHTML("afterbegin", b); });
+
+// ---------------------------------------------------------------- مدفوعاتي: بطاقات لكل ابن/قريب ولكل مرحلة
+function payBreakdownHTML() {
+  const r = APP.emp, bm = Emp.bookMap(), phName = id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id;
+  const items = (r.myReservationItems || []).filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  if (!items.length) return "";
+  const kidsArr = (r.employee && r.employee.kids) || [];
+  const who = {}, ph = {};
+  let cover = 0, emp = 0;
+  items.forEach(i => {
+    const b = bm[i.Book_ID] || {}, ep = n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price), cp = n(i.Unit_Cover_Price) || n(b.Cover_Price);
+    const billed = Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty)), booked = n(i.Requested_Qty);
+    const k = i.Beneficiary || "أنا";
+    const w = who[k] = who[k] || { books: 0, billed: 0, value: 0, delivered: 0, grade: b.Grade };
+    w.books += booked; w.billed += billed * ep; w.value += booked * ep; w.delivered += n(i.Delivered_Qty);
+    const p = ph[i.Phase_ID] = ph[i.Phase_ID] || { books: 0, value: 0 }; p.books += booked; p.value += booked * ep;
+    cover += booked * cp; emp += booked * ep;
+  });
+  const kidEm = name => { const k = kidsArr.find(x => (x.name || "") === name); return k ? (k.gender === "g" ? "👧" : "👦") : name === "أنا" ? "🙋" : "👤"; };
+  const total = Object.values(who).reduce((s, w) => s + w.value, 0) || 1;
+  const kidCards = Object.keys(who).sort((a, b) => who[b].value - who[a].value).map(k => { const w = who[k], pct = Math.round(w.value / total * 100);
+    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[24px] leading-none">${kidEm(k)}</span><div class="flex-1 min-w-0"><b class="block truncate text-[14px]">${esc(k)}</b><span class="text-[11.5px] text-slate-500">${booksWord(w.books)}${w.grade ? " · " + esc(Doc.shortGrade(w.grade)) : ""}</span></div><b class="num text-brand-800">${fmt(Math.round(w.value))}</b></div>
+      <div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-brand-500 rounded-full" style="width:${pct}%"></div></div>
+      <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>${pct}% من الإجمالي</span><span>${w.delivered ? `استلم ${fmt(w.delivered)}` : "لسه ما استلمش"}</span></div></div>`; }).join("");
+  const phCards = Object.keys(ph).map(pid => { const inv = (r.myInvoices || []).find(x => x.Phase_ID === pid);
+    return `<div class="rounded-2xl bg-slate-50 p-3"><div class="text-[12px] text-slate-500 truncate">${esc(phName(pid))}</div><div class="font-bold num text-[17px] mt-0.5">${fmt(Math.round(inv ? n(inv.Net_Final_Invoice_Amount) : ph[pid].value))} <span class="text-[11px] font-normal text-slate-500">ج.م</span></div>
+      <div class="text-[11.5px] mt-0.5 ${inv ? (n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600") : "text-slate-500"}">${inv ? (n(inv.Remaining_Balance) ? `مسدد ${fmt(inv.Total_Paid_Amount)} · باقي ${fmt(inv.Remaining_Balance)}` : "مسددة بالكامل ✅") : `${booksWord(ph[pid].books)} · الفاتورة لسه ما صدرتش`}</div></div>`; }).join("");
+  const save = Math.max(0, cover - emp), kidsN = Object.keys(who).length;
+  return `<div class="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
+      <div class="rounded-2xl p-3 text-white" style="background:linear-gradient(135deg,#059669,#047857)"><div class="text-[11px] opacity-80">وفّرت</div><div class="font-bold num text-[18px]">${fmt(Math.round(save))}</div><div class="text-[10.5px] opacity-80">${cover ? Math.round(save / cover * 100) : 0}% من الغلاف</div></div>
+      <div class="rounded-2xl p-3 text-white" style="background:linear-gradient(135deg,#6a3aa0,#3b1d63)"><div class="text-[11px] opacity-80">متوسط الفرد</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp / (kidsN || 1)))}</div><div class="text-[10.5px] opacity-80">${kidsN} ${kidsN > 2 ? "أفراد" : kidsN === 2 ? "فردين" : "فرد"}</div></div>
+      <div class="rounded-2xl p-3 text-brand-950" style="background:linear-gradient(135deg,#fde08a,#f9b224)"><div class="text-[11px] opacity-80">قيمة الكتب</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp))}</div><div class="text-[10.5px] opacity-80 line-through num">${fmt(Math.round(cover))}</div></div>
+    </div>
+    ${UI.section(`${ic("users", "text-brand-600")} تكلفة كل فرد`, "قيمة كتب كل ابن أو قريب في كل المراحل", `<div class="grid gap-2 sm:grid-cols-2">${kidCards}</div>`)}
+    <div class="mt-4">${UI.section(`${ic("calendar-range", "text-brand-600")} مدفوعات كل مرحلة`, "", `<div class="grid grid-cols-2 gap-2">${phCards}</div>`)}</div><div class="h-4"></div>`;
+}
+_wrap("/e/pay", view => { const h = payBreakdownHTML(); if (!h) return; const kpis = view.querySelector(".grid.grid-cols-2.lg\\:grid-cols-4"); if (kpis) kpis.insertAdjacentHTML("afterend", h); else view.insertAdjacentHTML("beforeend", h); });
