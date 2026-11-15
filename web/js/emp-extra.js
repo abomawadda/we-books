@@ -170,21 +170,31 @@ _wrap("/e/home", view => { const c = thanksCard(); if (!c) return; const h = vie
 
 // ---------------------------------------------------------------- إلغاء الطلب (قبل وبعد الإرسال) — بحسب مرحلة الطلب
 function cancelRequestOf() { const h = (APP.emp.myReservations || []).find(x => x.Phase_ID === APP.phaseId); try { return h && JSON.parse(h.Cancel_Request || "null"); } catch (_) { return null; } }
-function cancelBox() {
+/** بطاقة «إدارة طلبي»: ملخص + تعديل + إلغاء (في الرئيسية وحجوزاتي)، والحالة لو فيه طلب إلغاء معلّق/مرفوض */
+function cancelBox(where) {
   const ph = (APP.emp || {}).activePhase || {}, st = ph.Effective_Status || ph.Phase_Status;
   const items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
   const und = items.reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Delivered_Qty)), 0);
-  const cr = cancelRequestOf();
-  if (cr && cr.status === "Pending") return `<div class="mt-4 rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-3.5 text-[13px] text-amber-900">${ic("hourglass")} <b>طلب الإلغاء عند المسؤول</b> — اتسجّل ${esc(String(cr.at || "").slice(0, 10))} وهيتراجع قريب.</div>`;
-  if (cr && cr.status === "Rejected") return `<div class="mt-4 rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5 text-[13px] text-slate-700">${ic("info")} المسؤول ما وافقش على الإلغاء${cr.note ? ": " + esc(cr.note) : ""}.</div>`;
-  if (!und || st === "Completed") return "";
-  const how = ph.Booking_Open || !ph.Po_Frozen ? "الإلغاء فوري ومن غير أي التزام 👌" : st === "Delivering" ? "الكتب اتطلبت ووصلت — الإلغاء محتاج موافقة المسؤول، واللي استلمته يتعامل كمرتجع." : "الكتب اتطلبت من المكتبة — الإلغاء محتاج موافقة المسؤول.";
-  return `<div class="mt-5 text-center"><button class="text-[13px] text-rose-600 font-semibold underline underline-offset-4" data-act="empCancel">${ic("x")} ${ph.Booking_Open || !ph.Po_Frozen ? "إلغاء طلبي" : "طلب إلغاء"}</button><div class="text-[11.5px] text-slate-500 mt-1">${how}</div></div>`;
+  const cr = cancelRequestOf(), wrap = where === "home" ? "card p-4 mb-4" : "card p-4 mt-5";
+  if (cr && cr.status === "Pending") return `<div class="${wrap} ring-1 ring-amber-200 bg-amber-50/60 text-[13px] text-amber-900 flex items-center gap-2">${ic("hourglass", "text-lg")}<div><b>طلب الإلغاء عند المسؤول</b><div class="text-[12px] opacity-80">اتسجّل ${esc(String(cr.at || "").slice(0, 10))} — طلبك فاضل زي ما هو لحد الرد.</div></div></div>`;
+  if (!und || st === "Completed") return cr && cr.status === "Rejected" && where !== "home" ? `<div class="${wrap} text-[13px] text-slate-600">${ic("info")} المسؤول ما وافقش على الإلغاء${cr.note ? ": " + esc(cr.note) : ""}.</div>` : "";
+  const direct = ph.Booking_Open || !ph.Po_Frozen;
+  const how = direct ? "الإلغاء فوري ومن غير أي التزام 👌" : st === "Delivering" ? "الإلغاء بموافقة المسؤول، واللي استلمته يتعامل كمرتجع." : "الكتب اتطلبت من المكتبة — الإلغاء بموافقة المسؤول.";
+  const kids = new Set(items.map(i => i.Beneficiary || "")).size;
+  return `<section class="${wrap}"><div class="flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center">${ic("settings")}</span>
+    <div class="flex-1 min-w-0"><div class="font-bold text-[14.5px] text-slate-900">إدارة طلبي</div><div class="text-[12px] text-slate-500">${booksWord(und)} لسه ما استلمتهاش${kids > 1 ? ` · لـ ${kids} أفراد` : ""}</div></div></div>
+    <div class="grid ${ph.Booking_Open ? "grid-cols-2" : "grid-cols-1"} gap-2 mt-3">${ph.Booking_Open ? `<a href="#/e/wiz" data-act="wizStart" class="btn btn-outline !h-11">${ic("pencil")} تعديل الحجز</a>` : ""}
+      <button class="btn !h-11 bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100" data-act="empCancel">${ic("x")} ${direct ? "إلغاء الطلب" : "طلب إلغاء"}</button></div>
+    <div class="text-[11.5px] text-slate-500 mt-2 text-center">${how}</div>
+    ${cr && cr.status === "Rejected" ? `<div class="text-[12px] text-slate-500 mt-2">${ic("info")} آخر طلب إلغاء اترفض${cr.note ? ": " + esc(cr.note) : ""}.</div>` : ""}</section>`;
 }
 on("empCancel", async () => {
   const ph = APP.emp.activePhase || {}, direct = ph.Booking_Open || !ph.Po_Frozen;
+  const items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > n(i.Delivered_Qty));
+  const by = {}; items.forEach(i => { const k = i.Beneficiary || "العضو"; by[k] = (by[k] || 0) + n(i.Requested_Qty) - n(i.Delivered_Qty); });
+  const sumTxt = Object.keys(by).map(k => `${k}: ${booksWord(by[k])}`).join(" · ");
   const v = await UI.form({ title: direct ? "إلغاء الطلب" : "طلب إلغاء", danger: true,
-    intro: direct ? "هنلغي كل الكتب اللي في طلبك في المرحلة دي. تقدر تحجز تاني في أي وقت طول ما الحجز مفتوح." : "طلبك هيروح للمسؤول يراجعه. لو اتوافق عليه هيتلغي اللي ما استلمتهوش بس، وأي فلوس زيادة دفعتها هترجعلك كرصيد.",
+    intro: `<b>هيتلغي:</b> ${esc(sumTxt)}<br>` + (direct ? "هنلغي كل الكتب اللي في طلبك في المرحلة دي. تقدر تحجز تاني في أي وقت طول ما الحجز مفتوح." : "طلبك هيروح للمسؤول يراجعه. لو اتوافق عليه هيتلغي اللي ما استلمتهوش بس، وأي فلوس زيادة دفعتها هترجعلك كرصيد."),
     fields: [{ name: "reason", label: "السبب (اختياري)", placeholder: "مثال: اشتريت الكتب من مكان تاني" }], ok: direct ? "إلغاء الطلب" : "إرسال الطلب", icon: "x" });
   if (!v) return;
   const r = await call("EMP_CANCEL_REQUEST", { phaseId: APP.phaseId, reason: v.reason }, { block: true });
@@ -192,7 +202,8 @@ on("empCancel", async () => {
   await reloadData();
   r.immediate ? happyDialog("💜", "اتلغى طلبك", "ولا يهمك — شكراً إنك كنت معانا، والمبادرة مستنياك في أي وقت 🌷") : happyDialog("📨", "طلبك وصل للمسؤول", "هيراجعه ويبلغك — وطلبك فاضل زي ما هو لحد ما يتم الرد.");
 });
-_wrap("/e/orders", view => { const c = cancelBox(); if (c) view.insertAdjacentHTML("beforeend", c); });
+_wrap("/e/orders", view => { const c = cancelBox("orders"); if (c) view.insertAdjacentHTML("beforeend", c); });
+_wrap("/e/home", view => { const c = cancelBox("home"); if (c) view.insertAdjacentHTML("beforeend", c); });
 
 // ---------------------------------------------------------------- إلغاء قبل التأكيد: يرجع السلة لآخر حجز محفوظ (أو يفرّغها)
 on("discardDraft", async () => {
