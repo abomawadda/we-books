@@ -15,7 +15,7 @@
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
   <link rel="preload" href="fonts/ibm-plex-sans-arabic-arabic-400-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="preload" href="fonts/ibm-plex-sans-arabic-arabic-700-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="stylesheet" href="app.css?v=3.33.7">
+  <link rel="stylesheet" href="app.css?v=3.33.8">
 </head>
 <body>
   <!-- شاشة الافتتاح: مرة في كل جلسة حتى يضغط «يلا نبدأ»، وفيها عداد الحملة -->
@@ -61,10 +61,10 @@
       window.splashCountdown = function (ph) {
         var box = document.getElementById("spCd"); if (!box || !ph) return;
         var d = function (v) { if (!v) return null; var x = new Date(String(v).replace(" ", "T")); return isNaN(x) ? null : x; };
-        var now = new Date(), st = d(ph.start), en = d(ph.end), dl = d(ph.delivery), at = null, lb = "";
-        if (st && st > now) { at = st; lb = "🗓️ يبدأ الحجز بعد"; } else if (ph.open && en && en > now) { at = en; lb = "⏳ يقفل الحجز بعد"; } else if (dl && dl > now) { at = dl; lb = "📦 يبدأ التسليم بعد"; }
+        var now = new Date(), st = d(ph.start), en = d(ph.end), dl = d(ph.delivery), at = null, lb = "", nm = ph.name ? ph.name + " — " : "";
+        if (st && st > now) { at = st; lb = "🗓️ " + nm + "يبدأ الحجز بعد"; } else if (ph.open && en && en > now) { at = en; lb = "⏳ " + (ph.name ? "الحجز مفتوح - " + ph.name : "الحجز مفتوح") + " · ينتهي الحجز في"; } else if (dl && dl > now) { at = dl; lb = "📦 " + nm + "يبدأ التسليم بعد"; }
         if (!at) return;
-        document.getElementById("spCdL").textContent = lb + (ph.name ? " — " + ph.name : ""); box.hidden = false;
+        document.getElementById("spCdL").textContent = lb; box.hidden = false;
         var tick = function () { if (!document.getElementById("spCd")) return clearInterval(t); var ms = Math.max(0, at - Date.now()), v = { d: Math.floor(ms / 864e5), h: Math.floor(ms / 36e5) % 24, m: Math.floor(ms / 6e4) % 60, s: Math.floor(ms / 1e3) % 60 };
           Object.keys(v).forEach(function (k) { var e = box.querySelector('[data-k="' + k + '"]'); if (e) e.textContent = String(v[k]).padStart(2, "0"); }); };
         tick(); var t = setInterval(tick, 1000);
@@ -80,15 +80,15 @@
 
   <noscript><div style="padding:40px;text-align:center;font-family:sans-serif">يتطلب هذا التطبيق تفعيل JavaScript.</div></noscript>
   <script src="config.js"></script>
-  <script src="js/icons.js?v=3.33.7"></script>
-  <script src="js/core.js?v=3.33.7"></script>
-  <script src="js/app.js?v=3.33.7"></script>
-  <script src="js/art.js?v=3.33.7"></script>
-  <script src="js/docs.js?v=3.33.7"></script>
-  <script src="js/employee.js?v=3.33.7"></script>
-  <script src="js/pickup.js?v=3.33.7"></script>
-  <script src="js/help.js?v=3.33.7"></script>
-  <script src="js/entry.js?v=3.33.7"></script>
-  <script src="js/emp-extra.js?v=3.33.7"></script>
+  <script src="js/icons.js?v=3.33.8"></script>
+  <script src="js/core.js?v=3.33.8"></script>
+  <script src="js/app.js?v=3.33.8"></script>
+  <script src="js/art.js?v=3.33.8"></script>
+  <script src="js/docs.js?v=3.33.8"></script>
+  <script src="js/employee.js?v=3.33.8"></script>
+  <script src="js/pickup.js?v=3.33.8"></script>
+  <script src="js/help.js?v=3.33.8"></script>
+  <script src="js/entry.js?v=3.33.8"></script>
+  <script src="js/emp-extra.js?v=3.33.8"></script>
 </body>
 </html>

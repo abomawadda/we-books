@@ -73,11 +73,11 @@ const toDate = v => { if (!v) return null; const d = new Date(String(v).replace(
 /** الموعد القادم المهم للموظف في المرحلة: {label, at, art, tone} */
 function nextMilestone(ph) {
   if (!ph) return null;
-  const now = new Date(), st = toDate(ph.Start_DateTime), en = toDate(ph.End_DateTime), dl = toDate(ph.Delivery_Start_Date);
+  const now = new Date(), st = toDate(ph.Start_DateTime), en = toDate(ph.End_DateTime), dl = toDate(ph.Delivery_Start_Date), nm = ph.Phase_Name ? ph.Phase_Name + " — " : "";
   if (dl && /^\d{4}-\d{2}-\d{2}$/.test(String(ph.Delivery_Start_Date))) dl.setHours(9, 0, 0, 0);
-  if (st && st > now) return { label: "يفتح الحجز بعد", at: st, art: "calendar", note: "جهّز قائمة كتب أولادك من دلوقتي ✍️" };
-  if (ph.Booking_Open && en && en > now) return { label: "يقفل الحجز بعد", at: en, art: "books", note: "احجز أو عدّل قبل ما الوقت يخلص ⏳" };
-  if (dl && dl > now) return { label: "يبدأ التسليم بعد", at: dl, art: "truck", note: "كتبك في الطريق، جهّز المقدم 📦" };
+  if (st && st > now) return { label: nm + "يفتح الحجز بعد", at: st, art: "calendar", note: "جهّز قائمة كتب أولادك من دلوقتي ✍️" };
+  if (ph.Booking_Open && en && en > now) return { label: (ph.Phase_Name ? "الحجز مفتوح - " + ph.Phase_Name : "الحجز مفتوح") + " · ينتهي الحجز في", at: en, art: "books", note: "احجز أو عدّل قبل ما الوقت يخلص ⏳" };
+  if (dl && dl > now) return { label: nm + "يبدأ التسليم بعد", at: dl, art: "truck", note: "كتبك في الطريق، جهّز المقدم 📦" };
   return null;
 }
 function countdownHTML(m) {
