@@ -355,18 +355,21 @@ function payBreakdownHTML() {
   items.forEach(i => {
     const b = bm[i.Book_ID] || {}, ep = n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price), cp = n(i.Unit_Cover_Price) || n(b.Cover_Price);
     const billed = Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty)), booked = n(i.Requested_Qty);
-    const k = i.Beneficiary || "أنا";
-    const w = who[k] = who[k] || { books: 0, billed: 0, value: 0, delivered: 0, grade: b.Grade };
-    w.books += booked; w.billed += billed * ep; w.value += booked * ep; w.delivered += n(i.Delivered_Qty);
+    const pr = personOf(i, b), k = pr.key;
+    const w = who[k] = who[k] || { books: 0, billed: 0, value: 0, cover: 0, delivered: 0, grade: pr.grade || b.Grade, label: pr.label, name: pr.name, emoji: pr.emoji, ord: pr.ord };
+    w.books += booked; w.billed += billed * ep; w.value += booked * ep; w.cover += booked * cp; w.delivered += n(i.Delivered_Qty);
     const p = ph[i.Phase_ID] = ph[i.Phase_ID] || { books: 0, value: 0 }; p.books += booked; p.value += booked * ep;
     cover += booked * cp; emp += booked * ep;
   });
-  const kidEm = name => { const k = kidsArr.find(x => (x.name || "") === name); return k ? (k.gender === "g" ? "👧" : "👦") : name === "أنا" ? "🙋" : "👤"; };
+
   const total = Object.values(who).reduce((s, w) => s + w.value, 0) || 1;
-  const kidCards = Object.keys(who).sort((a, b) => who[b].value - who[a].value).map(k => { const w = who[k], pct = Math.round(w.value / total * 100);
-    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[24px] leading-none">${kidEm(k)}</span><div class="flex-1 min-w-0"><b class="block truncate text-[14px]">${esc(k)}</b><span class="text-[11.5px] text-slate-500">${booksWord(w.books)}${w.grade ? " · " + esc(Doc.shortGrade(w.grade)) : ""}</span></div><b class="num text-brand-800">${fmt(Math.round(w.value))}</b></div>
+  const kidCards = Object.keys(who).sort((a, b) => who[a].ord - who[b].ord || who[b].value - who[a].value).map(k => { const w = who[k], pct = Math.round(w.value / total * 100), sv = Math.max(0, w.cover - w.value);
+    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[26px] leading-none">${w.emoji}</span><div class="flex-1 min-w-0"><div class="truncate text-[14px]"><span class="text-slate-500">${esc(w.label)} …</span> <b>${esc(w.name)}</b></div><span class="text-[11.5px] text-slate-500">${booksWord(w.books)}${w.grade ? " · " + esc(Doc.shortGrade(w.grade)) : ""}</span></div></div>
+      <div class="grid grid-cols-3 gap-1.5 mt-2.5 text-center"><div class="rounded-xl bg-slate-50 py-1.5"><div class="text-[10.5px] text-slate-500">قبل الخصم</div><div class="num text-[13px] text-slate-500 line-through">${fmt(Math.round(w.cover))}</div></div>
+        <div class="rounded-xl bg-brand-50 py-1.5"><div class="text-[10.5px] text-brand-700">بعد الخصم</div><div class="num text-[14px] font-bold text-brand-800">${fmt(Math.round(w.value))}</div></div>
+        <div class="rounded-xl bg-emerald-50 py-1.5"><div class="text-[10.5px] text-emerald-700">وفّرت</div><div class="num text-[14px] font-bold text-emerald-700">${fmt(Math.round(sv))}</div></div></div>
       <div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-brand-500 rounded-full" style="width:${pct}%"></div></div>
-      <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>${pct}% من الإجمالي</span><span>${w.delivered ? `استلم ${fmt(w.delivered)}` : "لسه ما استلمش"}</span></div></div>`; }).join("");
+      <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>${pct}% من إجمالي حجزك</span><span>${w.delivered ? `استلم ${fmt(w.delivered)}` : "لسه ما استلمش"}</span></div></div>`; }).join("");
   const phCards = Object.keys(ph).map(pid => { const inv = (r.myInvoices || []).find(x => x.Phase_ID === pid);
     return `<div class="rounded-2xl bg-slate-50 p-3"><div class="text-[12px] text-slate-500 truncate">${esc(phName(pid))}</div><div class="font-bold num text-[17px] mt-0.5">${fmt(Math.round(inv ? n(inv.Net_Final_Invoice_Amount) : ph[pid].value))} <span class="text-[11px] font-normal text-slate-500">ج.م</span></div>
       <div class="text-[11.5px] mt-0.5 ${inv ? (n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600") : "text-slate-500"}">${inv ? (n(inv.Remaining_Balance) ? `مسدد ${fmt(inv.Total_Paid_Amount)} · باقي ${fmt(inv.Remaining_Balance)}` : "مسددة بالكامل ✅") : `${booksWord(ph[pid].books)} · الفاتورة لسه ما صدرتش`}</div></div>`; }).join("");
@@ -395,4 +398,19 @@ function payMethodsHTML() {
       <div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full" style="width:${pct}%;background:${m[2]}"></div></div>
       <div class="flex justify-between text-[11px] text-slate-500 mt-1"><span>${pct}%</span><span>${by[k].cnt} ${by[k].cnt > 2 ? "إيصالات" : by[k].cnt === 2 ? "إيصالين" : "إيصال"}</span></div></div>`; }).join("");
   return `<div class="mb-4">${UI.section(`${ic("wallet", "text-brand-600")} دفعت إزاي؟`, `${pays.length} إيصال · متوسط الدفعة ${fmt(Math.round(total / pays.length))} ج.م · آخر سداد ${esc(day(last.Payment_Date))}${refunds ? ` · رُدّ لك ${fmt(refunds)} ج.م` : ""}`, `<div class="grid grid-cols-2 gap-2">${cards}</div>`)}</div>`;
+}
+
+/** صاحب البند: ابنك/بنتك (بصف الكتاب) أو القريب بصلته — «ابنك … محمد»، «ابن أخوك … يوسف» */
+const REL_YOU = { "ابن أخ": "ابن أخوك", "بنت أخ": "بنت أخوك", "ابن أخت": "ابن أختك", "بنت أخت": "بنت أختك", "حفيد": "حفيدك", "حفيدة": "حفيدتك", "ابن عم": "ابن عمك", "بنت عم": "بنت عمك", "ابن خال": "ابن خالك", "بنت خال": "بنت خالك", "أخ": "أخوك", "أخت": "أختك", "زوجة": "زوجتك" };
+function personOf(i, b) {
+  const ks = (APP.emp.employee && APP.emp.employee.kids) || [];
+  if (i.Beneficiary) {
+    const rk = ks.find(k => k.rel && (String(k.name).trim() + " — " + k.rel) === i.Beneficiary);
+    const name = rk ? rk.name : String(i.Beneficiary).split(" — ")[0], rel = rk ? rk.rel : (String(i.Beneficiary).split(" — ")[1] || "قريبك");
+    return { key: "ben:" + i.Beneficiary, label: REL_YOU[rel] || rel, name, emoji: rk && rk.gender === "g" ? "👧" : "🧒", grade: rk ? rk.grade : b.Grade, ord: 50 + ks.indexOf(rk) };
+  }
+  const own = ks.map((k, ix) => ({ k, ix })).filter(x => !x.k.rel && x.k.grade && x.k.grade === b.Grade);
+  if (own.length) { const k0 = own[0].k, girls = own.every(x => x.k.gender === "g");
+    return { key: "kid:" + b.Grade, label: own.length > 1 ? (girls ? "بناتك" : "ولادك") : (k0.gender === "g" ? "بنتك" : "ابنك"), name: own.map(x => x.k.name || (x.k.gender === "g" ? "بنتي" : "ابني")).join(" و"), emoji: k0.gender === "g" ? "👧" : "👦", grade: b.Grade, ord: own[0].ix }; }
+  return { key: "g:" + (b.Grade || ""), label: "كتب", name: b.Grade ? Doc.shortGrade(b.Grade) : "أخرى", emoji: "📚", grade: "", ord: 99 };
 }
