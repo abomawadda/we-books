@@ -102,6 +102,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await go('/e/orders'); check(/وفّرت السنة دي/.test(view()), 'savings card');
   check(/إدارة طلبي/.test(view()) && d.querySelector('[data-act="empCancel"]'), 'manage order on orders');
   await go('/e/home'); check(/إدارة طلبي/.test(view()), 'manage order on home');
+  await go('/e/pay'); check(/حسابك في كل المراحل/.test(view()) && /إيصالات السداد/.test(view()), 'pay page all phases');
   await go('/e/me'); await click('[data-act="bigText"]'); check(d.documentElement.style.zoom === '1.15', 'big text on');
   await click('[data-act="bigText"]'); check(!d.documentElement.style.zoom, 'big text off');
   w.eval('wzClear')(); await go('/e/wiz'); check(/لمين هتحجز/.test(view()) || /الحجز مغلق/.test(view()), 'booking wizard renders');

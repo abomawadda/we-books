@@ -288,3 +288,58 @@ on("wizStart", async (...a) => {
   }
   return _wizStartBase(...a);
 });
+
+// ---------------------------------------------------------------- «محجوز بالفعل» أعلى الدليل للابن المختار
+function bookedForKidHTML() {
+  const f = Emp.filter, ben = Emp.ben || "", bm = Emp.bookMap();
+  if (!f.grade || f.q) return "";
+  const saved = {}; Emp.activeItems().filter(i => (i.Beneficiary || "") === ben).forEach(i => { (saved[i.Book_ID] = saved[i.Book_ID] || { qty: 0, carried: null }).qty += n(i.Requested_Qty); if (i.Carried_From_Item_ID) saved[i.Book_ID].carried = i; });
+  const ids = Object.keys(saved).filter(id => (bm[id] || {}).Grade === f.grade || !bm[id]);
+  if (!ids.length) return "";
+  const rows = ids.map(id => { const b = bm[id] || {}, k = ck(id, ben), q = APP.cart[k] || 0;
+    return `<li class="flex items-center gap-2 py-2 min-w-0"><span class="w-1.5 h-1.5 rounded-full ${q ? "bg-emerald-500" : "bg-slate-300"} shrink-0"></span>
+      <span class="flex-1 min-w-0 truncate text-[13.5px]"><b>${esc(b.Publisher || b.Book_Name || id)}</b> · ${esc(b.Subject || "")}${carriedTag(saved[id].carried)}</span>
+      <span class="inline-flex items-center gap-1 shrink-0"><button class="icon-btn w-8 h-8 ring-1 ring-slate-200" data-act="cartDec" data-id="${esc(k)}" aria-label="أقل">${ic("minus")}</button><b class="num w-5 text-center">${q}</b><button class="icon-btn w-8 h-8 ring-1 ring-slate-200" data-act="cartInc" data-id="${esc(k)}" aria-label="أكتر">${ic("plus")}</button></span></li>`; }).join("");
+  return `<section id="bookedKid" class="card p-4 mb-3 ring-1 ring-emerald-200"><div class="flex items-center gap-2"><span class="text-[20px]">✅</span><div class="flex-1"><div class="font-bold text-[15px] text-slate-900">محجوز بالفعل${ben ? " لـ " + esc(ben) : ""}</div><div class="text-[12px] text-slate-500">${booksWord(ids.length)} — تقدر تزوّد أو تقلّل، وتحت تكمّل من الدليل</div></div></div><ul class="mt-1 divide-y divide-slate-100">${rows}</ul></section>`;
+}
+_wrap("/e/books", view => {
+  const h = bookedForKidHTML(); if (!h) return;
+  const hero = view.querySelector('div[style*="#552c83"]');
+  if (hero) hero.insertAdjacentHTML("afterend", h); else afterHead(view, h);
+});
+if (typeof refreshCartViews === "function") { const _rcv = refreshCartViews; refreshCartViews = function () { const r = _rcv.apply(this, arguments); const el = document.getElementById("bookedKid"); if (el) { const h = bookedForKidHTML(); if (h) el.outerHTML = h; } return r; }; }
+
+// ---------------------------------------------------------------- مدفوعاتي: الحساب كله عبر كل المراحل
+Router.add("/e/pay", view => {
+  const r = APP.emp, invs = (r.myInvoices || []).slice(), phName = id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id;
+  const allInst = (r.myInstallments || []).slice().sort((a, b) => String(a.Due_Date).localeCompare(b.Due_Date));
+  const pays = (r.myPayments || []).slice().reverse();
+  const net = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance"), credit = sum(invs, "Credit_Balance");
+  const overdue = sum(allInst.filter(i => i.Status === "Overdue"), "Remaining_Inst_Amount");
+  const next = allInst.find(i => n(i.Remaining_Inst_Amount) > 0);
+  const instRow = (s, i) => { const st = s.Status === "Scheduled" ? (n(s.Remaining_Inst_Amount) ? "Scheduled" : "Paid") : s.Status;
+    const dot = st === "Paid" ? "bg-emerald-500 text-white" : st === "Overdue" ? "bg-rose-500 text-white" : st === "Partial" ? "bg-amber-400 text-white" : "bg-white ring-2 ring-slate-200 text-slate-400";
+    return `<li class="flex items-center gap-3 py-2"><span class="w-7 h-7 rounded-full flex items-center justify-center text-[12px] shrink-0 ${dot}">${st === "Paid" ? ic("check") : i + 1}</span>
+      <div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] truncate">${esc(s.Admin_Custom_Notes || "قسط " + s.Installment_No)}</div><div class="text-[11.5px] text-slate-500 num">${esc(day(s.Due_Date))}</div></div>
+      <div class="text-left num"><b>${fmt(s.Scheduled_Amount)}</b>${n(s.Remaining_Inst_Amount) && st !== "Scheduled" ? `<div class="text-[11px] text-rose-600">باقي ${fmt(s.Remaining_Inst_Amount)}</div>` : ""}</div></li>`; };
+  const byInv = invs.map(inv => { const its = allInst.filter(i => i.Emp_Inv_ID === inv.Emp_Inv_ID);
+    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3 mb-3"><div class="flex items-center justify-between gap-2"><b class="text-[14px]">${esc(phName(inv.Phase_ID))}</b><span class="text-[12px] num ${n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600"}">${n(inv.Remaining_Balance) ? "باقي " + fmt(inv.Remaining_Balance) : "مسددة ✅"}</span></div>
+      <div class="text-[12px] text-slate-500 num mt-0.5">فاتورة ${fmt(inv.Net_Final_Invoice_Amount)} · مسدد ${fmt(inv.Total_Paid_Amount)}</div>
+      ${its.length ? `<ol class="mt-1 divide-y divide-slate-100">${its.map(instRow).join("")}</ol>` : ""}</div>`; }).join("");
+  view.innerHTML = `${UI.pageHead("مدفوعاتي", "حسابك في كل المراحل: الفواتير والأقساط والإيصالات")}
+  ${next ? `<div class="mb-4 rounded-2xl bg-brand-50 ring-1 ring-brand-200 p-3.5 flex items-center gap-3">${ic("calendar-clock", "text-brand-700 text-xl")}<div class="flex-1 text-[13.5px]"><b>القسط الجاي:</b> <span class="num">${fmt(next.Remaining_Inst_Amount)}</span> ج.م — <span class="num">${esc(day(next.Due_Date))}</span></div></div>` : ""}
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
+    ${UI.kpi("إجمالي فواتيرك", money(net), { icon: "receipt", tone: "brand", foot: invs.length > 1 ? `${invs.length} مراحل` : "" })}
+    ${UI.kpi("المسدد", money(paid), { icon: "circle-check", tone: "green", pct: net ? paid / net * 100 : 0 })}
+    ${UI.kpi("المتبقي", money(rem), { icon: "hourglass", tone: rem ? "amber" : "green", foot: credit ? `ليك رصيد ${fmt(credit)} ج.م` : "" })}
+    ${UI.kpi("متأخرات", money(overdue), { icon: "triangle-alert", tone: overdue ? "red" : "gray" })}
+  </div>
+  <div class="grid gap-4 lg:gap-6 lg:grid-cols-2 items-start">
+    ${UI.section(`${ic("calendar-check", "text-brand-600")} الفواتير والأقساط`, "", invs.length ? byInv : Art.empty("wallet", "لسه مفيش فاتورة", "الفاتورة بتصدر لما كتبك تتجهّز للاستلام."))}
+    ${UI.section(`${ic("receipt", "text-brand-600")} إيصالات السداد`, pays.length ? `${pays.length} إيصال` : "", pays.length ? `<ul class="space-y-2.5">${pays.map(p => `<li class="flex items-center gap-3 rounded-2xl ring-1 ring-slate-100 p-3">
+        <span class="w-11 h-11 rounded-xl ${n(p.Amount) < 0 ? "bg-sky-50 text-sky-600" : "bg-emerald-50 text-emerald-600"} flex items-center justify-center text-lg">${ic(p.Payment_Method === "CASH" ? "banknote" : "smartphone")}</span>
+        <div class="flex-1 min-w-0"><div class="font-semibold text-slate-800 text-[14px]">${n(p.Amount) < 0 ? "رد رصيد" : "سداد"} · ${esc(ar(p.Payment_Method))}${isTrue(p.Is_Voided) ? ` <span class="text-rose-600 text-[11px]">(ملغى)</span>` : ""}</div><div class="text-[11.5px] text-slate-400 num truncate">${esc(p.Receipt_No)} · ${esc(dt(p.Payment_Date))} · ${esc(phName((invs.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {}).Phase_ID || ""))}</div></div>
+        <div class="font-bold num ${n(p.Amount) < 0 ? "text-sky-600" : "text-slate-900"}">${fmt(Math.abs(n(p.Amount)))}</div><button class="icon-btn w-9 h-9" data-act="printRcptE" data-id="${esc(p.Receipt_No)}" aria-label="الإيصال">${ic("printer")}</button></li>`).join("")}</ul>` : Art.empty("receipt", "لا توجد إيصالات بعد", "إيصالات السداد هتظهر هنا."))}
+  </div>`;
+});
+_wrap("/e/pay", view => { const b = backToOpenBar(); if (b) view.insertAdjacentHTML("afterbegin", b); });
