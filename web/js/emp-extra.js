@@ -364,7 +364,7 @@ function payBreakdownHTML() {
 
   const total = Object.values(who).reduce((s, w) => s + w.value, 0) || 1;
   const kidCards = Object.keys(who).sort((a, b) => who[a].ord - who[b].ord || who[b].value - who[a].value).map(k => { const w = who[k], pct = Math.round(w.value / total * 100), sv = Math.max(0, w.cover - w.value);
-    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[26px] leading-none">${w.emoji}</span><div class="flex-1 min-w-0"><div class="truncate text-[14px]"><span class="text-slate-500">${esc(w.label)} …</span> <b>${esc(w.name)}</b></div><span class="text-[11.5px] text-slate-500">${booksWord(w.books)}${w.grade ? " · " + esc(Doc.shortGrade(w.grade)) : ""}</span></div></div>
+    return `<div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[26px] leading-none">${w.emoji}</span><div class="flex-1 min-w-0"><div class="truncate text-[14px]"><span class="text-slate-500">${esc(w.label)} …</span> <b>${esc(w.name)}</b></div><span class="text-[11.5px] text-slate-500">${booksWord(w.books)}${w.grade ? " · " + esc(Doc.shortGrade(w.grade)) : ""}</span></div><button class="btn btn-outline btn-xs shrink-0" data-act="printPerson" data-id="${esc(k)}">${ic("printer")} فاتورته</button></div>
       <div class="grid grid-cols-3 gap-1.5 mt-2.5 text-center"><div class="rounded-xl bg-slate-50 py-1.5"><div class="text-[10.5px] text-slate-500">قبل الخصم</div><div class="num text-[13px] text-slate-500 line-through">${fmt(Math.round(w.cover))}</div></div>
         <div class="rounded-xl bg-brand-50 py-1.5"><div class="text-[10.5px] text-brand-700">بعد الخصم</div><div class="num text-[14px] font-bold text-brand-800">${fmt(Math.round(w.value))}</div></div>
         <div class="rounded-xl bg-emerald-50 py-1.5"><div class="text-[10.5px] text-emerald-700">وفّرت</div><div class="num text-[14px] font-bold text-emerald-700">${fmt(Math.round(sv))}</div></div></div>
@@ -407,10 +407,36 @@ function personOf(i, b) {
   if (i.Beneficiary) {
     const rk = ks.find(k => k.rel && (String(k.name).trim() + " — " + k.rel) === i.Beneficiary);
     const name = rk ? rk.name : String(i.Beneficiary).split(" — ")[0], rel = rk ? rk.rel : (String(i.Beneficiary).split(" — ")[1] || "قريبك");
-    return { key: "ben:" + i.Beneficiary, label: REL_YOU[rel] || rel, name, emoji: rk && rk.gender === "g" ? "👧" : "🧒", grade: rk ? rk.grade : b.Grade, ord: 50 + ks.indexOf(rk) };
+    return { key: "ben:" + i.Beneficiary, label: relYou(rel), name, emoji: rk && rk.gender === "g" ? "👧" : "🧒", grade: rk ? rk.grade : b.Grade, ord: 50 + ks.indexOf(rk) };
   }
   const own = ks.map((k, ix) => ({ k, ix })).filter(x => !x.k.rel && x.k.grade && x.k.grade === b.Grade);
   if (own.length) { const k0 = own[0].k, girls = own.every(x => x.k.gender === "g");
     return { key: "kid:" + b.Grade, label: own.length > 1 ? (girls ? "بناتك" : "ولادك") : (k0.gender === "g" ? "بنتك" : "ابنك"), name: own.map(x => x.k.name || (x.k.gender === "g" ? "بنتي" : "ابني")).join(" و"), emoji: k0.gender === "g" ? "👧" : "👦", grade: b.Grade, ord: own[0].ix }; }
   return { key: "g:" + (b.Grade || ""), label: "كتب", name: b.Grade ? Doc.shortGrade(b.Grade) : "أخرى", emoji: "📚", grade: "", ord: 99 };
 }
+
+/** صلة القرابة بضمير المخاطب: «ابن أخت»/«ابن الأخت» ← «ابن أختك»، «حفيدة» ← «حفيدتك»، «أخ» ← «أخوك» */
+function relYou(rel) {
+  rel = String(rel || "").trim(); if (!rel || rel === "أخرى") return "قريبك";
+  if (REL_YOU[rel]) return REL_YOU[rel];
+  const w = rel.split(/\s+/); let last = w.pop().replace(/^ال/, "");
+  if (/ك$/.test(last)) return rel;
+  last = last === "أخ" ? "أخوك" : last === "أب" ? "أبوك" : /ة$/.test(last) ? last.slice(0, -1) + "تك" : last + "ك";
+  return w.concat(last).join(" ");
+}
+// ---------------------------------------------------------------- فاتورة منفصلة لكل ابن/قريب
+function personLines(key) {
+  const r = APP.emp, bm = Emp.bookMap();
+  return (r.myReservationItems || []).filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward").filter(i => personOf(i, bm[i.Book_ID] || {}).key === key);
+}
+on("printPerson", key => {
+  const r = APP.emp, bm = Emp.bookMap(), its = personLines(key); if (!its.length) return;
+  const pr = personOf(its[0], bm[its[0].Book_ID] || {}), billedQ = i => Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty));
+  const anyBilled = its.some(i => billedQ(i) > 0);
+  const lines = its.map(i => { const b = bm[i.Book_ID] || {}; return { code: i.Book_ID, name: b.Book_Name || i.Book_ID, grade: b.Grade, qty: anyBilled ? billedQ(i) : n(i.Requested_Qty), cover: n(i.Unit_Cover_Price) || n(b.Cover_Price), price: n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price) }; }).filter(l => l.qty > 0);
+  const phases = [...new Set(its.map(i => i.Phase_ID))].map(id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id).join(" + ");
+  const who = `${pr.label} ${pr.name}`;
+  const e = { name: APP.user.fullName, id: APP.user.empId, dept: APP.user.department || "", mobile: APP.user.mobile || "" };
+  Doc.show("فاتورة " + who, Doc.reservation({ title: "فاتورة كتب — " + who, no: (APP.user.empId || "") + "-" + (pr.name || "").replace(/\s+/g, ""), date: new Date().toISOString(), phase: phases, status: anyBilled ? "مؤكد" : "محجوز", emp: e, lines,
+    note: `• فاتورة تفصيلية لكتب <b>${esc(who)}</b> فقط — جزء من حساب العضو، والسداد والأقساط على الفاتورة المجمّعة في «مدفوعاتي».<br>• ${anyBilled ? "الكمية = المخصص/المُسلَّم بعد خصم المرتجع." : "الكتب لسه في مرحلة الحجز؛ الكمية = المحجوز."}` }), { file: "invoice-" + (pr.name || "member") });
+});
