@@ -168,7 +168,9 @@ function repGroups(g, o) {
 function repFill(el) {
   const R = Rep._g, gi = +el.dataset.rg, body = el.querySelector(".rg-body"); if (!R || body.dataset.done) return;
   const l = R.g[R.keys[gi]].slice().sort(R.o.sort || (() => 0));
-  body.innerHTML = `<table class="tbl w-full border-t border-slate-100"><thead><tr>${R.o.cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${l.map((x, k) => `<tr>${R.o.cols.map(c => `<td class="align-top">${c[1](x, k)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  // العمود الرئيسي (الموظف/الكتاب) يأخذ العرض كله، والأعمدة الرقمية والحالة ضيقة بلا التفاف — يناسب الموبايل
+  const main = R.o.cols.findIndex(c => /الموظف|الكتاب/.test(c[0])), cls = j => R.o.cols[j][0] === "#" ? "w-7 text-center text-slate-400" : j === main ? "w-full min-w-[8.5rem]" : "w-px whitespace-nowrap text-center text-[12px] [&_.pill]:!text-[10.5px] [&_.pill]:!px-1.5";
+  body.innerHTML = `<table class="tbl tbl-grp w-full border-t border-slate-100"><thead><tr>${R.o.cols.map((c, j) => `<th class="${cls(j)}">${c[0]}</th>`).join("")}</tr></thead><tbody>${l.map((x, k) => `<tr>${R.o.cols.map((c, j) => `<td class="align-top ${cls(j)}">${c[1](x, k)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
   body.dataset.done = 1;
 }
 document.addEventListener("toggle", ev => { const el = ev.target; if (el && el.matches && el.matches("details[data-rg]") && el.open) repFill(el); }, true);
