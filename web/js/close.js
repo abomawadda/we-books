@@ -120,3 +120,73 @@ Notif.list = function () {
   return out;
 };
 setTimeout(() => { try { Notif.badge(); } catch (_) {} }, 0);
+
+const _wrapA = (path, fn) => { const base = Router.routes[path]; if (base) Router.add(path, view => { base(view); fn(view); }); };
+// ================================================================ المتأخرات + تذكير واتساب
+ADMIN_NAV[3].items.push(["late", "triangle-alert", "المتأخرات"]);
+const lateRows = () => {
+  const d = A(), today = new Date().toISOString().slice(0, 10), { e } = maps(), by = {};
+  d.installments.filter(i => n(i.Remaining_Inst_Amount) > 0 && String(i.Due_Date).slice(0, 10) < today).forEach(i => {
+    const inv = d.empInvoices.find(x => x.Emp_Inv_ID === i.Emp_Inv_ID) || {}; const id = inv.Emp_ID || i.Emp_ID; if (!id) return;
+    const o = by[id] = by[id] || { id, name: empName(e, id), mobile: (e[id] || {}).Mobile || "", amount: 0, n: 0, oldest: i.Due_Date };
+    o.amount += n(i.Remaining_Inst_Amount); o.n++; if (String(i.Due_Date) < String(o.oldest)) o.oldest = i.Due_Date; });
+  return Object.values(by).map(o => Object.assign(o, { days: Math.floor((new Date(today) - new Date(String(o.oldest).slice(0, 10))) / 864e5) })).sort((a, b) => b.days - a.days || b.amount - a.amount);
+};
+const lateMsg = o => `السلام عليكم أ/ ${o.name}\nتذكير ودّي من مبادرة الكتب: عليك ${o.n > 1 ? o.n + " أقساط متأخرة" : "قسط متأخر"} بإجمالي ${fmt(o.amount)} ج.م (من ${day(o.oldest)}).\nتقدر تدفع من «مدفوعاتي» ← ادفع الآن (إنستاباي/محفظة) أو نقداً للمسؤول. شكراً لتعاونك 🌷`;
+const waNum = m => { m = String(m || "").replace(/\D/g, ""); return m.startsWith("0") ? "2" + m : m; };
+Router.add("/a/late", view => {
+  const rows = lateRows(), tot = rows.reduce((s, o) => s + o.amount, 0);
+  view.innerHTML = UI.pageHead("المتأخرات", "كل من فات ميعاد قسطه، مع تذكير واتساب جاهز")
+    + `<div class="grid grid-cols-2 gap-3 sm:gap-4 mb-4">${UI.kpi("متأخرين", fmt(rows.length), { icon: "users", tone: "red" })}${UI.kpi("إجمالي المتأخر", money(tot), { icon: "triangle-alert", tone: "amber" })}</div>`
+    + UI.section(`${ic("triangle-alert", "text-rose-500")} القائمة`, "الأقدم تأخيراً أولاً", (rows.length ? `<div class="flex justify-end mb-2"><button class="btn btn-outline btn-xs" data-act="lateCopy">${ic("copy")} نسخ القائمة كلها</button></div>` : "") + UI.table([
+      { t: "الموظف", v: o => `${empLink(o.id, o.name)}<div class="text-[11px] text-slate-400 num">${esc(o.id)} · ${esc(o.mobile)}</div>` },
+      { t: "المتأخر", cls: "num", v: o => `<b class="text-rose-600">${fmt(o.amount)}</b><div class="text-[11px] text-slate-400">${o.n} قسط</div>` },
+      { t: "من", cls: "num", v: o => `${esc(day(o.oldest))}<div class="text-[11px] ${o.days > 14 ? "text-rose-600 font-bold" : "text-amber-600"}">${o.days} يوم</div>` },
+      { t: "تذكير", actions: true, v: o => o.mobile ? `<a class="btn btn-success btn-xs" target="_blank" rel="noopener" href="${esc(Brand.waLink(waNum(o.mobile), lateMsg(o)))}">${ic("message-circle")} واتساب</a>` : `<span class="text-[11px] text-slate-400">بلا موبايل</span>` }
+    ], rows, { maxH: 700, emptyIcon: "circle-check", empty: "مفيش متأخرات 🎉" }));
+});
+on("lateCopy", () => { const t = lateRows().map(o => `${o.name} (${o.id}) — ${fmt(o.amount)} ج.م — ${o.days} يوم — ${o.mobile}`).join("\n"); try { navigator.clipboard.writeText(t); toast("اتنسخت القائمة", "success"); } catch (_) {} });
+
+// ================================================================ محضر إقفال الخزينة (طباعة)
+_wrapA("/a/cash", view => {
+  const inp = $$("input[data-change=cashDay]", view)[0]; if (!inp) return;
+  inp.insertAdjacentHTML("afterend", `<button class="btn btn-outline btn-sm w-full mb-3" data-act="cashReport">${ic("printer")} محضر اليوم (PDF)</button>`);
+});
+on("cashReport", () => {
+  const d = A(), { e } = maps(), dv = Q.cashDay || new Date().toISOString().slice(0, 10);
+  const ps = d.empPayments.filter(p => day(p.Payment_Date) === dv), ok = ps.filter(p => !isTrue(p.Is_Voided));
+  const byM = {}, byU = {}; ok.forEach(p => { byM[p.Payment_Method] = (byM[p.Payment_Method] || 0) + n(p.Amount); byU[p.Collected_By || "—"] = (byU[p.Collected_By || "—"] || 0) + n(p.Amount); });
+  const t = (h, rows) => `<table><thead><tr>${h.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="${h.length}" class="c sub">—</td></tr>`}</tbody></table>`;
+  const html = Doc.page(`${Doc.head("محضر إقفال الخزينة", dv)}
+    <div class="meta"><div class="box"><h4>حسب الوسيلة</h4>${Object.keys(byM).map(k => Doc.kv(esc(ar(k)), `<span class="num">${Doc.money(byM[k])}</span>`)).join("") || "—"}${Doc.kv("الإجمالي", `<b class="num">${Doc.money(sum(ok, "Amount"))}</b>`)}</div>
+      <div class="box"><h4>حسب المحصِّل</h4>${Object.keys(byU).map(k => Doc.kv(esc(k), `<span class="num">${Doc.money(byU[k])}</span>`)).join("") || "—"}${Doc.kv("عدد الإيصالات", `<span class="num">${ok.length}</span>`)}</div></div>
+    <h4 style="margin:2mm 0 1mm">الإيصالات</h4>${t(["الإيصال", "الموظف", "الوسيلة", "المرجع", "المبلغ"], ps.map(p => `<tr><td class="num">${esc(p.Receipt_No)}${isTrue(p.Is_Voided) ? " (ملغى)" : ""}</td><td>${esc(empName(e, p.Emp_ID))}</td><td>${esc(ar(p.Payment_Method))}</td><td class="num">${esc(p.Transaction_Ref || "")}</td><td class="l num">${Doc.money(p.Amount)}</td></tr>`).join(""))}
+    <div class="meta" style="margin-top:8mm"><div class="box"><h4>المحصِّل</h4><br>التوقيع: ..................</div><div class="box"><h4>المراجع المالي</h4><br>التوقيع: ..................</div></div>
+    ${Doc.foot("CASH-" + dv)}`, "", "", "dense");
+  Doc.show("محضر خزينة " + dv, html, { file: "cash-" + dv });
+});
+
+// ================================================================ تصدير Excel لأي جدول في الإدارة
+const _uiTable = UI.table;
+UI.table = function (cols, rows, opts) {
+  const h = _uiTable.call(UI, cols, rows, opts);
+  if (!rows.length || !APP.user || APP.user.userType === "EMPLOYEE" || (opts && opts.noExport)) return h;
+  return `<div class="wb-xls"><div class="flex justify-end -mt-1 mb-1"><button class="btn btn-ghost btn-xs text-slate-500" data-act="tblXls">${ic("file-spreadsheet")} Excel</button></div>${h}</div>`;
+};
+document.addEventListener("click", ev => {
+  const btn = ev.target.closest && ev.target.closest('[data-act="tblXls"]'); if (!btn) return;
+  ev.stopPropagation();
+  const box = btn.closest(".wb-xls"), tb = box && box.querySelector("table"); if (!tb) return;
+  const cell = c => '"' + c.innerText.replace(/\s*\n\s*/g, " — ").replace(/"/g, '""').trim() + '"';
+  const csv = "﻿" + $$("tr", tb).map(r => $$("th,td", r).map(cell).join(",")).join("\r\n");
+  const t = ((document.querySelector("main h1, h1") || {}).innerText || "جدول").trim();
+  const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" })); a.download = t + "-" + new Date().toISOString().slice(0, 10) + ".csv";
+  document.body.appendChild(a); a.click(); setTimeout(() => document.body.removeChild(a), 500);
+}, true);
+
+// ================================================================ تقييمات الموظفين بعد الاستلام
+_wrapA("/a/dash", view => {
+  const fb = A().resHeaders.map(h => { try { const f = JSON.parse(h.Feedback || "null"); return f ? Object.assign({ emp: h.Emp_ID }, f) : null; } catch (_) { return null; } }).filter(x => x && x.stars);
+  if (!fb.length) return; const { e } = maps(), avg = fb.reduce((s, x) => s + x.stars, 0) / fb.length, notes = fb.filter(x => x.note).sort((a, b) => String(b.at).localeCompare(a.at)).slice(0, 6);
+  view.insertAdjacentHTML("beforeend", `<div class="mt-4 sm:mt-6">${UI.section(`⭐ رأي الموظفين بعد الاستلام`, `${fmt(fb.length)} تقييم · المتوسط ${avg.toFixed(1)} من 5`, `<div class="flex gap-1 mb-3">${[5, 4, 3, 2, 1].map(s => { const c = fb.filter(x => x.stars === s).length; return `<div class="flex-1 rounded-xl bg-slate-50 text-center py-2"><div class="text-[11px]">${s} ⭐</div><b class="num">${c}</b></div>`; }).join("")}</div>${notes.length ? `<ul class="divide-y divide-slate-100 text-[13px]">${notes.map(x => `<li class="py-2"><b>${esc(empName(e, x.emp))}</b> ${"⭐".repeat(x.stars)}<div class="text-slate-600">${esc(x.note)}</div></li>`).join("")}</ul>` : ""}`)}</div>`);
+});

@@ -157,7 +157,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
-    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request"] },
+    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request", "Feedback"] },
     { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
@@ -530,6 +530,7 @@ function seedInitialData_() {
       st("CASH_ACCOUNT_HOLDER", "محمود العراقي", "STRING", "اسم صاحب المحفظة وحساب إنستاباي"),
       st("PAY_INSTAPAY", "", "STRING", "عنوان/رقم إنستاباي لتحويل الأقساط (يظهر للموظف في «ادفع الآن»)"),
       st("PAY_WALLET", "", "STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"),
+      st("PAY_INSTAPAY_LINK", "", "STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"),
       st("DEFICIT_BEARER", "أمين الصندوق", "STRING", "الجهة التي تتحمل العجز ويؤول إليها الفائض"),
       st("ROUNDING_POLICY", "CEIL_INTEGER", "STRING", "جبر سعر الموظف لأقرب رقم صحيح أعلى"),
       st("BOOK_PUBLISHERS", POPULAR_PUBLISHERS.join("،"), "STRING", "قائمة الناشرين في نموذج الكتاب (مفصولة بفاصلة)"),
@@ -615,6 +616,7 @@ const ACTION_ACL = {
   WAITLIST_DECISION: ["EMPLOYEE", "Coordinator"],
   EMP_CANCEL_REQUEST: ["EMPLOYEE"],
   EMP_RETURN_REQUEST: ["EMPLOYEE"],
+  EMP_FEEDBACK: ["EMPLOYEE"],
   RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
@@ -704,6 +706,7 @@ function callServerApi(action, payload, sessionToken) {
       case "WAITLIST_DECISION": return E.waitlistDecision(session, payload);
       case "EMP_CANCEL_REQUEST": return E.empCancelRequest(session, payload);
       case "EMP_RETURN_REQUEST": return E.empReturnRequest(session, payload);
+      case "EMP_FEEDBACK": return E.empFeedback(session, payload);
       case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
@@ -1000,7 +1003,7 @@ const OperationsEngine = {
         MAX_QTY_PER_BOOK: settings.MAX_QTY_PER_BOOK, CASH_ACCOUNT_HOLDER: settings.CASH_ACCOUNT_HOLDER,
         ALLOW_RELATIVE_BOOKING: settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false", MAX_RELATIVES: settings.MAX_RELATIVES || 5,
         PICKUP_SCHEDULE: settings.PICKUP_SCHEDULE || "",
-        EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || ""
+        EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || "", PAY_INSTAPAY_LINK: settings.PAY_INSTAPAY_LINK || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
       employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department) },
@@ -1347,7 +1350,7 @@ const OperationsEngine = {
       const key = Util.str(payload.key);
       let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
       // إعدادات أُضيفت بعد التشغيل: تُنشأ عند أول حفظ
-      const LATE = { PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
+      const LATE = { PAY_INSTAPAY_LINK: ["STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"], PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
       if (!row && LATE[key]) { row = { Setting_Key: key, Setting_Value: "", Data_Type: LATE[key][0], Description: LATE[key][1] }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       Util.require(row, "إعداد غير معروف: " + key);
       if ((key === "PICKUP_SCHEDULE" || key === "BOOK_GRADES") && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة البيانات غير صحيحة."); } }
@@ -1954,7 +1957,7 @@ const OperationsEngine = {
    * النسخة الاحتياطية اليومية (books.daily_snapshot) تسمح بالاسترجاع خلال 14 يومًا.
    */
   resetOperationalData: function(session, payload) {
-    Util.require(session && session.role === "Admin", "هذه العملية للمدير فقط.");
+    Util.require(session && session.role === "Admin" && Util.str(session.userId) === "USR-01", "هذه العملية لمدير المنظومة فقط.");
     Util.require(Util.str(payload && payload.confirm) === "تصفير", "اكتب كلمة «تصفير» للتأكيد.");
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
@@ -2418,6 +2421,17 @@ const OperationsEngine = {
    * طلب مرتجع من الموظف بعد الاستلام خلال مدة EMP_RETURN_WINDOW_DAYS: يُسجَّل معلّقاً على البند،
    * ولا يمس المخزون أو الفاتورة إلا بعد اعتماد الإدارة (RESOLVE_RETURN_REQUEST ← نفس مسار المرتجع الرسمي).
    */
+  /** تقييم الموظف بعد الاستلام: نجوم 1–5 + اقتراح (يُحفظ في رأس الحجز) */
+  empFeedback: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId), stars = parseInt(payload.stars, 10) || 0;
+      Util.require(stars >= 1 && stars <= 5, "اختار من نجمة لخمس نجوم.");
+      const h = DB_Engine.getAllRecords(S.RES_HEADER).find(x => Util.str(x.Res_ID) === Util.str(payload.resId) && Util.str(x.Emp_ID) === empId);
+      Util.require(h, "الحجز غير موجود.");
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Feedback: JSON.stringify({ stars: stars, note: Util.str(payload.note).slice(0, 300), at: Util.now() }) });
+      return { success: true, message: "شكراً على رأيك 💜" };
+    });
+  },
   empReturnRequest: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S(), st = getSettings_(), empId = Util.str(session.empId);

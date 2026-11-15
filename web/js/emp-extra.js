@@ -544,3 +544,55 @@ Notif.list = function () {
   }
   return out;
 };
+
+// ================================================================ فتح تطبيق إنستاباي
+const isAndroid = () => /android/i.test(navigator.userAgent), isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+function openInstaPay(num) {
+  try { navigator.clipboard.writeText(num); } catch (_) {}
+  const link = payS().PAY_INSTAPAY_LINK;
+  if (link) { window.location.href = link; return; }
+  toast("اتنسخ الرقم " + num + " — الصقه في إنستاباي 👌", "success");
+  if (isAndroid()) window.location.href = "intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.egyptianbanks.instapay;S.browser_fallback_url=" + encodeURIComponent("https://play.google.com/store/apps/details?id=com.egyptianbanks.instapay") + ";end";
+  else if (isIOS()) window.location.href = "itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=InstaPay%20Egypt";
+}
+on("openInsta", () => openInstaPay(payS().PAY_INSTAPAY));
+const _payNow0 = ACTIONS.payNow;
+on("payNow", () => {
+  _payNow0();
+  const s = payS(); if (!s.PAY_INSTAPAY) return;
+  const m = UI._stack[UI._stack.length - 1]; if (!m || !m.root) return;
+  const g = m.root.querySelector(".grid.gap-2"); if (g) g.insertAdjacentHTML("afterbegin", `<button class="btn btn-primary w-full !h-12" data-act="openInsta">⚡ افتح إنستاباي وادفع</button>`);
+});
+
+// ================================================================ نزّل التطبيق على الشاشة الرئيسية
+let _installEvt = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); _installEvt = e; });
+const isStandalone = () => (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+on("installApp", async () => {
+  if (_installEvt) { _installEvt.prompt(); const c = await _installEvt.userChoice; _installEvt = null; if (c && c.outcome === "accepted") toast("اتنزل التطبيق 🎉 هتلاقيه على الشاشة الرئيسية", "success"); return; }
+  UI.open(isIOS() ? `<ol class="list-decimal pr-5 space-y-2 text-[14px]"><li>افتح الموقع من <b>Safari</b>.</li><li>اضغط زر المشاركة <b>⬆️</b> تحت.</li><li>اختار <b>«إضافة إلى الشاشة الرئيسية»</b>.</li></ol>`
+    : `<ol class="list-decimal pr-5 space-y-2 text-[14px]"><li>افتح الموقع من <b>Chrome</b>.</li><li>اضغط النقط التلاتة <b>⋮</b> فوق.</li><li>اختار <b>«تثبيت التطبيق»</b> أو «إضافة إلى الشاشة الرئيسية».</li></ol>`, { title: "نزّل التطبيق على موبايلك" });
+});
+const installCard = () => isStandalone() ? "" : `<section class="card p-3.5 mb-4 flex items-center gap-3"><span class="text-[26px]">📲</span><div class="flex-1 text-[13px]"><b>نزّل التطبيق على موبايلك</b><div class="text-slate-500 text-[12px]">يفتح أسرع ويشتغل حتى لو النت فاصل.</div></div><button class="btn btn-primary btn-sm" data-act="installApp">نزّله</button></section>`;
+_wrap("/e/me", view => afterHead(view, installCard()));
+_wrap("/e/home", view => { let hide = false; try { hide = localStorage.getItem("wb_inst_hide") === "1"; } catch (_) {} if (!hide) view.insertAdjacentHTML("beforeend", installCard().replace("</section>", `<button class="icon-btn w-8 h-8" data-act="installHide" aria-label="إخفاء">✕</button></section>`)); });
+on("installHide", () => { try { localStorage.setItem("wb_inst_hide", "1"); } catch (_) {} Shell.rerender(); });
+
+// ================================================================ تقييم بعد الاستلام
+function feedbackCard() {
+  const r = APP.emp; if (!r) return "";
+  const hs = (r.myReservations || []).filter(h => h.Res_Status !== "Cancelled" && !h.Feedback);
+  const h = hs.find(x => (r.myReservationItems || []).some(i => i.Res_ID === x.Res_ID && n(i.Delivered_Qty) > 0)); if (!h) return "";
+  return `<section class="card p-4 mb-4 ring-1 ring-amber-200 bg-amber-50/40"><b class="text-[14.5px]">استلمت كتبك؟ قولنا رأيك 🙏</b><div class="text-[12.5px] text-slate-600 mt-0.5">رأيك بيساعد النقابة تحسّن المبادرة السنة الجاية.</div>
+    <div class="flex justify-center gap-1.5 mt-3" dir="ltr">${[1, 2, 3, 4, 5].map(s => `<button class="text-[30px] leading-none hover:scale-110 transition" data-act="rate" data-id="${esc(h.Res_ID)}|${s}" aria-label="${s} نجوم">⭐</button>`).join("")}</div></section>`;
+}
+on("rate", async v => {
+  const [resId, stars] = v.split("|");
+  const f = await UI.form({ title: "⭐".repeat(+stars), sub: +stars >= 4 ? "مبسوطين إنك مبسوط 💜" : "آسفين — قولنا إيه اللي ممكن نحسّنه", fields: [{ name: "note", label: "عندك اقتراح أو ملاحظة؟ (اختياري)", type: "textarea" }], ok: "إرسال" });
+  if (!f) return;
+  const r = await call("EMP_FEEDBACK", { resId, stars: +stars, note: f.note }, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  await reloadData(); happyDialog("💜", "شكراً على رأيك", "وصل للمسؤولين، وهيتاخد في الاعتبار.");
+});
+_wrap("/e/home", view => afterHead(view, feedbackCard()));
+_wrap("/e/orders", view => afterHead(view, feedbackCard()));
