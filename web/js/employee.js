@@ -836,6 +836,7 @@ on("submitRes", async () => {
   if (!items.length && !(await UI.confirm({ title: "إلغاء الحجز", message: "الاستمارة فارغة، وسيتم إلغاء حجزك في هذه المرحلة بالكامل. متابعة؟", tone: "danger", ok: "إلغاء الحجز" }))) return;
   const r = await call("SUBMIT_OR_UPDATE_RESERVATION", { phaseId: APP.phaseId, items, paymentMethod: APP.plan.method, downPaymentType: APP.plan.downType, downPaymentInput: n(APP.plan.down), installmentCount: APP.plan.count }, { block: true });
   if (!r.success) return toast(r.message, "danger");
+  if (r.queued) { if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; } return UI.open(`<div class="text-center py-4"><div class="text-4xl">📴</div><h3 class="text-xl font-bold mt-3">حجزك اتحفظ على موبايلك</h3><p class="text-sm text-slate-600 mt-1">النت فاصل دلوقتي — أول ما يرجع هيتبعت لوحده وهيوصلك تأكيد. ما تمسحش التطبيق لحد ما يتبعت 🙏</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تمام</button>` }); }
   Emp.dirty = false;
   if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
   if (Router.current === "/e/cart" || Router.current === "/e/wiz") Router.go("/e/home");

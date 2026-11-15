@@ -452,3 +452,66 @@ function openContact(topic) {
     ${b.email ? btn("mailto:" + b.email + "?subject=" + encodeURIComponent(b.platform + (topic ? " — " + topic : "")) + "&body=" + encodeURIComponent(msg), "mail", "بريد إلكتروني", b.email, "bg-brand-50 text-brand-600") : ""}</div>
     ${b.credit ? `<p class="text-center text-[11.5px] text-slate-400 mt-4">${esc(b.credit)}</p>` : ""}`, { title: "تواصل مع المسؤول", sub: b.org });
 }
+
+// ================================================================ العمل بدون إنترنت
+// القراءة: آخر رد ناجح لكل عملية GET_* يُحفظ على الجهاز ويُعرض لو النت قطع.
+// الكتابة: عمليات الموظف غير المالية تُحفظ في «صندوق صادر» وتُرسل تلقائياً أول ما النت يرجع.
+// العمليات المالية والإدارية لا تُؤجَّل أبداً (لا سداد ولا توزيع بدون اتصال) حفاظاً على الترقيم والأرصدة.
+const Offline = {
+  QUEUE: ["SUBMIT_OR_UPDATE_RESERVATION", "SAVE_MY_KIDS", "WAITLIST_DECISION", "EMP_CANCEL_REQUEST", "EMP_RETURN_REQUEST"],
+  LAST_WINS: ["SUBMIT_OR_UPDATE_RESERVATION", "SAVE_MY_KIDS"],
+  who() { const u = APP.user || {}; return u.empId || u.userId || "anon"; },
+  netFail(r) { return !!(r && !r.success && /تعذر الاتصال|انتهت مهلة/.test(r.message || "")); },
+  ck(action, payload) { return "wb_c_" + Offline.who() + "_" + action + "_" + JSON.stringify(payload || {}); },
+  save(action, payload, r) { try { localStorage.setItem(Offline.ck(action, payload), JSON.stringify({ at: Date.now(), r })); } catch (_) { Offline.prune(); } },
+  load(action, payload) { try { return JSON.parse(localStorage.getItem(Offline.ck(action, payload)) || "null"); } catch (_) { return null; } },
+  prune() { try { Object.keys(localStorage).filter(k => k.startsWith("wb_c_")).forEach(k => localStorage.removeItem(k)); } catch (_) {} },
+  box() { try { return JSON.parse(localStorage.getItem("wb_outbox") || "[]"); } catch (_) { return []; } },
+  setBox(b) { try { localStorage.setItem("wb_outbox", JSON.stringify(b)); } catch (_) {} Offline.bar(); },
+  push(action, payload) {
+    const who = Offline.who(), key = action + "|" + ((payload || {}).phaseId || "");
+    const b = Offline.box().filter(x => !(Offline.LAST_WINS.includes(action) && x.who === who && x.key === key));
+    b.push({ id: Date.now() + "-" + Math.random().toString(36).slice(2, 7), who, key, action, payload: payload || {}, token: APP.token, at: Date.now() });
+    Offline.setBox(b);
+  },
+  flushing: false,
+  async flush() {
+    if (Offline.flushing || !navigator.onLine) return; const b = Offline.box(); if (!b.length) return;
+    Offline.flushing = true; let sent = 0, failed = [];
+    try {
+      for (const x of b) {
+        const tk = APP.token; if (x.token) APP.token = x.token;
+        const r = await _callNet(x.action, x.payload, {}); APP.token = tk;
+        if (Offline.netFail(r)) break;
+        Offline.setBox(Offline.box().filter(y => y.id !== x.id));
+        if (r.success) sent++; else failed.push(r.message);
+      }
+    } finally { Offline.flushing = false; }
+    if (sent) { toast(`رجع النت ✅ اتبعت ${sent === 1 ? "التعديل اللي عملته" : sent + " تعديلات عملتها"} وانت أوفلاين`, "success"); try { if (APP.token) await reloadData(); } catch (_) {} }
+    failed.forEach(m => toast("تعديل اتعمل أوفلاين ما اتقبلش: " + m, "danger"));
+  },
+  bar() {
+    let el = document.getElementById("wb-offbar"); const off = !navigator.onLine, q = Offline.box().filter(x => x.who === Offline.who()).length;
+    if (!off && !q) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement("div"); el.id = "wb-offbar"; el.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:60;padding:6px 12px calc(6px + env(safe-area-inset-bottom));font:600 12.5px Cairo,sans-serif;text-align:center;color:#fff"; document.body.appendChild(el); }
+    el.style.background = off ? "#b45309" : "#047857";
+    el.textContent = off ? `📴 مفيش إنترنت — بتشوف آخر بيانات محفوظة${q ? ` · ${q} تعديل مستني يتبعت` : " · تقدر تعدّل حجزك وهيتحفظ لما النت يرجع"}` : `🔄 جاري إرسال ${q} تعديل…`;
+  }
+};
+const _callNet = call;
+call = async function (action, payload, opts) {
+  const isGet = /^GET_/.test(action);
+  if (!navigator.onLine && Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, message: "اتحفظ على جهازك 📴 وهيتبعت لوحده أول ما النت يرجع" }; }
+  const r = await _callNet(action, payload, opts);
+  if (isGet && r && r.success) Offline.save(action, payload, r);
+  if (Offline.netFail(r)) {
+    if (isGet) { const c = Offline.load(action, payload); if (c) { Offline.bar(); return Object.assign({}, c.r, { offline: true, cachedAt: c.at }); } }
+    if (Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, message: "النت فاصل — اتحفظ على جهازك وهيتبعت لوحده أول ما يرجع 📴" }; }
+    if (!isGet && !/^LOGIN_/.test(action)) r.message = "مفيش إنترنت — العملية دي لازم تتم والنت شغال (مش بتتأجل حفاظاً على الحسابات).";
+  }
+  return r;
+};
+window.addEventListener("online", () => { Offline.bar(); Offline.flush(); });
+window.addEventListener("offline", () => Offline.bar());
+setTimeout(() => { Offline.bar(); Offline.flush(); }, 1500);
+setInterval(() => Offline.flush(), 60000);
