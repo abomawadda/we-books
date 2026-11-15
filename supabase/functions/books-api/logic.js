@@ -1786,7 +1786,7 @@ const OperationsEngine = {
         if (seen[id]) { res.error = "مكرر في القائمة"; return; }
         seen[id] = 1; res.name = b.Book_Name;
         const cover = Util.num(r.coverPrice);
-        if (!(cover > 0)) { res.error = "سعر الغلاف غير صحيح"; return; }
+        if (!(cover > 0)) { res.error = "السعر قبل الخصم غير صحيح"; return; }
         const supId = firstSup; // كل الكتب تتبع المكتبة الرئيسية المسجلة
         const sup = sups[supId];
         if (!sup) { res.error = "سجّل المكتبة الرئيسية أولاً"; return; }

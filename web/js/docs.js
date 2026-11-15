@@ -46,7 +46,7 @@ tfoot td { background: #f3eefa !important; font-weight: 700; border-top: 1.2px s
 /* كثافة تتكيف مع عدد الصفوف: قليلة ← مريحة، كثيرة ← مضغوطة */
 .page.roomy { --pad-y: 2.6mm; } .page.roomy td { font-size: 1.04em; }
 .page.dense { --pad-y: .9mm; font-size: ${A4 ? "9.6pt" : "7.6pt"}; line-height: 1.4; } .page.dense .sub { font-size: .8em; } .page.dense .sig { padding-top: 4mm; }
-.page.xdense { --pad-y: .5mm; font-size: ${A4 ? "8.6pt" : "6.9pt"}; line-height: 1.3; } .page.xdense .sub { display: none; } .page.xdense .meta { gap: 1.5mm; } .page.xdense .box { padding: 1.2mm 2mm; } .page.xdense .strip div { padding: .4mm 1.2mm; } .page.xdense .sig { padding-top: 3mm; } .page.xdense .grp td { padding-top: .4mm; padding-bottom: .4mm; }
+.page.xdense { --pad-y: .5mm; font-size: ${A4 ? "8.6pt" : "6.9pt"}; line-height: 1.3; } .page.xdense .sub { font-size: .82em; } .page.xdense .meta { gap: 1.5mm; } .page.xdense .box { padding: 1.2mm 2mm; } .page.xdense .strip div { padding: .4mm 1.2mm; } .page.xdense .sig { padding-top: 3mm; } .page.xdense .grp td { padding-top: .4mm; padding-bottom: .4mm; }
 td.c, th.c { text-align: center; } td.l, th.l { text-align: left; }
 .num { font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate; white-space: nowrap; }
 .sub { color: #6b6585; font-size: .86em; }
@@ -151,10 +151,10 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     return Doc.page(`${Doc.head("طلب حجز كتب", d.no, `<div style="margin-top:1mm"><span class="badge ${d.status === "مؤكد" ? "g" : "a"}">${esc(d.status || "")}</span></div>`)}
       <div class="meta"><div class="box"><h4>بيانات العضو</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}${d.emp.mobile ? Doc.kv("الموبايل", `<span class="num">${esc(d.emp.mobile)}</span>`) : ""}</div>
         <div class="box"><h4>بيانات الطلب</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("تاريخ الطلب", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("عدد الكتب", `<span class="num">${cnt}</span>`)}${Doc.kv("طريقة السداد", esc(Doc.methodAr(p.method)))}</div></div>
-      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">العدد</th><th class="l" style="width:10%">الغلاف</th><th class="l" style="width:10%">سعرك</th><th class="l" style="width:11%">القيمة</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">العدد</th><th class="l" style="width:10%">قبل الخصم</th><th class="l" style="width:10%">سعرك</th><th class="l" style="width:11%">القيمة</th></tr></thead><tbody>${rows}</tbody></table>
       <div class="tot"><div>
         <div class="note">• الأسعار بعد خصم العاملين، وتُحتسب الأسبقية بوقت حجز كل كتاب.<br>• هذا طلب حجز وليس فاتورة؛ تصدر الفاتورة عند جاهزية الكتب للتسليم.</div></div>
-        <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}<div class="kv save"><span>توفيرك</span><b class="num">${Doc.money(cover - net)}</b></div><div class="kv big"><span>الإجمالي (ج.م)</span><b class="num">${Doc.money(net)}</b></div></div></div>
+        <div class="sum">${Doc.kv("قبل الخصم", `<span class="num sub">${Doc.money(cover)}</span>`)}<div class="kv save"><span>توفيرك</span><b class="num">${Doc.money(cover - net)}</b></div><div class="kv big"><span>الإجمالي (ج.م)</span><b class="num">${Doc.money(net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>
       <div class="sig"><div>توقيع العضو</div><div>مسؤول المبادرة</div><div>الختم</div></div>${Doc.foot(d.no)}`, d.status === "ملغي" ? "ملغي" : "", "red", Doc.density(d.lines.length + keys.length, "A5"));
   },
@@ -182,10 +182,10 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="meta"><div class="box"><h4>العميل</h4>${Doc.kv("الاسم", esc(d.emp.name))}${Doc.kv("الرقم الوظيفي", `<span class="num">${esc(d.emp.id)}</span>`)}${d.emp.dept ? Doc.kv("جهة العمل", esc(d.emp.dept)) : ""}</div>
         <div class="box"><h4>الفاتورة</h4>${Doc.kv("تاريخ الإصدار", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("السداد", esc(Doc.methodAr(d.method)))}</div></div>
       <table><thead><tr><th class="c" style="width:5%">#</th>${Doc.bookHead}<th class="c" style="width:6%">الكمية</th><th class="c" style="width:6%">سُلّم</th><th class="l" style="width:10%">السعر</th><th class="l" style="width:11%">الإجمالي</th></tr></thead><tbody>${rows || `<tr><td colspan="8" class="c sub">لا بنود</td></tr>`}</tbody></table>
-      ${compact ? Doc.sumStrip([["بسعر الغلاف", cover, "m"], ["قيمة الكتب", gross], ["الصافي", net, "big"], ["المقدم المطلوب", d.down], ["المسدد", d.paid], ["المتبقي", d.remaining, n(d.remaining) ? "r" : "g"], ...(n(d.credit) ? [["مستحق الرد", d.credit, "g"]] : []), ["وفّرت", cover - net, "g"]],
+      ${compact ? Doc.sumStrip([["قبل الخصم", cover, "m"], ["قيمة الكتب", gross], ["الصافي", net, "big"], ["المقدم المطلوب", d.down], ["المسدد", d.paid], ["المتبقي", d.remaining, n(d.remaining) ? "r" : "g"], ...(n(d.credit) ? [["مستحق الرد", d.credit, "g"]] : []), ["وفّرت", cover - net, "g"]],
         esc(Doc.words(net))) : `
       <div class="tot"><div>${d.adj ? `<div class="note">• ${n(d.adj) < 0 ? "خصم" : "إضافة"} ${Doc.money(Math.abs(n(d.adj)))} ج.م: ${esc(d.adjReason || "")}</div>` : ""}</div>
-        <div class="sum">${Doc.kv("بسعر الغلاف", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
+        <div class="sum">${Doc.kv("قبل الخصم", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
           ${Doc.kv("المقدم المطلوب", `<span class="num">${Doc.money(d.down)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(d.paid)}</span>`)}<div class="kv" style="color:${n(d.remaining) ? "#be123c" : "#047857"}"><span>المتبقي</span><b class="num">${Doc.money(d.remaining)}</b></div>${n(d.credit) ? `<div class="kv save"><span>رصيد مستحق الرد</span><b class="num">${Doc.money(d.credit)}</b></div>` : ""}<div class="kv save"><span>وفّرت</span><b class="num">${Doc.money(cover - net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>`}
       <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.invDensity(rowsCount));
@@ -228,12 +228,18 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
 
 
   // ---------------------------------------------------------------- المعاينة والحفظ
+  fontsCss(base) {
+    return [400, 500, 600, 700, 800].map(w =>
+      `@font-face{font-family:"Cairo";font-weight:${w};font-display:swap;src:url(${base}fonts/cairo-arabic-${w}-normal.woff2) format("woff2");unicode-range:U+0600-06FF,U+0750-077F,U+FB50-FDFF,U+FE70-FEFF;}`
+      + `@font-face{font-family:"Cairo";font-weight:${w};font-display:swap;src:url(${base}fonts/cairo-latin-${w}-normal.woff2) format("woff2");unicode-range:U+0000-00FF;}`
+    ).join("\n");
+  },
   /** يفتح معاينة داخل التطبيق مع: حفظ PDF/طباعة، حفظ صورة، مشاركة */
   show(title, pagesHtml, opts) {
     opts = opts || {};
     const size = opts.size || "A5", file = (opts.file || title).replace(/[\\/:*?"<>|]+/g, "-");
     const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
-    const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>${esc(title)}</title><link rel="stylesheet" href="${base}app.css"><style>${Doc.css(size)}</style></head><body>${pagesHtml}</body></html>`;
+    const html = `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><base href="${base}"><title>${esc(title)}</title><style>${Doc.fontsCss(base)}\n${Doc.css(size)}</style></head><body>${pagesHtml}</body></html>`;
     const root = document.createElement("div");
     root.className = "fixed inset-0 z-[70] flex flex-col bg-ink-950/80 backdrop-blur-sm animate-fade-in";
     root.innerHTML = `<div class="flex items-center gap-2 px-3 py-2.5 bg-white shadow safe-t">
@@ -254,21 +260,48 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     root.querySelector("[data-png]").onclick = async e => {
       const btn = e.currentTarget; btn.disabled = true;
       try {
-        await Doc.lib();
-        const doc = fr.contentDocument; doc.body.style.zoom = 1;
+        const win = fr.contentWindow, doc = fr.contentDocument;
+        if (!win || !doc) throw new Error("iframe");
+        await Doc.lib(win);
+        doc.body.style.zoom = 1;
+        if (doc.fonts && doc.fonts.ready) await doc.fonts.ready;
+        const imgs = [...doc.querySelectorAll("img")].filter(im => !im.complete);
+        if (imgs.length) await Promise.race([
+          Promise.all(imgs.map(im => new Promise(r => { im.onload = r; im.onerror = r; }))),
+          new Promise(r => setTimeout(r, 2000))
+        ]);
         const pages = [...doc.querySelectorAll(".page")];
         for (let k = 0; k < pages.length; k++) {
-          const c = await window.html2canvas(pages[k], { scale: 2, backgroundColor: "#ffffff", useCORS: true, windowWidth: size === "A4" ? 900 : 640 });
-          const a = document.createElement("a"); a.download = file + (pages.length > 1 ? "-" + (k + 1) : "") + ".png"; a.href = c.toDataURL("image/png"); document.body.appendChild(a); a.click(); a.remove();
+          const c = await win.html2canvas(pages[k], { scale: 2, backgroundColor: "#ffffff", useCORS: true, logging: false, scrollX: 0, scrollY: 0, windowWidth: size === "A4" ? 900 : 640 });
+          const blob = await new Promise(res => c.toBlob(res, "image/png"));
+          const url = blob ? URL.createObjectURL(blob) : c.toDataURL("image/png");
+          const a = document.createElement("a");
+          a.download = file + (pages.length > 1 ? "-" + (k + 1) : "") + ".png";
+          a.href = url;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          if (blob) setTimeout(() => URL.revokeObjectURL(url), 5000);
+          if (k + 1 < pages.length) await new Promise(r => setTimeout(r, 150));
         }
         toast("تم حفظ الصورة ✅", "success");
-      } catch (err) { toast("تعذر حفظ الصورة، استخدم «PDF / طباعة».", "danger"); }
+      } catch (err) {
+        console.error("PNG export failed:", err);
+        toast("تعذر حفظ الصورة، استخدم «PDF / طباعة».", "danger");
+      }
       finally { btn.disabled = false; fit(); }
     };
     return root;
   },
-  lib() {
-    if (window.html2canvas) return Promise.resolve();
-    return Doc._lib || (Doc._lib = new Promise((res, rej) => { const s = document.createElement("script"); s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"; s.onload = res; s.onerror = () => { Doc._lib = null; rej(new Error("lib")); }; document.head.appendChild(s); }));
+  lib(win) {
+    win = win || window;
+    if (win.html2canvas) return Promise.resolve();
+    return win._h2c || (win._h2c = new Promise((res, rej) => {
+      const s = win.document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js";
+      s.onload = res;
+      s.onerror = () => { win._h2c = null; rej(new Error("lib")); };
+      win.document.head.appendChild(s);
+    }));
   }
 };

@@ -64,7 +64,7 @@ const Shell = {
           <h2 class="text-3xl xl:text-4xl font-bold leading-[1.35]">كتب أبنائك الخارجية<br><span class="text-gold-300">بخصم حقيقي وتقسيط مريح</span></h2>
           <p class="text-brand-100/80 mt-3 leading-relaxed">احجز من الكتالوج، وتابع التوزيع بأسبقية الحجز، واستلم وسدد على أقساط شهرية بشفافية كاملة.</p>
           <ul class="mt-6 space-y-2.5 text-[14.5px]">
-            ${[["badge-percent", "خصم موحد للعاملين على سعر الغلاف"], ["list-ordered", "توزيع عادل بأسبقية كل كتاب"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
+            ${[["badge-percent", "خصم موحد للعاملين على السعر قبل الخصم"], ["list-ordered", "توزيع عادل بأسبقية كل كتاب"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
           </ul>
         </div>
         <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · ${esc(Brand.get().org)}${Brand.get().credit ? " · " + esc(Brand.get().credit) : ""}</div>

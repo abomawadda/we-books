@@ -197,7 +197,7 @@ Router.add("/e/home", view => {
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4 lg:mt-6">
     ${UI.kpi("كتب محجوزة", fmt(reqQty), { icon: "book-open", tone: "brand", foot: Emp.dirty ? "عندك تعديلات لم تُحفظ" : rels.length ? `منها لـ ${rels.length} من الأقارب` : "" })}
     ${UI.kpi("جاهز للتسليم", fmt(alloc) + (reqQty ? ` <span class="text-sm text-slate-400">/ ${fmt(reqQty)}</span>` : ""), { icon: "package-check", tone: "green", pct: reqQty ? alloc / reqQty * 100 : 0, foot: deliv ? `استلمت ${fmt(deliv)}` : "" })}
-    ${UI.kpi("وفّرت", inv ? money(inv.Total_Savings) : money(t.cover - t.net), { icon: "piggy-bank", tone: "green", foot: "مقارنة بسعر الغلاف" })}
+    ${UI.kpi("وفّرت", inv ? money(inv.Total_Savings) : money(t.cover - t.net), { icon: "piggy-bank", tone: "green", foot: "مقارنة بالسعر قبل الخصم" })}
     ${UI.kpi("المتبقي عليك", inv ? money(inv.Remaining_Balance) : money(0), { icon: "hand-coins", tone: inv && n(inv.Remaining_Balance) ? "amber" : "green", foot: inv && n(inv.Credit_Balance) ? `لك رصيد ${moneyTxt(inv.Credit_Balance)}` : "" })}
   </div>
 
@@ -247,7 +247,7 @@ function cartHTML() {
     : Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊"))}
 
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
-    <div class="flex justify-between text-slate-500"><span>بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
+    <div class="flex justify-between text-slate-500"><span>قبل الخصم</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
     ${(() => { const u = cartLines().filter(l => !n(l.price)).reduce((a, l) => a + l.qty, 0); return u ? `<div class="text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5">🚚 ${booksWord(u)} سعرها جاي مع الشحنة — هتتضاف للإجمالي وقتها بخصم العاملين</div>` : ""; })()}
     <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><span class="font-bold text-slate-900">الإجمالي</span><span class="text-xl font-bold text-brand-800 num">${money(t.net)}</span></div>
@@ -539,7 +539,7 @@ function bagHTML() {
       <div class="text-left shrink-0">${b.Book_Status === "Pricing" ? `<div class="text-[11.5px] font-bold text-amber-700">🚚 مع الشحنة</div>` : `<div class="font-bold num text-brand-800">${fmt(b.Emp_Selling_Price)}</div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div>`}</div></div>
     ${r.opts.length > 1 && r.on ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pr-10 pb-0.5" style="scrollbar-width:none">${r.opts.map(o => `<button class="chip !h-7 !px-2.5 !text-[11.5px] shrink-0" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${o.Book_ID === r.pick}">${(popInfo(o) || {}).top ? "🔥 " : ""}${esc(o.Publisher)}${o.Book_Part ? " (" + esc(o.Book_Part) + ")" : ""} · <span class="num">${fmt(o.Emp_Selling_Price)}</span></button>`).join("")}</div>` : ""}</li>`; }).join("")}</ul>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
-    <div class="flex justify-between text-slate-500"><span>${sel.length} كتب بسعر الغلاف</span><span class="line-through num">${moneyTxt(cov)}</span></div>
+    <div class="flex justify-between text-slate-500"><span>${sel.length} كتب قبل الخصم</span><span class="line-through num">${moneyTxt(cov)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
     <div class="flex justify-between items-baseline pt-1 border-t border-slate-200"><b>إجمالي الشنطة</b><span class="text-xl font-bold text-brand-800 num">${money(tot)}</span></div></div>`;
 }
@@ -735,7 +735,7 @@ function resSummaryHTML(lines, opts) {
         <div class="text-left shrink-0"><div class="font-bold text-brand-800 num">${moneyTxt(g.net)}</div><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
       <ul class="divide-y divide-slate-100">${g.lines.map(l => `<li class="flex items-center gap-2 px-3.5 py-2 text-[13px]"><span class="flex-1 min-w-0 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="text-slate-400 num">×${l.qty}</span>` : ""}<span class="num font-semibold text-slate-800 text-left whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul></section>`).join("")}</div>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 space-y-1.5 text-[13.5px]">
-    <div class="flex justify-between text-slate-500"><span>${booksWord(cnt)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(cover)}</span></div>
+    <div class="flex justify-between text-slate-500"><span>${booksWord(cnt)} قبل الخصم</span><span class="line-through num">${moneyTxt(cover)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(cover - net)}</span></div>
     <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b class="text-slate-900">الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(net)}</span></div>
     ${p.method === "INSTALLMENT" ? `<div class="flex justify-between text-[12.5px] text-slate-600 pt-1"><span>مقدم عند الاستلام</span><b class="num">${moneyTxt(pc.down)}</b></div><div class="flex justify-between text-[12.5px] text-slate-600"><span>ثم ${pc.cnt} أقساط شهرية</span><b class="num">${moneyTxt(pc.per)}${pc.last !== pc.per ? " (الأخير " + fmt(pc.last) + ")" : ""}</b></div>`
@@ -846,7 +846,7 @@ function wzReviewHTML() {
       <ul class="divide-y divide-slate-100 px-3.5">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[13px]"><span class="flex-1 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold text-left whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul>
       <div class="px-3.5 pb-3"><button class="btn btn-ghost btn-sm" data-act="wzEdit" data-id="${esc(g.lines[0].ben || "")}|${esc(g.lines[0].grade || "")}">${ic("pencil")} تعديل</button></div></section>`).join("")
       : Art.empty("cart", "لسه ما اخترتش كتب", "ارجع واختار كتب لكل فرد")}
-    <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} بسعر الغلاف</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
+    <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} قبل الخصم</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
       <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
       <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b>الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(t.net)}</span></div></div>
     <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة فرد آخر</button>
@@ -927,7 +927,7 @@ Router.add("/e/orders", view => {
       ${inv ? `<section class="card overflow-hidden">
         <div class="hero text-white p-5"><div class="text-brand-200 text-sm">صافي فاتورتك</div><div class="text-3xl font-bold num mt-1">${money(inv.Net_Final_Invoice_Amount)}</div>
           <div class="mt-3">${UI.progress(paidPct, "bg-gold-400")}</div><div class="flex justify-between text-[12px] text-brand-200 mt-1.5"><span>مسدد ${moneyTxt(inv.Total_Paid_Amount)}</span><span>${Math.round(paidPct)}%</span></div></div>
-        <div class="p-4 grid grid-cols-2 gap-2">${UI.stat("بسعر الغلاف", `<span class="line-through text-slate-400">${fmt(inv.Total_Cover_Amount)}</span>`)}${UI.stat("وفّرت", `<span class="text-emerald-600">${moneyTxt(inv.Total_Savings)}</span>`)}${UI.stat("المقدم المطلوب", moneyTxt(inv.Down_Payment_Required))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600"}">${moneyTxt(inv.Remaining_Balance)}</span>`)}
+        <div class="p-4 grid grid-cols-2 gap-2">${UI.stat("قبل الخصم", `<span class="line-through text-slate-400">${fmt(inv.Total_Cover_Amount)}</span>`)}${UI.stat("وفّرت", `<span class="text-emerald-600">${moneyTxt(inv.Total_Savings)}</span>`)}${UI.stat("المقدم المطلوب", moneyTxt(inv.Down_Payment_Required))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600"}">${moneyTxt(inv.Remaining_Balance)}</span>`)}
           ${n(inv.Credit_Balance) ? `<div class="col-span-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm p-3 font-semibold">لك رصيد مستحق الرد ${moneyTxt(inv.Credit_Balance)}</div>` : ""}</div>
         <div class="px-4 pb-4 flex items-center justify-between text-[12px] text-slate-500"><span>${esc(inv.Emp_Inv_ID)}</span>${pill(inv.Invoice_Status)}</div></section>`
         : `<section class="card card-pad"><div class="flex gap-3"><span class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl shrink-0">${ic("receipt")}</span><div><div class="font-bold text-slate-900">الفاتورة لسه ما صدرتش</div><p class="text-[13px] text-slate-500 mt-1 leading-relaxed">بتصدر أول ما كتبك تبقى جاهزة للتسليم، والأقساط بتبدأ من يوم الاستلام.</p></div></div></section>`}

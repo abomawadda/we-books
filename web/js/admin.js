@@ -471,7 +471,7 @@ function booksTable() {
     <td class="text-xs text-slate-500">—</td>
     <td class="text-xs text-slate-500">—</td>
     <td class="num text-center whitespace-nowrap">${totResQ ? `${fmt(totResP)} | ${fmt(totResQ)} ن` : "0"}</td>
-    <td class="num text-center text-slate-700" title="متوسط سعر الغلاف">${avgCover ? fmt(avgCover) : "—"}</td>
+    <td class="num text-center text-slate-700" title="متوسط السعر قبل الخصم">${avgCover ? fmt(avgCover) : "—"}</td>
     <td class="num text-center text-slate-500">—</td>
     <td class="num text-center text-slate-700" title="متوسط صافي التكلفة">${avgCost ? fmt(avgCost) : "—"}</td>
     <td class="num text-center text-brand-800" title="متوسط سعر الموظف">${avgEmp ? fmt(avgEmp) : "—"}</td>
@@ -508,11 +508,11 @@ function booksTable() {
       return pill(x.Book_Status);
     } },
     { t: "الحاجزون", cls: "num text-center whitespace-nowrap", v: x => { const c = rcMap[x.Book_ID]; return c ? `<button class="inline-flex items-center gap-1 rounded-lg bg-brand-50/70 hover:bg-brand-100 text-brand-800 px-1.5 py-0.5 text-[11.5px] font-bold transition" data-act="bookRes" data-id="${esc(x.Book_ID)}" title="${fmt(c.p)} حاجز · ${fmt(c.q)} نسخة">${ic("users", "!w-3 !h-3")} ${fmt(c.p)} <span class="text-slate-300 font-normal">|</span> ${fmt(c.q)}</button>` : `<span class="text-slate-300">0</span>`; } },
-    { t: "الغلاف", cls: "num text-center whitespace-nowrap", v: x => {
+    { t: "قبل الخصم", cls: "num text-center whitespace-nowrap", v: x => {
       const inEd = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID);
       const dr = rowDraftOf(x);
       if (inEd) {
-        return `<input type="number" step="any" inputmode="decimal" class="tbl-inp" data-bk-inline="${esc(x.Book_ID)}" data-f="coverPrice" value="${esc(dr.coverPrice)}" placeholder="الغلاف">`;
+        return `<input type="number" step="any" inputmode="decimal" class="tbl-inp" data-bk-inline="${esc(x.Book_ID)}" data-f="coverPrice" value="${esc(dr.coverPrice)}" placeholder="قبل الخصم">`;
       }
       return x.Book_Status === "Pricing" && !n(x.Cover_Price)
         ? `<button type="button" class="inline-flex items-center gap-1 rounded-lg bg-amber-50 text-amber-700 ring-1 ring-amber-200 px-1.5 py-0.5 text-[11px] font-semibold hover:bg-amber-100 transition" ${canEdit ? `data-act="bkQuickRow" data-id="${esc(x.Book_ID)}" title="اضغط لإدخال السعر فوراً"` : ""}>تسعير ${canEdit ? ic("pencil", "!w-3 !h-3") : ""}</button>`
@@ -654,7 +654,7 @@ function quickBookEntryBarHTML() {
         </div>
         <div class="grid grid-cols-2 gap-1.5">
           <div>
-            <label class="label !text-[11.5px]">سعر الغلاف</label>
+            <label class="label !text-[11.5px]">السعر قبل الخصم</label>
             <input type="number" step="any" inputmode="decimal" class="input !h-10 !text-xs num font-bold" placeholder="جاري التسعير" value="${esc(qf.coverPrice)}" data-input="qbPrice" data-k="coverPrice">
           </div>
           <div>
@@ -914,7 +914,7 @@ Router.add("/a/books", view => {
   const pubsCnt = new Set(d.books.map(b => b.Publisher).filter(Boolean)).size;
   const subsCnt = new Set(d.books.map(b => b.Subject).filter(Boolean)).size;
 
-  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب مسجل · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
+  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب مسجل · سعر الموظف = السعر قبل الخصم − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
     lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("sliders-horizontal")} قوائم الكتالوج</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
     + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         ${UI.kpi("إجمالي الكتب المسجلة", fmt(d.books.length), { icon: "library-big", tone: "brand", foot: `${fmt(pubsCnt)} دار نشر · ${fmt(subsCnt)} مادة دراسية` })}
@@ -1244,7 +1244,7 @@ on("coversBulk", async () => {
 });
 on("exportBooks", () => {
   const list = filteredBooksList();
-  exportCSV(list.length === A().books.length ? "الكتالوج" : "الكتالوج_المصفى", ["الكود", "الكتاب", "المرحلة", "الصف", "نوع المدرسة", "الناشر", "المادة", "الجزء", "الحالة", "كود المكتبة", "الغلاف", "خصم المكتبة %", "التكلفة", "سعر الموظف"], list.map(x => [x.Book_ID, x.Book_Name, x.Stage, x.Grade, x.School_Types, x.Publisher, x.Subject, x.Book_Part, ar(x.Book_Status), x.Supplier_ID, x.Cover_Price, x.Supplier_Discount_Pct, x.Standard_Net_Cost, x.Emp_Selling_Price]));
+  exportCSV(list.length === A().books.length ? "الكتالوج" : "الكتالوج_المصفى", ["الكود", "الكتاب", "المرحلة", "الصف", "نوع المدرسة", "الناشر", "المادة", "الجزء", "الحالة", "كود المكتبة", "قبل الخصم", "خصم المكتبة %", "التكلفة", "سعر الموظف"], list.map(x => [x.Book_ID, x.Book_Name, x.Stage, x.Grade, x.School_Types, x.Publisher, x.Subject, x.Book_Part, ar(x.Book_Status), x.Supplier_ID, x.Cover_Price, x.Supplier_Discount_Pct, x.Standard_Net_Cost, x.Emp_Selling_Price]));
 });
 /** خيارات نوع المدرسة: كل نوع منفرداً أو مشتركاً (حكومي، حكومي + لغات، ...) */
 function typeCombos(types) {
@@ -1658,7 +1658,7 @@ async function openBookModal(id, cloneFromId) {
         </div>
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-end">
           <div>
-            <label class="label !text-xs" for="f_coverPrice">سعر الغلاف (ج.م)</label>
+            <label class="label !text-xs" for="f_coverPrice">السعر قبل الخصم (ج.م)</label>
             <input id="f_coverPrice" name="coverPrice" type="number" inputmode="decimal" step="any" class="input !h-10 num font-bold text-slate-900" value="${esc(x.Cover_Price || "")}" placeholder="فارغ = جاري التسعير">
           </div>
           <div>
@@ -2044,7 +2044,7 @@ async function openBookModal(id, cloneFromId) {
         ["وفر الموظف بالنسخة", saving > 0 ? saving : 0, "text-emerald-700"],
         ["هامش المبادرة للنسخة", p.margin, p.margin < 0 ? "text-rose-600" : "text-emerald-700"]
       ].map(c => `<div class="rounded-xl bg-white/90 ring-1 ring-brand-100/80 px-2.5 py-2"><div class="text-[10.5px] text-slate-500 font-semibold">${c[0]}</div><div class="text-base font-bold num mt-0.5 ${c[2]}">${fmt(c[1])} <span class="text-[10px] font-normal text-slate-400">ج.م</span></div></div>`).join("")}</div>
-      <div class="mt-2.5 text-[11.5px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border-t border-brand-100/70 pt-2"><span class="flex items-center gap-1">${ic("info", "text-brand-600")} خصم الكمية (افتراضي 3%) يُحتسب على إجمالي كل فاتورة توريد كاملة عند الاستلام وليس على سعر الكتاب الفردي.</span><span class="text-slate-500">الغلاف: <b class="num font-bold text-slate-800">${fmt(f.coverPrice || 0)}</b> ج.م</span></div>`;
+      <div class="mt-2.5 text-[11.5px] text-slate-600 flex flex-wrap items-center justify-between gap-2 border-t border-brand-100/70 pt-2"><span class="flex items-center gap-1">${ic("info", "text-brand-600")} خصم الكمية (افتراضي 3%) يُحتسب على إجمالي كل فاتورة توريد كاملة عند الاستلام وليس على سعر الكتاب الفردي.</span><span class="text-slate-500">قبل الخصم: <b class="num font-bold text-slate-800">${fmt(f.coverPrice || 0)}</b> ج.م</span></div>`;
 
       if (cpv) {
         const pub = cleanCatItem(f.publisher === "__NEW__" ? extra.newPublisher : f.publisher);
@@ -2245,7 +2245,7 @@ on("bookDel", async id => {
   }
 });
 on("importBooks", async () => {
-  const v = await UI.form({ title: "استيراد الكتالوج", wide: true, intro: "انسخ الصفوف من Excel والصقها هنا. الأعمدة بالترتيب:<br><b>الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، سعر الغلاف، خصم المكتبة %</b>",
+  const v = await UI.form({ title: "استيراد الكتالوج", wide: true, intro: "انسخ الصفوف من Excel والصقها هنا. الأعمدة بالترتيب:<br><b>الكود، الاسم، المرحلة، الصف، المادة، الناشر، كود المكتبة، السعر قبل الخصم، خصم المكتبة %</b>",
     fields: [{ name: "txt", label: "البيانات", type: "textarea", rows: 8, required: true, placeholder: "BK-101\tسلاح التلميذ رياضيات\tالمرحلة الابتدائية\tالرابع\tرياضيات\t..." }], ok: "استيراد", icon: "upload" });
   if (!v) return;
   const rows = parsePaste(v.txt).map(p => ({ Book_ID: p[0], Book_Name: p[1], Stage: p[2], Grade: p[3], Subject: p[4], Publisher: p[5], Supplier_ID: p[6], Cover_Price: p[7], Supplier_Discount_Pct: p[8] }));
@@ -2270,7 +2270,7 @@ function bpRows() {
 function bpBody() {
   const d = A(), s = BP.s, rows = bpRows();
   const res = s.res ? s.res.results : null;
-  return `<ol class="grid gap-3 sm:grid-cols-3 text-[12.5px] mb-4">${[["download", "نزّل القالب", "ملف Excel بالكتب وأعمدة السعر فارغة"], ["file-spreadsheet", "املأ الأسعار", "سعر الغلاف وخصم المكتبة % لكل كتاب"], ["upload", "الصق واعتمد", "انسخ الصفوف من Excel والصقها هنا"]].map((x, i) => `<li class="rounded-2xl bg-slate-50 p-3 flex gap-2.5"><span class="w-7 h-7 rounded-full bg-brand-700 text-white font-bold flex items-center justify-center shrink-0">${i + 1}</span><span><b class="block text-slate-800">${x[1]}</b><span class="text-slate-500">${x[2]}</span></span></li>`).join("")}</ol>
+  return `<ol class="grid gap-3 sm:grid-cols-3 text-[12.5px] mb-4">${[["download", "نزّل القالب", "ملف Excel بالكتب وأعمدة السعر فارغة"], ["file-spreadsheet", "املأ الأسعار", "السعر قبل الخصم وخصم المكتبة % لكل كتاب"], ["upload", "الصق واعتمد", "انسخ الصفوف من Excel والصقها هنا"]].map((x, i) => `<li class="rounded-2xl bg-slate-50 p-3 flex gap-2.5"><span class="w-7 h-7 rounded-full bg-brand-700 text-white font-bold flex items-center justify-center shrink-0">${i + 1}</span><span><b class="block text-slate-800">${x[1]}</b><span class="text-slate-500">${x[2]}</span></span></li>`).join("")}</ol>
   <div class="flex flex-wrap items-end gap-2 mb-3">
     <div><div class="label">القالب يشمل</div><select class="input !h-10 !w-auto" data-change="bpF" data-k="scope"><option value="pricing" ${s.scope === "pricing" ? "selected" : ""}>الكتب بانتظار السعر</option><option value="filtered" ${s.scope === "filtered" ? "selected" : ""}>الكتب الظاهرة بالفلاتر الحالية</option><option value="all" ${s.scope === "all" ? "selected" : ""}>كل الكتب</option></select></div>
     <button class="btn btn-outline btn-sm !h-10" data-act="bpTemplate">${ic("download")} تنزيل القالب</button>
@@ -2284,10 +2284,10 @@ function bpBody() {
       <button class="btn btn-outline btn-xs mr-auto" data-act="bpReprice">${ic("refresh-cw")} طبّق على الكتب المسعّرة</button></div>
     <div class="text-[11.5px] text-slate-400 mt-1.5">الأولوية: الخصم المكتوب في السطر ← قاعدة الناشر ← باقي الكتب. سعر الموظف لا يتأثر.</div></div>
   <textarea class="input h-auto py-2.5 leading-relaxed num" rows="6" dir="ltr" placeholder="P4-012	سلاح التلميذ — عربي	4 ابتدائي	سلاح التلميذ	135	25&#10;أو بالمختصر:  P4-012	135	25" data-input="bpTxt">${esc(s.txt)}</textarea>
-  <div class="text-[12px] text-slate-500 mt-1.5">${rows.length ? `قُرئ ${fmt(rows.length)} سطراً` : "يُقبل القالب كما هو (6 أعمدة) أو 3 أعمدة: الكود، سعر الغلاف، خصم المكتبة. الخصم الفارغ يأخذ الافتراضي."} · سعر الموظف = الغلاف − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}% مقرَّباً لأعلى جنيه.</div>
+  <div class="text-[12px] text-slate-500 mt-1.5">${rows.length ? `قُرئ ${fmt(rows.length)} سطراً` : "يُقبل القالب كما هو (6 أعمدة) أو 3 أعمدة: الكود، السعر قبل الخصم، خصم المكتبة. الخصم الفارغ يأخذ الافتراضي."} · سعر الموظف = السعر قبل الخصم − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}% مقرَّباً لأعلى جنيه.</div>
   ${res ? `<div class="mt-3">${UI.table([
       { t: "الكتاب", v: r => `<b>${esc(r.name || r.bookId)}</b><div class="text-[11px] text-slate-400 num">${esc(r.bookId)} · سطر ${r.line}</div>` },
-      { t: "الغلاف", cls: "num", v: r => r.ok ? fmt(r.cover) + (n(r.oldCover) && n(r.oldCover) !== n(r.cover) ? `<div class="text-[11px] text-slate-400 line-through">${fmt(r.oldCover)}</div>` : "") : "" },
+      { t: "قبل الخصم", cls: "num", v: r => r.ok ? fmt(r.cover) + (n(r.oldCover) && n(r.oldCover) !== n(r.cover) ? `<div class="text-[11px] text-slate-400 line-through">${fmt(r.oldCover)}</div>` : "") : "" },
       { t: "خصم المكتبة", cls: "num", v: r => r.ok ? r.disc + "%" + (r.rule ? `<div class="text-[10.5px] text-slate-400">${esc(r.rule)}</div>` : "") : "" }, { t: "التكلفة", cls: "num", v: r => r.ok ? fmt(r.cost) : "" },
       { t: "سعر الموظف", cls: "num", v: r => r.ok ? `<b class="text-brand-800">${fmt(r.emp)}</b>` : "" },
       { t: "الهامش", cls: "num", v: r => r.ok ? `<span class="${r.margin < 0 ? "text-rose-600 font-bold" : "text-emerald-600"}">${fmt(r.margin)}</span>` : "" },
@@ -2302,7 +2302,7 @@ on("bpTemplate", () => {
   const d = A(), f = Q.bookF || {}, q = (Q.books || "").toLowerCase(), sc = BP.s.scope;
   const list = d.books.filter(x => x.Book_Status !== "Discontinued" && (sc === "all" || (sc === "pricing" ? x.Book_Status === "Pricing"
     : (!q || (x.Book_ID + x.Book_Name + x.Grade + x.Subject + x.Publisher).toLowerCase().includes(q)) && (!f.grade || x.Grade === f.grade) && (!f.type || String(x.School_Types || "").split("،").includes(f.type)) && (!f.pub || x.Publisher === f.pub) && (!f.sub || x.Subject === f.sub) && (!f.st || x.Book_Status === f.st))));
-  exportCSV("قالب_التسعير", ["الكود", "الكتاب", "الصف", "الناشر", "سعر الغلاف", "خصم المكتبة %"], list.map(x => [x.Book_ID, x.Book_Name, x.Grade, x.Publisher, x.Book_Status === "Pricing" ? "" : x.Cover_Price, x.Book_Status === "Pricing" ? "" : x.Supplier_Discount_Pct]));
+  exportCSV("قالب_التسعير", ["الكود", "الكتاب", "الصف", "الناشر", "السعر قبل الخصم", "خصم المكتبة %"], list.map(x => [x.Book_ID, x.Book_Name, x.Grade, x.Publisher, x.Book_Status === "Pricing" ? "" : x.Cover_Price, x.Book_Status === "Pricing" ? "" : x.Supplier_Discount_Pct]));
 });
 const pubsOf = () => [...new Set(A().books.filter(b => b.Book_Status !== "Discontinued").map(b => b.Publisher).filter(Boolean))].sort((a, b) => a.localeCompare(b, "ar"));
 const bpRules = () => { const m = {}; BP.s.rules.forEach(r => { if (r.pct !== "" && r.pct !== undefined) r.pubs.forEach(p => { m[p] = toEnDigits(r.pct); }); }); return m; };
@@ -2589,14 +2589,19 @@ on("cancelBO", async id => {
 // ============================================================ فاتورة المكتبة والجرد
 Router.add("/a/receive", view => {
   if (noPhase(view)) return;
-  const d = A(), sid = Q.sup || (d.suppliers[0] || {}).Supplier_ID, sup = d.suppliers.find(x => x.Supplier_ID === sid) || {};
-  const snaps = {}; d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId).forEach(p => snaps[p.Book_ID] = n(p.Outstanding_Qty));
-  const books = d.books.filter(b => b.Supplier_ID === sup.Supplier_ID)
-    .sort((x, y) => (snaps[y.Book_ID] || 0) - (snaps[x.Book_ID] || 0) || bookSortComparator(x, y, d.catalog));
+  const d = A(), ph = phaseObj(), sid = Q.sup || (d.suppliers[0] || {}).Supplier_ID, sup = d.suppliers.find(x => x.Supplier_ID === sid) || {};
+  const bMap = {}; d.books.forEach(b => bMap[b.Book_ID] = b);
+  const poRows = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId && n(p.Net_Order_To_Supplier_Qty) > 0 && (p.Supplier_ID || (bMap[p.Book_ID] || {}).Supplier_ID) === sup.Supplier_ID);
+  const poMap = {}; poRows.forEach(p => poMap[p.Book_ID] = p);
+  const books = poRows.map(p => bMap[p.Book_ID]).filter(Boolean)
+    .sort((x, y) => (n((poMap[y.Book_ID] || {}).Outstanding_Qty) > 0 ? 1 : 0) - (n((poMap[x.Book_ID] || {}).Outstanding_Qty) > 0 ? 1 : 0)
+      || n((poMap[y.Book_ID] || {}).Outstanding_Qty) - n((poMap[x.Book_ID] || {}).Outstanding_Qty)
+      || bookSortComparator(x, y, d.catalog));
   const canSubmit = can("SUBMIT_SUPPLIER_INVOICE");
   const defVol = sup.Volume_Discount_Pct !== undefined && sup.Volume_Discount_Pct !== "" ? n(sup.Volume_Discount_Pct) : 3;
+  const phaseInvs = d.supInvHeaders.filter(h => h.Phase_ID === APP.phaseId).slice().reverse();
 
-  view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", "أدخل ما وصل فعلياً: السليم يدخل المخزن، والتالف مطالبة على المكتبة · خصم الكمية يُحتسب على إجمالي الفاتورة بنسبة ثابتة قابلة للتعديل")
+  view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", `المرحلة: ${ph.Phase_Name || APP.phaseId} · تظهر فقط الكتب المطلوبة بأمر التوريد خلال هذه المرحلة`)
   + `<section class="card card-pad mb-4">
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div class="col-span-2 lg:col-span-1"><label class="label">المكتبة</label><select class="input" data-change="pickSup">${d.suppliers.map(s => `<option value="${esc(s.Supplier_ID)}" ${s.Supplier_ID === sid ? "selected" : ""}>${esc(s.Supplier_Name)}</option>`).join("")}</select></div>
@@ -2629,18 +2634,19 @@ Router.add("/a/receive", view => {
       </div>
     </div>
 
-  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const o = snaps[b.Book_ID] || 0; return `<article class="card p-4 si-row" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "")).toLowerCase())}">
+  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const po = poMap[b.Book_ID] || {}, o = n(po.Outstanding_Qty), ordTot = n(po.Net_Order_To_Supplier_Qty), recTot = n(po.Received_Qty_To_Date); return `<article class="card p-4 si-row" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "")).toLowerCase())}">
       <div class="flex items-start justify-between gap-2">
         <div class="min-w-0">
           <h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name)}</h3>
           <div class="text-[11.5px] text-slate-500 flex items-center gap-2 mt-0.5"><code class="num font-bold text-brand-700">${esc(b.Book_ID)}</code>${b.Publisher ? `<span>· ${esc(b.Publisher)}</span>` : ""}${b.Grade ? `<span>· ${esc(b.Grade)}</span>` : ""}</div>
+          ${recTot > 0 || po.Line_Status === "Fulfilled" || po.Line_Status === "Cancelled" ? `<div class="text-[11px] text-slate-500 mt-1">أمر التوريد: <b class="num">${ordTot}</b> · مستلم سابقاً: <b class="num text-emerald-700">${recTot}</b>${po.Line_Status === "Cancelled" ? ` · <span class="text-rose-600 font-semibold">ملغى</span>` : ""}</div>` : ""}
         </div>
         <div class="text-left shrink-0"><div class="text-[11px] text-slate-500 font-semibold">المطلوب</div><div class="font-bold text-lg num text-brand-800">${o}</div></div>
       </div>
       <div class="grid grid-cols-4 gap-2 mt-3">
         <div><label class="text-[11px] font-semibold text-emerald-700">سليم</label><input type="number" min="0" class="input input-sm num font-bold text-emerald-800 si-rec" value="${o}" data-input="recalcSI"></div>
         <div><label class="text-[11px] font-semibold text-rose-600">تالف</label><input type="number" min="0" class="input input-sm num font-bold text-rose-700 si-dmg" value="0" data-input="recalcSI"></div>
-        <div><label class="text-[11px] font-semibold text-slate-500">الغلاف</label><input type="number" step="any" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
+        <div><label class="text-[11px] font-semibold text-slate-500">قبل الخصم</label><input type="number" step="any" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
         <div><label class="text-[11px] font-semibold text-slate-500">خصم %</label><input type="number" step="any" class="input input-sm num si-disc" value="${n(b.Supplier_Discount_Pct)}" data-input="recalcSI"></div>
       </div>
       <div class="flex items-center justify-between mt-3 text-[12.5px] border-t border-slate-100 pt-2.5">
@@ -2652,7 +2658,7 @@ Router.add("/a/receive", view => {
         </div>
         <span class="si-var"></span>
       </div></article>`; }).join("")}</div>`
-    : `<div class="card">${UI.empty("truck", "لا توجد كتب لهذه المكتبة")}</div>`}
+    : `<div class="card">${UI.empty("truck", "لا توجد كتب مطلوبة بأمر توريد لهذه المكتبة في المرحلة الحالية", `<button class="btn btn-outline btn-sm" data-go="/a/po">${ic("file-text")} الانتقال لأمر التوريد</button>`)}</div>`}
   <div class="sticky bottom-[calc(4.3rem+env(safe-area-inset-bottom))] md:bottom-4 z-20 mt-4">
     <div class="card p-3.5 sm:p-4 shadow-lift flex flex-wrap items-center gap-x-6 gap-y-2 bg-white/95 backdrop-blur-sm ring-1 ring-brand-200">
       <div class="text-[13px] text-slate-600">بعد خصم الأصناف: <b id="siAfter" class="num text-slate-900 font-bold"></b></div>
@@ -2662,7 +2668,7 @@ Router.add("/a/receive", view => {
       ${canSubmit && books.length ? `<button class="btn btn-success" data-act="submitSI">${ic("clipboard-check")} اعتماد الفاتورة</button>` : ""}
     </div></div>
   <div class="h-4"></div>
-  ${UI.section(`${ic("receipt", "text-brand-600")} فواتير المكتبة المسجلة`, "", UI.table([
+  ${UI.section(`${ic("receipt", "text-brand-600")} فواتير المكتبة المسجلة (${esc(ph.Phase_Name || APP.phaseId)})`, "", UI.table([
     { t: "المرجع", v: h => `<b>${esc(h.Internal_Ref_No)}</b><div class="text-[11.5px] text-slate-400">${esc(h.Supplier_Invoice_No)}</div>` },
     { t: "المرحلة", v: "Phase_ID" },
     { t: "التاريخ", cls: "num", v: h => esc(day(h.Invoice_Date)) },
@@ -2671,7 +2677,7 @@ Router.add("/a/receive", view => {
     { t: "الصافي", cls: "num", v: h => `<b>${fmt(h.Net_Payable_Amount)}</b>` },
     { t: "تالف", cls: "num", v: h => fmt(h.Damaged_Claim_Amount) },
     { t: "الحالة", v: h => esc(h.Status) + (n(h.Variance_Amount) ? ` ${pill("", "فرق " + fmt(h.Variance_Amount), "red")}` : "") }
-  ], d.supInvHeaders.slice().reverse(), { maxH: 420, emptyIcon: "receipt", empty: "لا فواتير مسجلة" }))}`;
+  ], phaseInvs, { maxH: 420, emptyIcon: "receipt", empty: "لا فواتير مسجلة لهذه المرحلة" }))}`;
   recalcSI();
 });
 on("pickSup", v => { Q.sup = v; Shell.rerender(); });
@@ -3326,7 +3332,7 @@ on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEd
 // ============================================================ سجل التعديلات
 const AUD_MOD = { Reservations: "الحجوزات", ReservationItems: "بنود الحجز", Invoices: "الفواتير", Payments: "الإيصالات", Installments: "الأقساط", Catalog: "الكتب", Settings: "الإعدادات", Phases: "المراحل", PO_Snapshot: "طلب التوريد", Supplier_Invoices: "فواتير المكتبة", Supplier: "حساب المكتبة", Suppliers: "المكتبات", Allocation: "التوزيع", Delivery: "التسليم", Returns: "المرتجعات", Inventory: "المخزن", Expenses: "المصروفات", Cash: "الخزينة", Employees: "الموظفون", Auth: "الدخول" };
 const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", DELETE_BOOK: "حذف كتاب من الكتالوج", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", CHANGE_PASSWORD: "تغيير كلمة المرور" };
-const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "إجمالي الغلاف", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "الغلاف", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
+const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "الإجمالي قبل الخصم", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "قبل الخصم", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
 const AUD_TONE = a => /DELETE|VOID|REMOVE|CANCEL/.test(a) ? "red" : /ADJUST|DECREASE|CUSTOM|SET_STATUS|PERMISSION|SETTING/.test(a) ? "amber" : /ON_BEHALF|MANUAL/.test(a) ? "blue" : "green";
 Q.aud = Q.aud || { module: "", q: "", days: 7 };
 async function loadAudit() {

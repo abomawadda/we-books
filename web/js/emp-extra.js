@@ -31,12 +31,12 @@ function savingsCard() {
   return `<section class="card overflow-hidden mb-4" style="background:linear-gradient(135deg,#f0fdf4,#fefce8)"><div class="p-4 sm:p-5 flex items-center gap-4">
     <span class="text-[40px] leading-none">💰</span>
     <div class="flex-1 min-w-0"><div class="text-[12.5px] font-bold text-emerald-700">وفّرت السنة دي</div><div class="font-display font-bold text-[26px] text-emerald-800 num leading-tight">${fmt(Math.round(s.save))} <span class="text-[14px]">ج.م</span></div>
-      <div class="text-[12px] text-slate-500">على ${booksWord(s.books)} · ${Math.round(s.save / s.cover * 100)}% أقل من سعر الغلاف</div></div>
+      <div class="text-[12px] text-slate-500">على ${booksWord(s.books)} · ${Math.round(s.save / s.cover * 100)}% أقل من السعر قبل الخصم</div></div>
     <button class="btn btn-success btn-sm shrink-0" data-act="shareSave">${ic("send")} شارك</button></div></section>`;
 }
 on("shareSave", () => {
   const s = mySavings();
-  const txt = `💰 وفّرت ${fmt(Math.round(s.save))} ج.م على كتب أولادي الخارجية السنة دي (${Math.round(s.save / s.cover * 100)}% أقل من سعر الغلاف) مع مبادرة الكتب المخفضة — ${Brand.get().org} 📚\nنقابتك معاك… من أول كتاب\n${location.origin}`;
+  const txt = `💰 وفّرت ${fmt(Math.round(s.save))} ج.م على كتب أولادي الخارجية السنة دي (${Math.round(s.save / s.cover * 100)}% أقل من السعر قبل الخصم) مع مبادرة الكتب المخفضة — ${Brand.get().org} 📚\nنقابتك معاك… من أول كتاب\n${location.origin}`;
   if (navigator.share) navigator.share({ text: txt }).catch(() => {}); else window.open("https://wa.me/?text=" + encodeURIComponent(txt), "_blank");
 });
 
