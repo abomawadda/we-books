@@ -15,7 +15,7 @@ const Emp = {
   dirty: false,
 
   async load() {
-    const r = await call("GET_EMPLOYEE_PORTAL_DATA", { phaseId: APP.phaseId });
+    const r = await call("GET_EMPLOYEE_PORTAL_DATA", { phaseId: APP.phasePicked ? APP.phaseId : "" });
     if (!r.success) { toast(r.message, "danger"); return; }
     const samePhase = APP.emp && r.activePhase && APP.phaseId === r.activePhase.Phase_ID;
     APP.emp = r; store.set("cache", { t: "EMP", d: r });
