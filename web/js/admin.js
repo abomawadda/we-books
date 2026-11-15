@@ -95,7 +95,8 @@ const phaseObj = () => A().phases.find(p => p.Phase_ID === APP.phaseId) || {};
 const maps = () => ({ e: by(A().employees, "Emp_ID"), b: by(A().books, "Book_ID"), s: by(A().suppliers, "Supplier_ID") });
 const phaseItems = () => A().resItems.filter(i => i.Phase_ID === APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
 const empName = (e, id) => (e[id] || {}).Full_Name || id;
-const bookName = (b, id) => (b[id] || {}).Book_Name || id;
+/** اسم الكتاب + الصف الدراسي (إن لم يكن ضمن الاسم) — يُستخدم في كل التقارير والقوائم */
+const bookName = (b, id) => { const x = b[id] || {}, nm = x.Book_Name || id, g = x.Grade ? Doc.shortGrade(x.Grade) : ""; return g && !nm.includes(g) ? nm + " — " + g : nm; };
 /** «الناشر · المادة · الصف» للكتاب في القوائم */
 const bookMeta = (b, id) => { const x = b[id] || {}, nm = String(x.Book_Name || ""); return [x.Publisher, x.Subject, x.Book_Part, Doc.shortGrade(x.Grade)].filter(v => v && !nm.includes(v)).join(" · "); };
 const bookSub = (b, id, extra) => `<div class="text-[11.5px] text-slate-500 truncate"><span class="num text-brand-700 font-semibold">${esc(id)}</span>${bookMeta(b, id) ? " · " + esc(bookMeta(b, id)) : ""}${extra || ""}</div>`;

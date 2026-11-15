@@ -65,6 +65,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', W =
   await p.waitForTimeout(800);
   for (const r of (process.argv[3] || 'res,collect,delivery,cash,alloc').split(',')) {
     if (r.startsWith('act:')) { const [, act, id] = r.split(':'); await p.evaluate(([a, i]) => ACTIONS[a](i), [act, id]); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${act}-${id}.png`), fullPage: true }); await p.evaluate(() => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); }); continue; }
+    if (r.startsWith('rep:')) { await p.evaluate(x => { Rep.sel = x; location.hash = '#/a/dash'; setTimeout(() => location.hash = '#/a/reports', 50); }, r.slice(4)); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${r.replace(':', '-')}.png`), fullPage: true }); continue; }
     await p.evaluate(h => location.hash = h, '#/a/' + r); await p.waitForTimeout(700);
     await p.screenshot({ path: path.join(OUT, `am-${r.replace(/\//g, '_')}.png`), fullPage: true });
   }

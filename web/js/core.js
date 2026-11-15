@@ -216,21 +216,44 @@ const UI = {
     const foot = opts.foot ? `<tfoot>${opts.foot}</tfoot>` : "";
     const tableHtml = `<div class="${opts.cardsOnMobile === false ? "" : "hidden lg:block"} overflow-auto rounded-2xl ring-1 ring-slate-200/90 bg-white shadow-soft" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="tbl ${opts.tblCls || ""}" ${opts.id ? `id="${opts.id}"` : ""}>${head}${body}${foot}</table></div>`;
     if (opts.cardsOnMobile === false) return tableHtml;
-    // بطاقة الموبايل: عنوان (والكود بجواره) + شارات الحالة أعلى اليسار + سطور «البيان … القيمة» متراصة + الإجراءات أسفل
+    // بطاقة الموبايل: شريط لوني جانبي · الكود فوق العنوان · الكتاب سطر مميّز · الرقم الأهم (القيمة) بارز يساراً ·
+    // الشارات (الحالة/النوع) تحته · باقي البيانات «حبوب» صغيرة متراصة تُخفى الفارغة · التواريخ مختصرة · الإجراءات أسفل
     const isTag = c => /^(الحالة|النوع|الوسيلة|حالة)/.test(String(c.t));
+    const isHero = c => /^(القيمة|المبلغ|الإجمالي|الصافي|المتبقي|المتأخر|إجمالي|صافي|الرصيد)/.test(String(c.t));
+    const isBook = c => /^(الكتاب|البيان)$/.test(String(c.t));
+    const empty = v => /^<span class="text-slate-300">—<\/span>$/.test(v) || !String(v).replace(/<[^>]+>/g, "").trim();
+    const shortDt = v => String(v).replace(/(\d{4})-(\d\d)-(\d\d)[ T](\d\d:\d\d)(:\d\d(\.\d+)?)?/g, (_, y, m, d, t) => `${+d}/${+m}/${y.slice(2)} · ${t}`);
+    const inl = v => shortDt(v).replace(/<div/g, "<span").replace(/<\/div>/g, "</span> ");
     const card = opts.card || (r => {
       const vis = cols.filter(c => !c.noCard && !c.actions), act = cols.find(c => c.actions);
       let [first, ...rest] = vis, code = "";
-      if (rest.length && /^(الكود|الرقم|رقم|#|المستند|الإيصال)$/.test(String(first.t)) && !isTag(rest[0])) { code = cell(first, r); first = rest.shift(); }
-      const tags = rest.filter(isTag), kv = rest.filter(c => !isTag(c));
+      if (rest.length && /^(الكود|الرقم|رقم|#|المستند|الإيصال|الفاتورة)$/.test(String(first.t)) && !isTag(rest[0])) { code = cell(first, r); first = rest.shift(); }
+      const tags = rest.filter(isTag), hero = rest.find(isHero), book = rest.find(c => isBook(c) && c !== first);
+      const others = rest.filter(c => !isTag(c) && c !== hero && c !== book);
       const rCls = typeof opts.rowCls === "function" ? opts.rowCls(r) : "";
-      return `<div class="card p-3 ${/loss|late|danger/.test(rCls) ? "ring-1 ring-rose-200" : ""}">
-        <div class="flex items-start gap-2"><div class="flex-1 min-w-0 font-bold text-slate-900 text-[14px] leading-snug">${code ? `<div class="mb-1">${code}</div>` : ""}${cell(first, r)}</div>${tags.length ? `<div class="shrink-0 flex flex-col items-end gap-1 text-[12px]">${tags.map(c => cell(c, r)).join("")}</div>` : ""}</div>
-        ${kv.length ? `<div class="grid grid-cols-2 gap-1.5 mt-2.5">${kv.map(c => { const v = cell(c, r); if (/^<span class="text-slate-300">—<\/span>$/.test(v)) return ""; const wide = c.cardWide || v.replace(/<[^>]+>/g, "").trim().length > 26;
-          return `<div class="rounded-xl bg-slate-50 px-2.5 py-1.5 min-w-0 ${wide ? "col-span-2" : ""}"><div class="text-[10.5px] text-slate-500 leading-tight">${c.t}</div><div class="text-[13px] font-semibold text-slate-800 num mt-0.5 [overflow-wrap:anywhere]">${v}</div></div>`; }).join("")}</div>` : ""}
-        ${act ? `<div class="flex flex-wrap items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100">${cell(act, r)}</div>` : ""}</div>`;
+      const bad = /loss|late|danger|red/.test(rCls);
+      const chips = [], blocks = [];
+      others.forEach(c => { const v = cell(c, r); if (empty(v)) return; const txt = v.replace(/<[^>]+>/g, "").trim();
+        if (c.cardWide || txt.length > 34) blocks.push(`<div class="mt-2 rounded-xl bg-slate-50/80 ring-1 ring-slate-100 px-2.5 py-2"><div class="text-[10.5px] font-semibold text-slate-400 mb-0.5">${c.t}</div><div class="text-[12.5px] text-slate-700 [overflow-wrap:anywhere]">${shortDt(v)}</div></div>`);
+        else chips.push(`<span class="inline-flex items-baseline gap-1 rounded-lg bg-slate-50 ring-1 ring-slate-200/70 px-2 py-1 text-[11.5px] leading-tight max-w-full"><span class="text-slate-400 shrink-0">${c.t}</span><b class="font-semibold text-slate-800 num [overflow-wrap:anywhere]">${inl(v)}</b></span>`); });
+      const hv = hero ? cell(hero, r) : "";
+      return `<article class="relative overflow-hidden rounded-2xl bg-white ring-1 ${bad ? "ring-rose-200" : "ring-slate-200/80"} shadow-[0_1px_2px_rgba(15,23,42,.04),0_6px_16px_-8px_rgba(76,29,149,.18)] p-3 pr-4">
+        <span class="absolute right-0 inset-y-0 w-1 ${bad ? "bg-rose-400" : "bg-gradient-to-b from-brand-500 via-brand-400 to-gold-400"}"></span>
+        <div class="flex items-start gap-3">
+          <div class="flex-1 min-w-0">
+            ${code ? `<div class="text-[11px] text-slate-400 mb-0.5 text-right [&_*]:!text-[11px]" dir="rtl">${code}</div>` : ""}
+            <div class="font-bold text-[14.5px] text-slate-900 leading-snug [overflow-wrap:anywhere]">${cell(first, r)}</div>
+            ${book && !empty(cell(book, r)) ? `<div class="mt-1.5 flex items-start gap-1.5 text-[13px] font-semibold text-brand-900 leading-snug">${ic("book-open", "!w-4 !h-4 mt-0.5 text-brand-500 shrink-0")}<span class="min-w-0 [overflow-wrap:anywhere]">${cell(book, r)}</span></div>` : ""}
+          </div>
+          ${hero && !empty(hv) || tags.length ? `<div class="shrink-0 flex flex-col items-end gap-1 text-left">${hero && !empty(hv) ? `<div class="text-[10px] font-semibold text-slate-400">${hero.t}</div><div class="font-display font-bold text-[18px] leading-none text-brand-800 num">${hv}</div>` : ""}${tags.map(c => `<div class="text-[11.5px]">${cell(c, r)}</div>`).join("")}</div>` : ""}
+        </div>
+        ${chips.length ? `<div class="flex flex-wrap gap-1.5 mt-2.5">${chips.join("")}</div>` : ""}
+        ${(() => { const pc = cols.find(c => /^المسدد/.test(String(c.t))); if (!pc || !hero) return ""; const num = v => +String(v).replace(/<[^>]+>/g, "").replace(/[^\d.\-]/g, "") || 0; const tot = num(hv), pd = num(cell(pc, r)); if (!(tot > 0)) return "";
+          const pct = Math.max(0, Math.min(100, Math.round(pd / tot * 100))); return `<div class="mt-2.5 flex items-center gap-2"><div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full ${pct >= 100 ? "bg-emerald-500" : "bg-gradient-to-l from-brand-500 to-gold-400"}" style="width:${pct}%"></div></div><span class="text-[10.5px] font-bold num ${pct >= 100 ? "text-emerald-600" : "text-slate-500"}">${pct}%</span></div>`; })()}
+        ${blocks.join("")}
+        ${act ? `<div class="flex flex-wrap items-center justify-end gap-1.5 mt-2.5 pt-2.5 border-t border-dashed border-slate-200">${cell(act, r)}</div>` : ""}</article>`;
     });
-    return tableHtml + `<div class="lg:hidden grid gap-2.5 sm:grid-cols-2">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
+    return tableHtml + `<div class="lg:hidden grid gap-2 sm:grid-cols-2">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
   },
   progress(pct, tone) {
     return `<div class="h-2 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full ${tone || "bg-brand-600"} transition-all" style="width:${Math.max(0, Math.min(100, pct))}%"></div></div>`;
