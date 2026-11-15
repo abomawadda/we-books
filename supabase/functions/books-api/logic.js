@@ -157,7 +157,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
-    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By"] },
+    { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request"] },
     { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
@@ -611,6 +611,8 @@ const ACTION_ACL = {
   GET_EMPLOYEE_PORTAL_DATA: ["EMPLOYEE"],
   SAVE_MY_KIDS: ["EMPLOYEE"],
   WAITLIST_DECISION: ["EMPLOYEE", "Coordinator"],
+  EMP_CANCEL_REQUEST: ["EMPLOYEE"],
+  RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
   CHANGE_PASSWORD: ADMIN_ROLES,
   GET_ADMIN_DASHBOARD_DATA: ADMIN_ROLES,
@@ -696,6 +698,8 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_EMPLOYEE_PORTAL_DATA": return E.getEmployeePortalData(session.empId, payload.phaseId);
       case "SAVE_MY_KIDS": return E.saveMyKids(session.empId, payload.kids);
       case "WAITLIST_DECISION": return E.waitlistDecision(session, payload);
+      case "EMP_CANCEL_REQUEST": return E.empCancelRequest(session, payload);
+      case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
       case "CHANGE_PASSWORD": return AuthEngine.changePassword(session, payload.oldPassword, payload.newPassword);
       case "GET_ADMIN_DASHBOARD_DATA": return E.getAdminDashboardFullData();
@@ -965,8 +969,9 @@ const OperationsEngine = {
   },
   getEmployeePortalData: function(empId, phaseId) {
     const S = this.S();
+    const frozenPh = {}; DB_Engine.getAllRecords(S.PO_SNAPSHOT).forEach(x => { frozenPh[Util.str(x.Phase_ID)] = true; });
     const phases = DB_Engine.getAllRecords(S.PHASES).filter(p => p.Phase_Status !== "Draft")
-      .map(p => Object.assign(p, { Effective_Status: this.effectiveStatus_(p), Booking_Open: this.isBookingOpen_(p) }));
+      .map(p => Object.assign(p, { Effective_Status: this.effectiveStatus_(p), Booking_Open: this.isBookingOpen_(p), Po_Frozen: !!frozenPh[Util.str(p.Phase_ID)] }));
     const active = (phaseId && phases.find(p => Util.str(p.Phase_ID) === Util.str(phaseId)))
       || phases.find(p => p.Booking_Open) || phases[phases.length - 1] || null;
     const resItems = DB_Engine.getAllRecords(S.RES_ITEMS);
@@ -2370,6 +2375,66 @@ const OperationsEngine = {
       }
       DB_Engine.logAudit(session.userId, session.role, "Allocation", "RUN_FIFO", phaseId, null, stats);
       return { success: true, message: "تم التوزيع بالأسبقية: مكتمل " + stats.full + " | جزئي " + stats.partial + " | انتظار " + stats.waiting + ". وتم تحديث فواتير الموظفين." };
+    });
+  },
+
+  /**
+   * إلغاء الموظف لطلبه بعد إرساله — حسب مرحلة الطلب بما لا يمس الحسابات:
+   *  - الحجز مفتوح أو مغلق ولم يُجمَّد طلب التوريد: إلغاء فوري (لا أثر مالي ولا توريد).
+   *  - بعد طلب التوريد/أثناء التسليم: «طلب إلغاء» يعتمده المسؤول؛ يُلغى غير المُسلَّم فقط، والمُسلَّم يُعالَج كمرتجع.
+   */
+  empCancelRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId), phase = this.getPhase_(payload.phaseId), pid = Util.str(phase.Phase_ID);
+      Util.require(phase.Phase_Status !== "Completed", "المرحلة دي اتقفلت خلاص — كلّم المسؤول لو محتاج مرتجع.");
+      const items = DB_Engine.getAllRecords(S.RES_ITEMS), mine = items.filter(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === pid && !this.isCancelledItem_(i));
+      const undelivered = mine.reduce((s, i) => s + Math.max(0, Util.num(i.Requested_Qty) - Util.num(i.Delivered_Qty)), 0);
+      Util.require(undelivered > 0, "مفيش كتب لسه ما استلمتهاش عشان تتلغي — المُستلَم يتعامل كمرتجع.");
+      const headers = DB_Engine.getAllRecords(S.RES_HEADER), h = headers.find(x => Util.str(x.Emp_ID) === empId && Util.str(x.Phase_ID) === pid);
+      Util.require(h, "مفيش حجز في المرحلة دي.");
+      const frozen = DB_Engine.getAllRecords(S.PO_SNAPSHOT).some(p => Util.str(p.Phase_ID) === pid);
+      const reason = Util.str(payload.reason).slice(0, 200) || "بدون سبب";
+      if (this.isBookingOpen_(phase) || !frozen) {
+        this.applyEmpCancel_(empId, pid, "ألغى الموظف طلبه: " + reason);
+        DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Cancel_Request: JSON.stringify({ at: Util.now(), reason: reason, status: "Done", by: "employee" }), Last_Modified_At: Util.nowPrecise() });
+        DB_Engine.logAudit(empId, "Employee", "Reservations", "EMP_CANCEL", h.Res_ID, null, { reason: reason, immediate: true });
+        return { success: true, immediate: true, message: "اتلغى طلبك في «" + phase.Phase_Name + "» 👌" };
+      }
+      const cur = (() => { try { return JSON.parse(h.Cancel_Request || "null"); } catch (e) { return null; } })();
+      Util.require(!(cur && cur.status === "Pending"), "طلب الإلغاء متسجّل قبل كده ومستني المسؤول.");
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Cancel_Request: JSON.stringify({ at: Util.now(), reason: reason, status: "Pending", by: "employee" }) });
+      DB_Engine.logAudit(empId, "Employee", "Reservations", "EMP_CANCEL_REQUEST", h.Res_ID, null, { reason: reason });
+      return { success: true, immediate: false, message: "طلب الإلغاء وصل للمسؤول ✅ — هيراجعه ويبلغك." };
+    });
+  },
+  /** إلغاء غير المُسلَّم من بنود الموظف في مرحلة (المخصص يتحرر لغيره، والفاتورة تُعاد حسابها؛ الزيادة المدفوعة تصبح رصيداً مستحق الرد) */
+  applyEmpCancel_: function(empId, pid, note) {
+    const S = this.S(), all = DB_Engine.getAllRecords(S.RES_ITEMS);
+    all.filter(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === pid && !this.isCancelledItem_(i)).forEach(i => {
+      const dl = Util.num(i.Delivered_Qty), before = Util.num(i.Requested_Qty);
+      if (before <= dl) return;
+      i.Requested_Qty = dl; i.Allocated_Qty = Math.min(Util.num(i.Allocated_Qty), dl);
+      i.Allocation_Status = dl === 0 ? "Cancelled_By_Employee" : "Fully_Allocated";
+      i.Unallocated_Reason = note;
+      i.Net_Billable_Qty = Math.max(Util.num(i.Allocated_Qty), dl) - Util.num(i.Returned_Qty);
+      i.Total_Emp_Line_Amount = i.Net_Billable_Qty * Util.num(i.Unit_Emp_Price);
+      DB_Engine.insertRecordsBatch(S.RES_AUDIT, [{ Log_ID: "RLOG-" + new Date().getTime() + "-" + i.Book_ID, Res_ID: i.Res_ID, Emp_ID: empId, Book_ID: i.Book_ID, Action_Type: "EMP_CANCEL", Old_Qty: before, New_Qty: dl, Priority_Timestamp_Applied: i.Priority_Timestamp, Action_Timestamp: Util.nowPrecise(), Rule_Applied: note }]);
+    });
+    DB_Engine.overwriteTableData(S.RES_ITEMS, all);
+    this.syncEmployeeInvoicesForPhase_(pid);
+  },
+  resolveCancelRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(payload.empId), pid = Util.str(payload.phaseId);
+      const h = DB_Engine.getAllRecords(S.RES_HEADER).find(x => Util.str(x.Emp_ID) === empId && Util.str(x.Phase_ID) === pid);
+      Util.require(h, "الحجز غير موجود.");
+      const cur = (() => { try { return JSON.parse(h.Cancel_Request || "null"); } catch (e) { return null; } })();
+      Util.require(cur && cur.status === "Pending", "لا يوجد طلب إلغاء معلّق.");
+      const ok = !!payload.approve;
+      if (ok) this.applyEmpCancel_(empId, pid, "اعتمد المسؤول إلغاء الموظف: " + cur.reason);
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Cancel_Request: JSON.stringify(Object.assign(cur, { status: ok ? "Approved" : "Rejected", by: Util.actor(session), resolvedAt: Util.now(), note: Util.str(payload.note).slice(0, 200) })) });
+      DB_Engine.logAudit(session.userId, session.role, "Reservations", ok ? "APPROVE_CANCEL" : "REJECT_CANCEL", h.Res_ID, null, { note: payload.note });
+      return { success: true, message: ok ? "تم اعتماد الإلغاء: أُلغي غير المُسلَّم وأُعيد حساب الفاتورة (أي زيادة مدفوعة أصبحت رصيداً مستحق الرد)." : "تم رفض طلب الإلغاء." };
     });
   },
 

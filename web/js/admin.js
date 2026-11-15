@@ -257,7 +257,7 @@ Router.add("/a/dash", view => {
       <span class="mt-2 text-[10.5px] sm:text-xs font-semibold leading-tight ${i <= cur ? "text-white" : "text-brand-300"}">${s[1]}</span></li>`).join("")}</ol>
   </section>
 
-  ${todayStrip()}${readinessBox()}${pricingPriority()}${watchBox()}
+  ${todayStrip()}${typeof cancelReqBox === "function" ? cancelReqBox() : ""}${readinessBox()}${pricingPriority()}${watchBox()}
   <div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mt-4 sm:mt-6">
     ${UI.kpi("الموظفون الحاجزون", fmt(people), { icon: "users", tone: "brand", foot: `${fmt(d.employees.length)} موظف مسجل` })}
     ${UI.kpi("النسخ المحجوزة", fmt(req), { icon: "book-open", tone: "blue", foot: `مخصص ${fmt(al)} · مُسلَّم ${fmt(dl)}`, pct: req ? dl / req * 100 : 0 })}
@@ -2983,7 +2983,7 @@ function allocTable() {
   const items = phaseItems().filter(i => (!f || (f === "wait" ? n(i.Requested_Qty) > n(i.Allocated_Qty) : i.Allocation_Status === f)) && (!q || (bookName(b, i.Book_ID) + i.Book_ID + i.Emp_ID + empName(e, i.Emp_ID)).toLowerCase().includes(q)))
     .sort((x, y) => (x.Book_ID + x.Priority_Timestamp).localeCompare(y.Book_ID + y.Priority_Timestamp));
   return UI.table([
-    { t: "الكتاب", v: i => `<b>${esc(bookName(b, i.Book_ID))}</b>${bookSub(b, i.Book_ID)}` },
+    { t: "الكتاب", v: i => `<b>${esc(bookName(b, i.Book_ID))}</b>${carriedTag(i)}${bookSub(b, i.Book_ID)}` },
     { t: "الموظف", v: i => `${esc(empName(e, i.Emp_ID))} <span class="text-slate-400 text-xs">(${esc(i.Emp_ID)})</span>` },
     { t: "الأسبقية", cls: "num", v: i => `<span dir="ltr" class="text-xs">${esc(i.Priority_Timestamp)}</span>${n(i.Tranche_No) > 1 ? ` <span class="pill pill-gray">ش${esc(i.Tranche_No)}</span>` : ""}${i.Carried_From_Item_ID ? ` <span class="pill pill-blue">مُرحَّل</span>` : ""}` },
     { t: "محجوز", cls: "num", v: i => fmt(i.Requested_Qty) }, { t: "مخصص", cls: "num", v: i => `<b class="text-brand-800">${fmt(i.Allocated_Qty)}</b>` }, { t: "مُسلَّم", cls: "num", v: i => fmt(i.Delivered_Qty) },
@@ -3530,7 +3530,7 @@ function epBody(id) {
 
   const resCols = [
     { t: "الكود", cls: "whitespace-nowrap", v: i => `<span class="inline-flex items-center rounded-lg bg-brand-50 text-brand-800 ring-1 ring-brand-200/80 px-2 py-0.5 text-[12px] font-bold num" dir="ltr">${esc(i.Book_ID)}</span>` },
-    { t: "الكتاب", v: i => { const meta = bookMeta(b, i.Book_ID), child = itemChildLabel(kids, b[i.Book_ID], i); return `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(bookName(b, i.Book_ID))}</div>${(meta || i.Beneficiary || child) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${meta ? `<span>${esc(meta)}</span>` : ""}${i.Beneficiary ? `<span class="pill pill-blue !text-[10.5px]">لـ ${esc(i.Beneficiary)}</span>` : child ? `<span class="pill pill-brand !text-[10.5px]">لـ ${esc(child)}</span>` : ""}</div>` : ""}</div>`; } },
+    { t: "الكتاب", v: i => { const meta = bookMeta(b, i.Book_ID), child = itemChildLabel(kids, b[i.Book_ID], i); return `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(bookName(b, i.Book_ID))}${carriedTag(i)}</div>${(meta || i.Beneficiary || child) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${meta ? `<span>${esc(meta)}</span>` : ""}${i.Beneficiary ? `<span class="pill pill-blue !text-[10.5px]">لـ ${esc(i.Beneficiary)}</span>` : child ? `<span class="pill pill-brand !text-[10.5px]">لـ ${esc(child)}</span>` : ""}</div>` : ""}</div>`; } },
     { t: "تاريخ ووقت الحجز", cls: "whitespace-nowrap num", v: i => { const s = String(dt(i.Priority_Timestamp) || "").trim(); const parts = s.split(/\s+/); return parts.length >= 2 ? `<div dir="ltr" class="inline-flex flex-col items-end"><span class="text-[12.5px] font-semibold text-slate-700">${esc(parts[0])}</span><span class="text-[11px] text-slate-400">${esc(parts.slice(1).join(" "))}</span></div>` : `<span dir="ltr" class="text-[12px] text-slate-600">${esc(s || "—")}</span>`; } },
     { t: "الكمية", cls: "whitespace-nowrap num", v: i => `<div class="font-bold text-slate-800">${fmt(i.Requested_Qty)} <span class="font-normal text-[11.5px] text-slate-500">نسخة</span></div>${n(i.Delivered_Qty) ? `<div class="text-[11px] text-emerald-600">سُلّم ${fmt(i.Delivered_Qty)}</div>` : n(i.Allocated_Qty) ? `<div class="text-[11px] text-sky-600">مخصص ${fmt(i.Allocated_Qty)}</div>` : ""}` },
     { t: "الإجمالي", cls: "whitespace-nowrap num", v: i => { const amt = n(i.Total_Emp_Line_Amount) || (n(i.Unit_Emp_Price) * n(i.Requested_Qty)); return amt > 0 ? `<span class="font-bold text-slate-800">${fmt(amt)}</span> <span class="text-[11px] text-slate-400">ج.م</span>` : `<span class="text-[11.5px] text-slate-400">—</span>`; } },
