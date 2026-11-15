@@ -1030,6 +1030,7 @@ const OperationsEngine = {
       settings: DB_Engine.getAllRecords(S.SETTINGS),
       settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
+      users: DB_Engine.getAllRecords(S.USERS).map(u => ({ User_ID: u.User_ID, Username: u.Username, Role: u.Role, Is_Active: u.Is_Active, Must_Change_Password: u.Must_Change_Password, Last_Login: u.Last_Login })),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
       books: (() => {
         const main = this.mainSupplier_(), mid = main ? Util.str(main.Supplier_ID) : "";
@@ -1352,7 +1353,7 @@ const OperationsEngine = {
       const key = Util.str(payload.key);
       let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === key);
       // إعدادات أُضيفت بعد التشغيل: تُنشأ عند أول حفظ
-      const LATE = { PAY_INSTAPAY_LINK: ["STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"], PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
+      const LATE = { RESET_LOCKED: ["BOOLEAN", "قفل زر تصفير البيانات بعد الإطلاق"], PAY_INSTAPAY_LINK: ["STRING", "رابط الدفع من تطبيق إنستاباي (ipn.eg) يفتح التطبيق مباشرة"], PAY_INSTAPAY: ["STRING", "عنوان/رقم إنستاباي لتحويل الأقساط"], PAY_WALLET: ["STRING", "رقم المحفظة الإلكترونية لتحويل الأقساط"], PICKUP_SCHEDULE: ["STRING", "مواعيد الاستلام (JSON)"], BOOK_GRADES: ["JSON", "صفوف دراسية إضافية"] };
       if (!row && LATE[key]) { row = { Setting_Key: key, Setting_Value: "", Data_Type: LATE[key][0], Description: LATE[key][1] }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       Util.require(row, "إعداد غير معروف: " + key);
       if ((key === "PICKUP_SCHEDULE" || key === "BOOK_GRADES") && Util.str(payload.value)) { try { JSON.parse(payload.value); } catch (e) { Util.require(false, "صيغة البيانات غير صحيحة."); } }
@@ -1960,6 +1961,7 @@ const OperationsEngine = {
    */
   resetOperationalData: function(session, payload) {
     Util.require(session && session.role === "Admin" && Util.str(session.userId) === "USR-01", "هذه العملية لمدير المنظومة فقط.");
+    Util.require(!Util.bool(getSettings_().RESET_LOCKED), "التصفير مقفول بعد الإطلاق (إعداد RESET_LOCKED).");
     Util.require(Util.str(payload && payload.confirm) === "تصفير", "اكتب كلمة «تصفير» للتأكيد.");
     return DB_Engine.executeWithLock(() => {
       const S = this.S();

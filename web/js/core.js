@@ -98,6 +98,7 @@ function toast(msg, type) {
 }
 
 // ---------------------------------------------------------------- الاتصال بالخادم
+const BUSY_MSG = "المنصة عليها ضغط كبير دلوقتي ⏳ — جرّب كمان شوية";
 function call(action, payload, opts) {
   opts = opts || {};
   busy(true, opts.block ? true : undefined);
@@ -111,24 +112,30 @@ function call(action, payload, opts) {
   const SAFE_RETRY = /^(LOGIN_|GET_|SUBMIT_OR_UPDATE_RESERVATION$)/.test(action);
   const once = () => {
     const ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
-    const timer = setTimeout(() => ctrl && ctrl.abort(), 60000);
+    const timer = setTimeout(() => ctrl && ctrl.abort(), SAFE_RETRY ? 35000 : 60000);
     return fetch(API_URL, {
       method: "POST", redirect: "follow", signal: ctrl ? ctrl.signal : undefined,
       headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify({ action, payload: payload || {}, token: APP.token })
     }).then(r => r.text()).then(t => {
       clearTimeout(timer);
-      try { return JSON.parse(t); } catch (e) { return { success: false, retryable: true, message: "رد غير متوقع من الخادم. حاول مرة أخرى." }; }
+      let j; try { j = JSON.parse(t); } catch (e) { return { success: false, retryable: true, overload: true, message: BUSY_MSG }; }
+      // الخادم مزدحم (حدود الخطة): نعيد المحاولة بهدوء بدل إظهار خطأ تقني
+      if (j && !j.success && /compute resources|idle timeout|Function failed|WORKER_LIMIT|too many/i.test(String(j.message || j.msg || j.error || ""))) return { success: false, retryable: true, overload: true, message: BUSY_MSG };
+      return j;
     }).catch(err => {
       clearTimeout(timer);
+      if (err && err.name === "AbortError" && SAFE_RETRY) return { success: false, retryable: true, overload: true, message: BUSY_MSG };
       return { success: false, retryable: !(err && err.name === "AbortError"), message: err && err.name === "AbortError" ? "انتهت مهلة الاتصال بالخادم. تحقق من الإنترنت وحاول مرة أخرى." : "تعذر الاتصال بالخادم. تحقق من الإنترنت." };
     });
   };
   const attempt = async () => {
     let r;
-    for (let i = 0; i < (SAFE_RETRY ? 4 : 1); i++) {
-      if (i) await new Promise(res => setTimeout(res, 700 * Math.pow(2, i - 1) * (0.5 + Math.random())));
+    let warned = false;
+    for (let i = 0; i < (SAFE_RETRY ? 6 : 1); i++) {
+      if (i) await new Promise(res => setTimeout(res, (r && r.overload ? Math.min(30000, 3000 * Math.pow(2, i - 1)) : 700 * Math.pow(2, i - 1)) * (0.5 + Math.random())));
       r = await once();
+      if (r.overload && !warned && typeof toast === "function") { warned = true; toast("زحمة على المنصة دلوقتي ⏳ — بنعيد المحاولة لوحدنا، خليك مكانك", "warning"); }
       if (r.success || !r.retryable) break;
     }
     if (r) delete r.retryable;
@@ -492,7 +499,7 @@ const Offline = {
   QUEUE: ["SUBMIT_OR_UPDATE_RESERVATION", "SAVE_MY_KIDS", "WAITLIST_DECISION", "EMP_CANCEL_REQUEST", "EMP_RETURN_REQUEST"],
   LAST_WINS: ["SUBMIT_OR_UPDATE_RESERVATION", "SAVE_MY_KIDS"],
   who() { const u = APP.user || {}; return u.empId || u.userId || "anon"; },
-  netFail(r) { return !!(r && !r.success && /تعذر الاتصال|انتهت مهلة/.test(r.message || "")); },
+  netFail(r) { return !!(r && !r.success && /تعذر الاتصال|انتهت مهلة|ضغط كبير/.test(r.message || "")); },
   ck(action, payload) { return "wb_c_" + Offline.who() + "_" + action + "_" + JSON.stringify(payload || {}); },
   save(action, payload, r) { try { localStorage.setItem(Offline.ck(action, payload), JSON.stringify({ at: Date.now(), r })); } catch (_) { Offline.prune(); } },
   load(action, payload) { try { return JSON.parse(localStorage.getItem(Offline.ck(action, payload)) || "null"); } catch (_) { return null; } },
@@ -537,7 +544,7 @@ call = async function (action, payload, opts) {
   if (isGet && r && r.success) Offline.save(action, payload, r);
   if (Offline.netFail(r)) {
     if (isGet) { const c = Offline.load(action, payload); if (c) { Offline.bar(); return Object.assign({}, c.r, { offline: true, cachedAt: c.at }); } }
-    if (Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, message: "النت فاصل — اتحفظ على جهازك وهيتبعت لوحده أول ما يرجع 📴" }; }
+    if (Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, busy: /ضغط/.test(r.message || ""), message: /ضغط/.test(r.message || "") ? "المنصة عليها زحمة — حجزك اتحفظ على جهازك وهيتبعت لوحده خلال دقايق ⏳ (أسبقيتك بتتحسب لحظة وصوله)" : "النت فاصل — اتحفظ على جهازك وهيتبعت لوحده أول ما يرجع 📴" }; }
     if (!isGet && !/^LOGIN_/.test(action)) r.message = "مفيش إنترنت — العملية دي لازم تتم والنت شغال (مش بتتأجل حفاظاً على الحسابات).";
   }
   return r;
@@ -546,3 +553,29 @@ window.addEventListener("online", () => { Offline.bar(); Offline.flush(); });
 window.addEventListener("offline", () => Offline.bar());
 setTimeout(() => { Offline.bar(); Offline.flush(); }, 1500);
 setInterval(() => Offline.flush(), 60000);
+
+// ================================================================ مسار الحجز (funnel) + أخطاء الموظفين لغرفة المتابعة
+// إرسال خفيف بلا انتظار: كل خطوة مرة واحدة في الجلسة، والأخطاء بنصها المختصر
+const Track = {
+  sent: {},
+  send(step, detail, tok) {
+    try {
+      if (!API_URL || (APP.user && (APP.user.userType === "ADMIN" || APP.user._proxy))) return;
+      if (!/^err/.test(step)) { if (Track.sent[step]) return; Track.sent[step] = 1; }
+      fetch(API_URL, { method: "POST", headers: { "Content-Type": "text/plain;charset=utf-8" }, keepalive: true,
+        body: JSON.stringify({ action: "TRACK", payload: { step, detail: String(detail || "").slice(0, 200) }, token: tok || APP.token }) }).catch(() => {});
+    } catch (_) {}
+  }
+};
+const _callTrack = call;
+call = async function (action, payload, opts) {
+  const r = await _callTrack(action, payload, opts);
+  if (action === "TRACK") return r;
+  try {
+    if (action === "LOGIN_EMPLOYEE") { if (r.success) Track.send("login", "", r.sessionToken); else Track.send("err:login", r.message); }
+    else if (action === "GET_EMPLOYEE_PORTAL_DATA" && r.success && !r.offline) Track.send("portal");
+    else if (action === "SUBMIT_OR_UPDATE_RESERVATION") { if (r.success && !r.queued) Track.send("submit"); else if (!r.success) Track.send("err:submit", r.message); else Track.send("err:queued", r.message); }
+    if (!r.success && /ضغط كبير/.test(r.message || "")) Track.send("err:busy", action);
+  } catch (_) {}
+  return r;
+};
