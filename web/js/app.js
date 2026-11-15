@@ -55,29 +55,34 @@ const Shell = {
     document.title = APP.title;
     const tab = Shell.loginTab || "emp"; // تبدأ دائماً بدخول الموظفين
     $("#app").innerHTML = `
-    <div class="min-h-[100dvh] mesh text-white lg:grid lg:grid-cols-[1.1fr_1fr]">
-      <aside class="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden">
+    <div class="min-h-[100dvh] mesh text-white lg:grid lg:grid-cols-[1.05fr_1fr] overflow-x-hidden">
+      <aside class="relative hidden lg:flex flex-col justify-between p-8 xl:p-12 overflow-hidden">
         <div class="absolute -left-24 -bottom-24 w-[28rem] h-[28rem] rounded-full border border-white/10"></div>
         <div class="absolute -left-10 -bottom-10 w-[20rem] h-[20rem] rounded-full border border-white/10"></div>
         <div class="flex items-center justify-between gap-3">${Brand.logo("we", "w-14 h-14")}<div class="text-center"><div class="text-sm text-brand-200">${esc(Brand.get().org)}</div><div class="font-display font-bold text-lg">${esc(Brand.get().platform)}</div></div>${Brand.logo("union", "w-14 h-14")}</div>
         <div class="max-w-md">
-          <h2 class="text-4xl font-bold leading-[1.35]">كتب أبنائك الخارجية<br><span class="text-gold-300">بخصم حقيقي وتقسيط مريح</span></h2>
-          <p class="text-brand-100/80 mt-4 leading-relaxed">احجز من الكتالوج، وتابع التوزيع بأسبقية الحجز، واستلم وسدد على أقساط شهرية بشفافية كاملة.</p>
-          <ul class="mt-8 space-y-3 text-[15px]">
+          <h2 class="text-3xl xl:text-4xl font-bold leading-[1.35]">كتب أبنائك الخارجية<br><span class="text-gold-300">بخصم حقيقي وتقسيط مريح</span></h2>
+          <p class="text-brand-100/80 mt-3 leading-relaxed">احجز من الكتالوج، وتابع التوزيع بأسبقية الحجز، واستلم وسدد على أقساط شهرية بشفافية كاملة.</p>
+          <ul class="mt-6 space-y-2.5 text-[14.5px]">
             ${[["badge-percent", "خصم موحد للعاملين على سعر الغلاف"], ["list-ordered", "توزيع عادل بأسبقية كل كتاب"], ["calendar-check", "مقدم عند الاستلام وأقساط شهرية"], ["shield-check", "إيصالات ومستندات موثقة لكل حركة"]].map(x => `<li class="flex items-center gap-3"><span class="w-9 h-9 rounded-xl bg-white/10 flex items-center justify-center text-gold-300">${ic(x[0])}</span>${x[1]}</li>`).join("")}
           </ul>
         </div>
         <div class="text-xs text-brand-200/70">© ${new Date().getFullYear()} · ${esc(Brand.get().org)}${Brand.get().credit ? " · " + esc(Brand.get().credit) : ""}</div>
       </aside>
 
-      <main class="glass flex flex-col min-h-[100dvh] lg:justify-center lg:px-16">
-        <div class="lg:hidden px-6 pt-[max(2.75rem,env(safe-area-inset-top))] pb-6 text-center">
-          <div class="flex items-center justify-between">${Brand.logo("we", "w-16 h-16")}<div class="text-brand-200 text-[13px] font-semibold">${esc(Brand.get().org)}</div>${Brand.logo("union", "w-16 h-16")}</div>
-          <h1 class="mt-5 text-[25px] font-bold leading-snug">${esc(Brand.get().platform)}</h1>
-          <p class="text-brand-200 text-[13.5px] mt-1.5">كتب أولادك بخصم حقيقي وتقسيط مريح 📚</p>
+      <main class="glass flex flex-col min-h-[100dvh] lg:justify-center lg:px-10 xl:px-16 lg:py-4 min-w-0">
+        <div id="lgMobHead" class="lg:hidden px-4 sm:px-6 pt-[max(.9rem,env(safe-area-inset-top))] pb-3 border-b border-white/10">
+          <div class="flex items-center justify-between gap-2 max-w-md mx-auto">
+            ${Brand.logo("we", "w-11 h-11 shrink-0")}
+            <div class="min-w-0 text-center">
+              <div class="font-display font-bold text-[15px] sm:text-[17px] leading-tight truncate text-white">${esc(Brand.get().platform)}</div>
+              <div class="text-brand-200 text-[11.5px] font-medium truncate mt-0.5">${esc(Brand.get().org)}</div>
+            </div>
+            ${Brand.logo("union", "w-11 h-11 shrink-0")}
+          </div>
         </div>
-        <div class="flex-1 lg:flex-none px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] lg:p-0 lg:max-w-md lg:w-full lg:mx-auto">
-          <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-3.5" autocomplete="on">
+        <div class="flex-1 lg:flex-none flex flex-col justify-center px-5 sm:px-6 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] lg:p-0 max-w-md w-full mx-auto min-w-0">
+          <form id="fEmp" class="${tab === "emp" ? "" : "hidden"} space-y-3" autocomplete="on">
             <div><label class="label" for="lgEmp">الرقم الوظيفي</label><div class="input-icon">${ic("badge-check")}<input id="lgEmp" class="input" inputmode="numeric" autocomplete="username" required></div></div>
             <div><label class="label" for="lgNat">آخر 4 أرقام من الرقم القومي</label><div class="input-icon relative">${ic("lock")}<input id="lgNat" class="input tracking-[.4em] !pl-10" type="password" maxlength="4" inputmode="numeric" required><button type="button" data-act="toggleNatEye" class="absolute left-2 top-1/2 -translate-y-1/2 icon-btn w-8 h-8 text-brand-200/80 hover:text-white" aria-label="إظهار أو إخفاء الرقم">${ic("eye")}</button></div></div>
             <div><label class="label" for="lgMob">رقم الموبايل المسجل</label><div class="input-icon">${ic("smartphone")}<input id="lgMob" class="input" type="tel" inputmode="tel" dir="ltr" style="text-align:right" placeholder="01xxxxxxxxx" required></div></div>
@@ -87,17 +92,17 @@ const Shell = {
             </label>
             <button class="btn btn-gold btn-lg w-full !text-brand-950 font-bold shadow-lift">دخول ${ic("arrow-right", "rotate-180")}</button>
           </form>
-          <form id="fAdm" class="${tab === "adm" ? "" : "hidden"} space-y-4" autocomplete="on">
+          <form id="fAdm" class="${tab === "adm" ? "" : "hidden"} space-y-3.5" autocomplete="on">
             <div><h2 class="text-xl font-bold text-white">لوحة الإدارة</h2><p class="text-sm text-brand-200 mt-1">المدير · مسؤول المبادرة · أمين الصندوق · أمين المخزن</p></div>
             <div><label class="label" for="lgUser">اسم المستخدم</label><div class="input-icon">${ic("user-cog")}<input id="lgUser" class="input" autocomplete="username" dir="ltr" style="text-align:right" required></div></div>
             <div><label class="label" for="lgPass">كلمة المرور</label><div class="input-icon">${ic("key-round")}<input id="lgPass" class="input" type="password" autocomplete="current-password" required>
               <button type="button" data-act="togglePass" class="absolute left-2 top-1/2 -translate-y-1/2 icon-btn w-8 h-8 text-slate-400" aria-label="إظهار كلمة المرور">${ic("eye")}</button></div></div>
             <button class="btn btn-gold btn-lg w-full !text-brand-950">دخول لوحة الإدارة ${ic("arrow-right", "rotate-180")}</button>
           </form>
-          <p class="text-center text-xs text-brand-200/70 mt-6 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
-          <div class="text-center mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-[12.5px]">${tab === "emp" ? `<button type="button" data-act="helpForm" class="text-gold-300 font-semibold hover:underline">${ic("key-round", "ml-1")} نسيت بياناتي / مش قادر أدخل</button><button type="button" data-act="faq" class="text-gold-300 font-semibold hover:underline">${ic("info", "ml-1")} أسئلة شائعة</button>` : ""}<button type="button" data-act="contact" class="text-gold-300 font-semibold hover:underline">${ic("headset", "ml-1")} تواصل مع المسؤول</button></div>
-          ${Brand.get().credit ? `<p class="lg:hidden text-center text-[11px] text-brand-300/70 mt-4">${esc(Brand.get().credit)}</p>` : ""}
-          <div class="text-center mt-4">${tab === "adm"
+          <p id="lgShield" class="text-center text-[11.5px] text-brand-200/70 mt-4 flex items-center justify-center gap-1.5">${ic("shield-check")} اتصال آمن · لا تشارك بيانات دخولك</p>
+          <div class="text-center mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[12px]">${tab === "emp" ? `<button type="button" data-act="helpForm" class="text-gold-300 font-semibold hover:underline">${ic("key-round", "ml-1")} نسيت بياناتي / مش قادر أدخل</button><button type="button" data-act="faq" class="text-gold-300 font-semibold hover:underline">${ic("info", "ml-1")} أسئلة شائعة</button>` : ""}<button type="button" data-act="contact" class="text-gold-300 font-semibold hover:underline">${ic("headset", "ml-1")} تواصل مع المسؤول</button></div>
+          ${Brand.get().credit ? `<p id="lgCredit" class="lg:hidden text-center text-[11px] text-brand-300/70 mt-2.5">${esc(Brand.get().credit)}</p>` : ""}
+          <div class="text-center mt-3">${tab === "adm"
             ? `<button type="button" data-act="loginTab" data-id="emp" class="text-[12px] text-gold-300 font-semibold hover:underline">${ic("arrow-right", "ml-1")} دخول الموظفين</button>`
             : `<button type="button" data-act="loginTab" data-id="adm" class="text-[11px] text-brand-300/60 hover:text-brand-100 hover:underline">دخول الإدارة</button>`}</div>
         </div>
