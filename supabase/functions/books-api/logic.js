@@ -2401,9 +2401,18 @@ const OperationsEngine = {
       });
       DB_Engine.overwriteTableData(S.RES_ITEMS, all);
       this.syncEmployeeInvoicesForPhase_(phase.Phase_ID);
+      // ترحيل فوري لو فيه مرحلة حجز مفتوحة الآن: الكتب تدخل حجزه الجديد بأسبقيتها الأصلية (لكل ابن)
+      let carriedTo = null;
+      if (choice === "carry") {
+        const open = DB_Engine.getAllRecords(S.PHASES).find(p => Util.str(p.Phase_ID) !== Util.str(phase.Phase_ID) && this.isBookingOpen_(p));
+        if (open) {
+          this.carryWaitlistToPhase({ userId: isEmp ? empId : session.userId, role: isEmp ? "Employee" : session.role }, { fromPhaseId: phase.Phase_ID, toPhaseId: open.Phase_ID, empId: empId });
+          carriedTo = { id: Util.str(open.Phase_ID), name: open.Phase_Name, end: open.End_DateTime };
+        }
+      }
       DB_Engine.logAudit(isEmp ? empId : session.userId, isEmp ? "Employee" : session.role, "Allocation", "WAITLIST_DECISION", empId, null, { choice: choice, items: mine.length, by: isEmp ? "employee" : "admin" });
-      if (!isEmp) return { success: true, message: choice === "carry" ? "سُجّل ترحيل الكتب المنتظرة لهذا الموظف للمرحلة التالية." : "أُلغيت الكتب المنتظرة لهذا الموظف وانتهى حجزه على المتاح." };
-      return { success: true, message: choice === "carry" ? "تمام — الكتب دي هتترحّل للمرحلة الجاية بأسبقيتك 👍" : "تمام — أنهينا حجزك على الكتب اللي وصلت بس." };
+      if (!isEmp) return { success: true, carriedTo: carriedTo, message: choice === "carry" ? (carriedTo ? "رُحِّلت كتب الموظف المنتظرة إلى «" + carriedTo.name + "» بأسبقيتها." : "سُجّل ترحيل الكتب المنتظرة للدفعة الجديدة (تُرحَّل عند فتح المرحلة).") : "أُلغيت الكتب المنتظرة لهذا الموظف وانتهى حجزه على المتاح." };
+      return { success: true, choice: choice, carriedTo: carriedTo, count: mine.length, message: choice === "carry" ? (carriedTo ? "كتبك اترحّلت لـ «" + carriedTo.name + "» 🎉" : "تمام — كتبك محجوزة للدفعة الجديدة بأسبقيتك 👍") : "تمام — أنهينا حجزك على الكتب اللي وصلت." };
     });
   },
 
@@ -2455,7 +2464,8 @@ const OperationsEngine = {
       const newHeaders = [];
       let moved = 0, people = {};
       const added = [];
-      all.filter(i => Util.str(i.Phase_ID) === fromId && !this.isCancelledItem_(i)).forEach(i => {
+      const onlyEmp = Util.str(payload.empId);
+      all.filter(i => Util.str(i.Phase_ID) === fromId && !this.isCancelledItem_(i) && (!onlyEmp || Util.str(i.Emp_ID) === onlyEmp)).forEach(i => {
         const unmet = Util.num(i.Requested_Qty) - Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty));
         if (unmet <= 0) return;
         const empId = Util.str(i.Emp_ID);
