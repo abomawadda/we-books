@@ -23,7 +23,7 @@ const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق بلا إعادة نشر: update books.config set value = '<commit>' where key = 'logic_commit';
 // (تلتقطه نسخ الخادم خلال 5 دقائق). CODE_COMMIT احتياطي إن لم يوجد الإعداد.
-const CODE_COMMIT = 'd5d9470889d0288e1dce947f54bb76e4f105364c';
+const CODE_COMMIT = '522a8078441b0192411de06704ecc9bf0d07eb24';
 const codeUrl = (c: string) => `https://raw.githubusercontent.com/abomawadda/we-books/${c}/supabase/functions/books-api/logic.js`;
 let rtP: Promise<any> | null = null, rtCommit = '', rtChecked = 0;
 // يُقرأ أولاً من books.logic؛ وإن لم يوجد يُجلب من GitHub مرة واحدة ويُحفظ هناك (لا اعتماد على GitHub بعدها)
