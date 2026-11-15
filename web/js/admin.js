@@ -2918,6 +2918,7 @@ on("printSupInv", id => {
   const dt = supInvData(id); if (!dt) return;
   Doc.show("فاتورة توريد " + dt.no, Doc.supplierInvoice(dt), { size: "A4", file: "فاتورة-توريد-" + dt.no });
 });
+let SI_MODAL = null;
 on("viewSupInv", id => {
   const d = A(), h = d.supInvHeaders.find(x => x.Sup_Inv_ID === id), dt = supInvData(id);
   if (!h || !dt) return;
@@ -2939,15 +2940,15 @@ on("viewSupInv", id => {
       { t: "الإجمالي", cls: "num", v: l => `<b>${fmt(l.total)}</b>` },
       { t: "المطابقة", v: l => pill(l.flag) }
     ], dt.lines, { maxH: 360, empty: "لا توجد بنود" })}`;
-  const foot = `<div class="flex flex-wrap items-center justify-between gap-2 w-full">
+  const footer = `<div class="flex flex-wrap items-center justify-between gap-2 w-full">
       <div>${h.Status !== "Voided" && can("VOID_SUPPLIER_INVOICE") ? `<button class="btn btn-danger btn-sm" data-act="voidSupInv" data-id="${esc(id)}">${ic("rotate-ccw")} عكس وإلغاء الفاتورة</button>` : ""}</div>
       <div class="flex items-center gap-2"><button class="btn btn-primary btn-sm" data-act="printSupInv" data-id="${esc(id)}">${ic("printer")} طباعة / PDF</button><button class="btn btn-ghost btn-sm" data-close>إغلاق</button></div>
     </div>`;
-  UI.modal({ title: `فاتورة المكتبة ${dt.no}`, wide: true, body, foot });
+  SI_MODAL = UI.open(body, { title: `فاتورة المكتبة ${dt.no}`, wide: true, footer });
 });
 on("voidSupInv", async id => {
   const v = await UI.form({ title: "عكس وإلغاء فاتورة المكتبة", tone: "danger", intro: "سيتم إخراج الكمية السليمة من المخزن وإعادتها للمستحق بأمر التوريد وعكس القيد المالي للمكتبة (يُسمح فقط إذا لم تُوزَّع الكمية).", fields: [{ name: "reason", label: "سبب الإلغاء", required: true, placeholder: "مثال: خطأ في رقم الفاتورة أو نسبة خصم الكمية" }], ok: "تأكيد العكس" });
-  if (v) { UI.closeModal(); await act("VOID_SUPPLIER_INVOICE", { supInvId: id, reason: v.reason }); }
+  if (v) { if (SI_MODAL) { SI_MODAL.close(); SI_MODAL = null; } await act("VOID_SUPPLIER_INVOICE", { supInvId: id, reason: v.reason }); }
 });
 
 // ============================================================ التوزيع بالأسبقية
