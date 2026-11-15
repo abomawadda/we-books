@@ -388,3 +388,56 @@ ACTIONS.bookResList = ACTIONS.bookRes;
 on("bookRes", id => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); ACTIONS.bookFile(id); });
 const _bookResList0 = ACTIONS.bookResList;
 on("bookResList", id => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); _bookResList0(id); });
+
+// ================================================================ الشُّعب (علمي/أدبي/بكالوريا…): إدارة مرنة للصفوف والكتب
+// الإعداد GRADE_TRACKS = {"2 ثانوي": ["علمي","أدبي",...]}؛ حقل الكتاب Tracks (فارغ = مشترك لكل الشعب). الأزهر واللغات والحكومي بنفس الشعب.
+const TRK = { grade: "", sel: {}, dirty: {} };
+const trkList = () => { const v = (A().settingsMap || {}).GRADE_TRACKS; let o = v; if (typeof v === "string") { try { o = JSON.parse(v || "{}"); } catch (_) { o = {}; } } return o || {}; };
+const bookTracks = b => String(b.Tracks || "").split(/[،,]/).map(x => x.trim()).filter(Boolean);
+on("tracksMgr", () => {
+  const tl = trkList(), grades = (A().catalog.grades || []).map(g => g.label);
+  TRK.grade = TRK.grade || Object.keys(tl)[0] || "2 ثانوي"; TRK.dirty = {};
+  trkOpen();
+});
+function trkBody() {
+  const tl = trkList(), g = TRK.grade, tracks = tl[g] || [], books = A().books.filter(b => b.Grade === g);
+  const bySub = {}; books.forEach(b => (bySub[b.Subject || "—"] = bySub[b.Subject || "—"] || []).push(b));
+  const cur = b => TRK.dirty[b.Book_ID] || bookTracks(b);
+  const chip = (b, t) => { const on = cur(b).includes(t); return `<button class="rounded-full px-2 h-7 text-[11.5px] font-semibold ring-1 ${on ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-600 ring-slate-200"}" data-trk="${esc(b.Book_ID)}|${esc(t)}">${esc(t)}</button>`; };
+  const grades = Object.keys(tl).concat((A().catalog.grades || []).map(x => x.label).filter(x => /ثانوي/.test(x) && !tl[x]));
+  return `<div class="flex gap-1.5 overflow-x-auto pb-1 mb-3">${grades.map(x => `<button class="chip shrink-0" data-trkg="${esc(x)}" aria-pressed="${x === g}">${esc(x)}${tl[x] ? ` <span class="num opacity-60">${tl[x].length}</span>` : ""}</button>`).join("")}</div>
+    <div class="rounded-2xl bg-brand-50/60 ring-1 ring-brand-100 p-3 mb-3"><div class="flex items-center justify-between gap-2"><b class="text-[13.5px] text-brand-900">شُعب ${esc(g)}</b><button class="btn btn-outline btn-xs" data-trkedit>${ic("pencil")} تعديل القائمة</button></div>
+      <div class="flex flex-wrap gap-1.5 mt-2">${tracks.length ? tracks.map(t => `<span class="rounded-full bg-white ring-1 ring-brand-200 px-2.5 py-1 text-[12px] font-semibold text-brand-800">${esc(t)}</span>`).join("") : `<span class="text-[12.5px] text-slate-500">الصف ده من غير شُعب — كل كتبه للكل.</span>`}</div>
+      <p class="text-[11.5px] text-slate-500 mt-2">${ic("info", "inline -mt-0.5")} نفس الشُّعب للحكومي واللغات والأزهر. الكتاب من غير شعبة = <b>مشترك</b> يظهر لكل الشعب.</p></div>
+    ${tracks.length ? Object.keys(bySub).sort((a, b) => a.localeCompare(b, "ar")).map(sub => { const l = bySub[sub];
+      return `<section class="rounded-2xl ring-1 ring-slate-200 bg-white mb-2 overflow-hidden"><div class="flex items-center gap-2 p-2.5 bg-slate-50 border-b border-slate-100"><b class="flex-1 text-[13.5px]">${esc(sub)} <span class="text-[11px] text-slate-400 font-normal num">${l.length} كتاب</span></b>
+          <select class="input !h-8 !w-auto !text-[12px]" data-trksub="${esc(sub)}"><option value="">طبّق على كل كتب المادة…</option><option value="__all">مشترك (كل الشعب)</option>${tracks.map(t => `<option value="${esc(t)}">${esc(t)} فقط</option>`).join("")}</select></div>
+        <ul class="divide-y divide-slate-100">${l.map(b => `<li class="p-2.5"><div class="text-[12.5px] font-semibold text-slate-800">${esc(b.Book_Name)} <span class="text-[10.5px] text-slate-400 num">${esc(b.Book_ID)}</span>${TRK.dirty[b.Book_ID] ? ` <span class="text-amber-600 text-[11px]">• معدّل</span>` : ""}</div>
+          <div class="flex flex-wrap gap-1 mt-1.5">${tracks.map(t => chip(b, t)).join("")}${cur(b).length ? "" : `<span class="rounded-full px-2 h-7 inline-flex items-center text-[11.5px] bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">مشترك</span>`}</div></li>`).join("")}</ul></section>`; }).join("") : ""}`;
+}
+function trkOpen() {
+  const n = () => Object.keys(TRK.dirty).length;
+  const m = UI.open(`<div id="trkBody">${trkBody()}</div>`, { title: "الشُّعب الدراسية", sub: "علمي · أدبي · بكالوريا — مرنة بالكامل", wide: true,
+    footer: `<div class="flex items-center justify-between gap-2"><span class="text-[12.5px] text-slate-500" id="trkN"></span><button class="btn btn-primary" id="trkSave">${ic("check")} حفظ شُعب الكتب</button></div>` });
+  const re = () => { m.root.querySelector("#trkBody").innerHTML = trkBody(); m.root.querySelector("#trkN").textContent = n() ? `${n()} كتاب معدّل` : ""; };
+  m.root.addEventListener("click", async ev => {
+    const c = ev.target.closest("[data-trk]"), g = ev.target.closest("[data-trkg]"), ed = ev.target.closest("[data-trkedit]");
+    if (c) { const [id, t] = c.dataset.trk.split("|"), b = A().books.find(x => x.Book_ID === id); const cur = (TRK.dirty[id] || bookTracks(b)).slice(); const i = cur.indexOf(t); i < 0 ? cur.push(t) : cur.splice(i, 1); TRK.dirty[id] = cur; re(); }
+    if (g) { TRK.grade = g.dataset.trkg; re(); }
+    if (ed) { const tl = trkList(), v = await UI.form({ title: "شُعب " + TRK.grade, intro: "شعبة في كل سطر. سيبها فاضية لو الصف من غير شُعب.", fields: [{ name: "t", label: "الشُّعب", type: "textarea", rows: 7, value: (tl[TRK.grade] || []).join("\n") }], ok: "حفظ" });
+      if (!v) return; const list = String(v.t).split(/\n+/).map(x => x.trim()).filter(Boolean), nt = Object.assign({}, tl); if (list.length) nt[TRK.grade] = list; else delete nt[TRK.grade];
+      const r = await call("SAVE_SETTING", { key: "GRADE_TRACKS", value: JSON.stringify(nt) }, { block: true }); toast(r.message || "تم", r.success ? "success" : "danger"); if (r.success) { await Admin.load(); re(); } }
+  });
+  m.root.addEventListener("change", ev => { const sel = ev.target.closest("[data-trksub]"); if (!sel || !sel.value) return;
+    A().books.filter(b => b.Grade === TRK.grade && (b.Subject || "—") === sel.dataset.trksub).forEach(b => { TRK.dirty[b.Book_ID] = sel.value === "__all" ? [] : [sel.value]; }); re(); });
+  m.root.querySelector("#trkSave").addEventListener("click", async () => {
+    const rows = Object.keys(TRK.dirty).map(id => ({ bookId: id, tracks: TRK.dirty[id] })); if (!rows.length) return toast("مفيش تعديلات", "info");
+    const r = await call("SET_BOOK_TRACKS", { rows }, { block: true }); toast(r.message, r.success ? "success" : "danger"); if (r.success) { TRK.dirty = {}; await Admin.load(); re(); }
+  });
+}
+// زر «الشُّعب» في صفحة الكتب + شارة الشعبة على بطاقة الكتاب
+_wrapA("/a/books", view => {
+  if (!can("SAVE_BOOK")) return;
+  const head = view.querySelector(".flex.flex-wrap.gap-2, [data-act=bulkPrice]"); const btn = `<button class="btn btn-outline btn-sm" data-act="tracksMgr">${ic("graduation-cap")} الشُّعب (علمي/أدبي/بكالوريا)</button>`;
+  const bp = view.querySelector("[data-act=bulkPrice]"); if (bp) bp.insertAdjacentHTML("afterend", btn);
+});

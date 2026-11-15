@@ -43,6 +43,13 @@ if (!pp.myReservationItems.length || pp.myReservationItems.some(i => i.Emp_ID !=
 ok(api('SAVE_MY_KIDS', { empId: '1002', kids: [{ name: 'ليلى', gender: 'g', grade: '4 ابتدائي' }] }, coord), 'المنسق يسجّل بنت 1002');
 expectFail(api('ADMIN_EMP_PORTAL', { empId: '1002' }, E['1001']), 'موظف يفتح بوابة زميله');
 expectFail(api('SAVE_MY_KIDS', { kids: [] }, A), 'حفظ أبناء من الإدارة بلا موظف');
+// الشُّعب: كتاب أدبي فقط، وابن 3 ثانوي علمي رياضة
+ok(api('SET_BOOK_TRACKS', { rows: [{ bookId: 'BK-302', tracks: ['علمي علوم', 'علمي رياضة'] }] }, coord), 'المنسق يحدد شعبة كتاب الفيزياء (علمي فقط)');
+ok(api('SAVE_MY_KIDS', { kids: [{ name: 'سلمى', gender: 'g', grade: '3 ثانوي', type: 'لغات', track: 'أدبي' }] }, E['1005']), '1005 يسجّل بنته أدبي');
+{ const pt = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, E['1005']), 'بوابة 1005 بالشعب');
+  if (!pt.settings.GRADE_TRACKS || !pt.settings.GRADE_TRACKS['3 ثانوي']) issues.push('الشعب غير ظاهرة للموظف');
+  if (pt.employee.kids[0].track !== 'أدبي') issues.push('شعبة الابن لم تُحفظ');
+  if ((pt.books.find(b => b.Book_ID === 'BK-302') || {}).Tracks !== 'علمي علوم،علمي رياضة') issues.push('شعبة الكتاب لم تُحفظ'); }
 console.log('\n— الإغلاق والتوريد —');
 at(2027, 1, 2, 9);
 expectFail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 1 }], paymentMethod: 'CASH' }, E['1005']), 'حجز بعد انتهاء الموعد');

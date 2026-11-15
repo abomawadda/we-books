@@ -10,7 +10,7 @@ const relOn = () => !!(APP.emp && APP.emp.settings && APP.emp.settings.ALLOW_REL
 const toneOf = s => { let h = 0; String(s || "").split("").forEach(c => h = (h * 31 + c.charCodeAt(0)) >>> 0); return SUBJECT_TONES[h % SUBJECT_TONES.length]; };
 
 const Emp = {
-  filter: { stage: "", grade: "", type: "", subject: "", q: "" },
+  filter: { stage: "", grade: "", type: "", track: "", subject: "", q: "" },
   ben: "", bens: [],   // المستفيد الحالي ("" = العضو وأبناؤه) وقائمة الأقارب
   dirty: false,
 
@@ -409,7 +409,10 @@ function popInfo(b) {
   if (tot < POP_MIN) return null;
   return { top: n(b.Pop) === Math.max(...same.map(x => n(x.Pop))), pct: Math.round(n(b.Pop) / tot * 100), n: n(b.Pop) };
 }
-const typeOk = (b, t) => !t || String(b.School_Types || "").split(/[،,]/).map(x => x.trim()).includes(t);
+// نوع المدرسة + الشعبة (علمي/أدبي/بكالوريا…): كتاب بلا شعبة = مشترك لكل الشعب، وابن بلا شعبة يرى كل كتب صفه
+const trackOk = (b, tr) => !tr || !String(b.Tracks || "").trim() || String(b.Tracks).split(/[،,]/).map(x => x.trim()).includes(tr);
+const typeOk = (b, t, tr) => (!t || String(b.School_Types || "").split(/[،,]/).map(x => x.trim()).includes(t)) && trackOk(b, tr === undefined ? Emp.filter.track : tr);
+const gradeTracks = g => (((APP.emp && APP.emp.settings) || {}).GRADE_TRACKS || {})[g] || [];
 // ============================================================ أبنائي (محفوظون في حساب الموظف على الخادم)
 const myKids = () => ((APP.emp && APP.emp.employee && APP.emp.employee.kids) || []).filter(k => k.grade);
 const kidEmoji = k => k.rel ? "🧒" : k.gender === "g" ? "👧" : "👦";
@@ -420,8 +423,8 @@ const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت"
 const kidTypeTxt = t => t ? "مدارس " + t : "كل المدارس";
 /** كم كتاب في السلة لصف هذا الابن */
 const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && (k.rel ? bn(id) === kidBen(k) : b.Grade === k.grade && !bn(id)); }).reduce((s, id) => s + APP.cart[id], 0);
-const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type)).length;
-function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.q = ""; Emp.kidIx = i;
+const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type, k.track || "")).length;
+function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.track = k.track || ""; Emp.filter.q = ""; Emp.kidIx = i;
   Emp.ben = kidBen(k); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
 on("pickKid", v => openKid(+v));
 
@@ -466,6 +469,7 @@ function kdHTML() {
     ${st ? `<div class="animate-pop-in"><div class="label">الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
     ${k.grade ? `<div class="animate-pop-in"><div class="label">نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
+    ${k.grade && gradeTracks(k.grade).length ? `<div class="animate-pop-in"><div class="label">الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${gradeTracks(k.grade).concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
     ${k.grade ? `<div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-3 flex items-center gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500")} <span>${esc(kidName(k, KD.i))} في <b>${esc(gradeTitle(k.grade))}</b> — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>` : ""}
   </div>
   ${KD.list.length > 1 ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${k.rel ? "هذا القريب" : "هذا الابن"}</button>` : ""}
@@ -473,7 +477,7 @@ function kdHTML() {
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; b.innerHTML = `${ic("check-check")} حفظ ${n2 > 1 ? "(" + n2 + ")" : ""}`; } } };
 function kidsEditor(addRel) {
-  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", rel: k.rel || "" }));
+  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "" }));
   KD.list = ks.length ? ks : [kdBlank(addRel)];
   if (addRel && ks.length) KD.list.push(kdBlank(true));
   KD.i = addRel ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
@@ -488,13 +492,14 @@ on("kdRel", v => { KD.list[KD.i].rel = v; kdRender(); });
 on("kdName", v => { (KD.list[KD.i] || {}).name = v; });
 on("kdGender", v => { KD.list[KD.i].gender = v; kdRender(); });
 on("kdStage", v => { const k = KD.list[KD.i]; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) k.grade = ""; kdRender(); });
-on("kdGrade", v => { KD.list[KD.i].grade = v; kdRender(); });
+on("kdGrade", v => { const k = KD.list[KD.i]; k.grade = v; if (!gradeTracks(v).includes(k.track)) k.track = ""; kdRender(); });
+on("kdTrack", v => { KD.list[KD.i].track = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdType", v => { KD.list[KD.i].type = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdPick", v => { KD.i = +v; kdRender(); });
 on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast("اختر الصف أولاً 👆", "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
 on("kdDel", () => { KD.list.splice(KD.i, 1); KD.i = Math.max(0, KD.i - 1); kdRender(); });
 on("kdSave", async () => {
-  const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "", rel: k.rel || "" }));
+  const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "", track: gradeTracks(k.grade).includes(k.track) ? k.track : "", rel: k.rel || "" }));
   if (!kids.length) return toast("اختر الصف لفرد واحد على الأقل", "warning");
   const noName = kids.findIndex(k => k.rel && !k.name); if (noName >= 0) { KD.i = KD.list.indexOf(KD.list.filter(k => k.grade)[noName]); kdRender(); return toast("اكتب اسم القريب", "warning"); }
   const r = await call("SAVE_MY_KIDS", { kids }, { block: true });
@@ -585,7 +590,7 @@ function gradePicker() {
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
   return `${ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
-      <div class="grid grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-2.5 min-w-0 text-right flex items-center gap-2 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[11.5px] text-slate-500 leading-snug">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}</span><span class="block text-[11px] font-bold mt-0.5 ${c ? "text-emerald-600" : "text-brand-600"}">${c ? c + " في السلة" : kidAvail(k) + " كتاب"}</span></span></button>`; }).join("")}</div>
+      <div class="grid grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-2.5 min-w-0 text-right flex items-center gap-2 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[11.5px] text-slate-500 leading-snug">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span><span class="block text-[11px] font-bold mt-0.5 ${c ? "text-emerald-600" : "text-brand-600"}">${c ? c + " في السلة" : kidAvail(k) + " كتاب"}</span></span></button>`; }).join("")}</div>
       <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
     : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
     <h2 class="font-display font-bold text-slate-800 mb-1 flex items-center gap-2">${ic("graduation-cap", "text-brand-600")} ${ks.length ? "أو اختر صفاً آخر" : "اختر صف ابنك"}</h2>
@@ -717,7 +722,7 @@ Router.add("/e/books", view => {
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
           <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${(() => { const i = myKids().findIndex(k => k.grade === f.grade && (k.type || "") === (f.type || "") && kidBen(k) === Emp.ben); return i >= 0 ? "كتب " + esc(kidName(myKids()[i], i)) + " " + kidEmoji(myKids()[i]) : "كتب"; })()}</div><div class="font-display font-bold text-[20px] leading-tight">${esc(gradeTitle(f.grade))}</div></div>
           <button class="btn btn-sm !bg-white/15 !text-white !ring-white/20" data-act="fGrade" data-id="">${ic("arrow-left-right")} تغيير</button></div>
-        <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div>${Emp.open() ? `<button class="mt-3 w-full flex items-center gap-3 rounded-2xl bg-gold-400 text-brand-950 px-4 py-3 font-bold active:scale-[.98] transition shadow-soft" data-act="bagOpen"><span class="text-[26px] leading-none">🎒</span><span class="flex-1 text-right"><span class="block text-[15.5px]">جهّز الشنطة كاملة</span><span class="block text-[11.5px] font-semibold opacity-75">كتاب لكل مادة بضغطة — وعدّل براحتك</span></span>${ic("chevron-left")}</button>` : ""}</div>` : ""}
+        <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div>${gradeTracks(f.grade).length ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pb-0.5">${[["", "كل الشعب"], ...gradeTracks(f.grade).map(t => [t, t])].map(t => `<button data-act="fTrack" data-id="${esc(t[0])}" class="shrink-0 rounded-full px-3 h-8 text-[12px] font-bold ring-1 ${(f.track || "") === t[0] ? "bg-gold-400 text-brand-950 ring-gold-400" : "bg-white/10 text-white ring-white/25"}">${esc(t[1])}</button>`).join("")}</div>` : ""}${Emp.open() ? `<button class="mt-3 w-full flex items-center gap-3 rounded-2xl bg-gold-400 text-brand-950 px-4 py-3 font-bold active:scale-[.98] transition shadow-soft" data-act="bagOpen"><span class="text-[26px] leading-none">🎒</span><span class="flex-1 text-right"><span class="block text-[15.5px]">جهّز الشنطة كاملة</span><span class="block text-[11.5px] font-semibold opacity-75">كتاب لكل مادة بضغطة — وعدّل براحتك</span></span>${ic("chevron-left")}</button>` : ""}</div>` : ""}
       <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-2 bg-slate-50/90 backdrop-blur-xl">
         ${ctxBar()}
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="${f.grade ? "ابحث في كتب " + esc(gradeShort(f.grade)) : "ابحث باسم الكتاب أو الناشر أو المادة"}" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
@@ -740,8 +745,9 @@ Router.add("/e/books", view => {
 });
 on("bookSearch", v => { Emp.filter.q = v.trim(); renderBookGrid(); });
 on("fStage", v => { Emp.filter.stage = v; Emp.filter.grade = ""; Shell.rerender(); });
-on("fGrade", v => { Emp.filter.grade = v; Emp.filter.q = ""; Shell.rerender(); scrollTo({ top: 0 }); });
+on("fGrade", v => { Emp.filter.grade = v; Emp.filter.track = ""; Emp.filter.q = ""; Shell.rerender(); scrollTo({ top: 0 }); });
 on("fType", v => { Emp.filter.type = v; Shell.rerender(); });
+on("fTrack", v => { Emp.filter.track = v; Shell.rerender(); });
 on("jumpSubj", v => { const el = document.getElementById("sub_" + v); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });
 on("addBundle", async pub => {
   const list = gradeList().list.filter(b => b.Publisher === pub);
@@ -858,7 +864,7 @@ const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, tem
 /** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
 function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
 const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
-function wzFocus(m) { Emp.filter.grade = m.grade; Emp.filter.type = m.type || ""; Emp.filter.q = ""; Emp.ben = kidBen(m); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); }
+function wzFocus(m) { Emp.filter.grade = m.grade; Emp.filter.type = m.type || ""; Emp.filter.track = m.track || ""; Emp.filter.q = ""; Emp.ben = kidBen(m); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); }
 const wzGo = (step, i) => { WZ.step = step; if (i !== undefined) WZ.i = i; wzSave(); if (Router.current !== "/e/wiz") Router.go("/e/wiz"); else Shell.rerender(); scrollTo({ top: 0 }); };
 
 function wzSteps() {
@@ -867,7 +873,7 @@ function wzSteps() {
 }
 const personCard = (k, i, on, act) => `<button class="min-w-0 text-right rounded-2xl p-2.5 ring-2 transition active:scale-[.98] flex items-center gap-2 ${on ? "ring-brand-600 bg-brand-50" : "ring-slate-200 bg-white opacity-70"}" data-act="${act}" data-id="${i}">
   <span class="w-10 h-10 rounded-xl ${k.rel ? "bg-sky-50" : "bg-gold-50"} flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span>
-  <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}</span></span>
+  <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span></span>
   <span class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check") : ""}</span></button>`;
 
 function wzFamily() {
@@ -897,7 +903,7 @@ function wzMember() {
   const mode = WZ.mode[WZ.i], last = WZ.i === ms.length - 1;
   const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#552c83,#2e1650)">
     <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px]">${m._temp ? "📚" : kidEmoji(m)}</span>
-    <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${ms.length > 1 ? `الفرد ${WZ.i + 1} من ${ms.length}` : "الحجز"}</div><div class="font-display font-bold text-[19px] leading-tight truncate">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div><div class="text-[12.5px] text-gold-300">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}</div></div></div>`;
+    <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${ms.length > 1 ? `الفرد ${WZ.i + 1} من ${ms.length}` : "الحجز"}</div><div class="font-display font-bold text-[19px] leading-tight truncate">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div><div class="text-[12.5px] text-gold-300">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}${m.track ? " · " + esc(m.track) : ""}</div></div></div>`;
   if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">إزاي تحب نختار الكتب؟</h2>
     <div class="grid gap-2.5">${[["popular", "🎒", "جهّز لي الأشهر", "كتاب لكل مادة: الأكثر حجزاً والأشهر — وتعدّل براحتك", "bg-gold-50 ring-gold-300"],
       ["series", "📚", "سلسلة واحدة", "تختار الناشر (الأضواء، سلاح التلميذ…) ونجيب كتبه كلها", "bg-brand-50 ring-brand-200"],

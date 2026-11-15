@@ -96,7 +96,7 @@ const maps = () => ({ e: by(A().employees, "Emp_ID"), b: by(A().books, "Book_ID"
 const phaseItems = () => A().resItems.filter(i => i.Phase_ID === APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
 const empName = (e, id) => (e[id] || {}).Full_Name || id;
 /** اسم الكتاب + الصف الدراسي (إن لم يكن ضمن الاسم) — يُستخدم في كل التقارير والقوائم */
-const bookName = (b, id) => { const x = b[id] || {}, nm = x.Book_Name || id, g = x.Grade ? Doc.shortGrade(x.Grade) : ""; return g && !nm.includes(g) ? nm + " — " + g : nm; };
+const bookName = (b, id) => { const x = b[id] || {}, nm = x.Book_Name || id, g = x.Grade ? Doc.shortGrade(x.Grade) : ""; const t = String(x.Tracks || "").trim(); return (g && !nm.includes(g) ? nm + " — " + g : nm) + (t ? " (" + t.replace(/،/g, "/") + ")" : ""); };
 /** «الناشر · المادة · الصف» للكتاب في القوائم */
 const bookMeta = (b, id) => { const x = b[id] || {}, nm = String(x.Book_Name || ""); return [x.Publisher, x.Subject, x.Book_Part, Doc.shortGrade(x.Grade)].filter(v => v && !nm.includes(v)).join(" · "); };
 const bookSub = (b, id, extra) => `<div class="text-[11.5px] text-slate-500 truncate"><span class="num text-brand-700 font-semibold">${esc(id)}</span>${bookMeta(b, id) ? " · " + esc(bookMeta(b, id)) : ""}${extra || ""}</div>`;
@@ -607,7 +607,7 @@ function bookCardsMobile(list, rcMap, st, canEdit, stageTone) {
           <div class="text-[12px] text-slate-500 mt-0.5 truncate">${[x.Publisher, x.Subject, x.Book_Part].filter(Boolean).map(esc).join(" · ")}</div>
           <div class="flex flex-wrap items-center gap-1 mt-1.5">
             <span class="rounded-md bg-slate-800 text-white px-1.5 py-0.5 text-[11px] font-bold">${esc(Doc.shortGrade ? Doc.shortGrade(x.Grade) : x.Grade)}</span>
-            <span class="rounded-md ring-1 ring-slate-200 px-1.5 py-0.5 text-[11px] text-slate-600">${esc(x.School_Types || "حكومي")}</span>
+            <span class="rounded-md ring-1 ring-slate-200 px-1.5 py-0.5 text-[11px] text-slate-600">${esc(x.School_Types || "حكومي")}</span>${x.Tracks ? `<span class="rounded-md bg-sky-50 text-sky-800 ring-1 ring-sky-200 px-1.5 py-0.5 text-[11px] font-semibold">${esc(String(x.Tracks).replace(/،/g, " · "))}</span>` : ""}
             ${noPrice ? "" : pill(x.Book_Status)}
             ${c ? `<button class="rounded-md bg-brand-50 text-brand-800 px-1.5 py-0.5 text-[11px] font-bold inline-flex items-center gap-1" data-act="bookRes" data-id="${id}">${ic("users", "!w-3 !h-3")} ${fmt(c.p)} · ${fmt(c.q)} نسخة</button>` : ""}
           </div>
