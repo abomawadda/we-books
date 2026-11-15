@@ -3092,9 +3092,9 @@ function ddCard(id) {
       <div class="text-[13px] text-slate-500 num truncate">${esc(id)}${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div></div>
     <div class="mx-4 rounded-2xl ring-1 ${tone} px-4 py-3 flex items-center gap-2 font-bold text-[15px]">${ic(step[2])} ${esc(step[0])}</div>
     ${inv ? `<div class="grid grid-cols-3 gap-2 p-4">${UI.stat("الفاتورة", fmt(inv.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(inv.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(inv.Remaining_Balance)}</span>`)}</div>` : ""}
-    <ul class="divide-y divide-slate-100 border-t border-slate-100">${s.list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty); return `<li class="flex items-center gap-3 px-4 py-2.5">
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">${(() => { const kids = empKids(emp); return s.list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty), child = itemChildLabel(kids, b[i.Book_ID], i); return `<li class="flex items-center gap-3 px-4 py-2.5">
       <span class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${r > 0 ? "bg-brand-50 text-brand-700" : "bg-emerald-50 text-emerald-600"}">${r > 0 ? `<b class="num">${r}</b>` : ic("check")}</span>
-      <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold text-slate-800 truncate">${esc(bookName(b, i.Book_ID))}</div>${bookSub(b, i.Book_ID, `${i.Beneficiary ? ` · <span class="text-sky-700 font-semibold">لـ ${esc(i.Beneficiary)}</span>` : ""}${n(i.Delivered_Qty) ? ` · سُلّم ${fmt(i.Delivered_Qty)}` : ""}`)}</div></li>`; }).join("")}</ul>
+      <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold text-slate-800 truncate">${esc(bookName(b, i.Book_ID))}</div>${bookSub(b, i.Book_ID, `${i.Beneficiary ? ` · <span class="text-sky-700 font-semibold">لـ ${esc(i.Beneficiary)}</span>` : child ? ` · <span class="text-brand-700 font-semibold">لـ ${esc(child)}</span>` : ""}${n(i.Delivered_Qty) ? ` · سُلّم ${fmt(i.Delivered_Qty)}` : ""}`)}</div></li>`; }).join(""); })()}</ul>
     <div class="p-3 bg-slate-50/70 grid gap-2">
       ${inv && n(inv.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn ${s.dueDown || s.overdue ? "btn-primary" : "btn-outline"} w-full !h-12" data-act="collect" data-id="${esc(inv.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل${s.dueDown ? " المقدم " + fmt(s.dueDown) : ""}</button>` : ""}
       ${s.rem > 0 && can("EXECUTE_BOOK_DELIVERY") ? `<button class="btn ${s.ok ? "btn-success" : "btn-outline"} w-full !h-12" data-act="deliver" data-id="${esc(id)}">${ic("check-check")} تسليم ${fmt(s.rem)} نسخة وطباعة الإذن</button>` : ""}
@@ -3463,11 +3463,35 @@ on("edSave", async () => {
 });
 
 // ============================================================ ملف الموظف: كل ما يخصه في مكان واحد
+function empKids(emp) {
+  if (!emp || !emp.Kids_JSON) return [];
+  let o = null; try { o = JSON.parse(emp.Kids_JSON); } catch (_) { o = null; }
+  if (!o || !Array.isArray(o.kids)) return [];
+  const labels = ((A().catalog && A().catalog.grades) || []).map(g => g.label);
+  const now = new Date(), curYr = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
+  const yrs = Math.max(0, curYr - n(o.y || curYr));
+  let ownIdx = 0;
+  return o.kids.map(k => {
+    const i = labels.indexOf(k.grade);
+    const grade = (yrs && i >= 0) ? (i + yrs < labels.length ? labels[i + yrs] : "") : k.grade;
+    const isOwn = !k.rel;
+    const label = (k.name || "").trim() || (isOwn ? (k.gender === "g" ? "ابنته" : "ابنه") + (ownIdx ? " " + (ownIdx + 1) : "") : "");
+    if (isOwn) ownIdx++;
+    return Object.assign({}, k, { grade, label });
+  }).filter(k => k.grade);
+}
+function itemChildLabel(kids, book, item) {
+  if (item && item.Beneficiary) return "";
+  const grade = (book || {}).Grade;
+  if (!grade || !kids || !kids.length) return "";
+  return kids.filter(k => !k.rel && k.grade === grade).map(k => k.label).filter(Boolean).join(" و");
+}
 on("empProfile", id => { Q.epTab = Q.epTab || "res"; Q.epId = id; const e = maps().e[id] || {};
   Q.epM = UI.open(`<div id="epBody">${epBody(id)}</div>`, { title: esc(e.Full_Name || id), sub: `<span class="num">${esc(id)}</span>${e.Department ? " · " + esc(e.Department) : ""}${e.Job_Title ? " · " + esc(e.Job_Title) : ""}`, wide: true }); });
 on("epTab", t => { Q.epTab = t; const el = $("#epBody"); if (el) el.innerHTML = epBody(Q.epId); });
 function epBody(id) {
   const d = A(), { b } = maps(), e = maps().e[id] || {}, ph = by(d.phases, "Phase_ID");
+  const kids = empKids(e), ownKids = kids.filter(k => !k.rel);
   const items = d.resItems.filter(i => i.Emp_ID === id && n(i.Requested_Qty) > 0 && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
   const invs = d.empInvoices.filter(i => i.Emp_ID === id), pays = d.empPayments.filter(p => p.Emp_ID === id);
   const insts = d.installments.filter(i => i.Emp_ID === id).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date)));
@@ -3480,7 +3504,7 @@ function epBody(id) {
 
   const resCols = [
     { t: "الكود", cls: "whitespace-nowrap", v: i => `<span class="inline-flex items-center rounded-lg bg-brand-50 text-brand-800 ring-1 ring-brand-200/80 px-2 py-0.5 text-[12px] font-bold num" dir="ltr">${esc(i.Book_ID)}</span>` },
-    { t: "الكتاب", v: i => { const meta = bookMeta(b, i.Book_ID); return `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(bookName(b, i.Book_ID))}</div>${(meta || i.Beneficiary) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${meta ? `<span>${esc(meta)}</span>` : ""}${i.Beneficiary ? `<span class="pill pill-blue !text-[10.5px]">لـ ${esc(i.Beneficiary)}</span>` : ""}</div>` : ""}</div>`; } },
+    { t: "الكتاب", v: i => { const meta = bookMeta(b, i.Book_ID), child = itemChildLabel(kids, b[i.Book_ID], i); return `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(bookName(b, i.Book_ID))}</div>${(meta || i.Beneficiary || child) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${meta ? `<span>${esc(meta)}</span>` : ""}${i.Beneficiary ? `<span class="pill pill-blue !text-[10.5px]">لـ ${esc(i.Beneficiary)}</span>` : child ? `<span class="pill pill-brand !text-[10.5px]">لـ ${esc(child)}</span>` : ""}</div>` : ""}</div>`; } },
     { t: "تاريخ ووقت الحجز", cls: "whitespace-nowrap num", v: i => { const s = String(dt(i.Priority_Timestamp) || "").trim(); const parts = s.split(/\s+/); return parts.length >= 2 ? `<div dir="ltr" class="inline-flex flex-col items-end"><span class="text-[12.5px] font-semibold text-slate-700">${esc(parts[0])}</span><span class="text-[11px] text-slate-400">${esc(parts.slice(1).join(" "))}</span></div>` : `<span dir="ltr" class="text-[12px] text-slate-600">${esc(s || "—")}</span>`; } },
     { t: "الكمية", cls: "whitespace-nowrap num", v: i => `<div class="font-bold text-slate-800">${fmt(i.Requested_Qty)} <span class="font-normal text-[11.5px] text-slate-500">نسخة</span></div>${n(i.Delivered_Qty) ? `<div class="text-[11px] text-emerald-600">سُلّم ${fmt(i.Delivered_Qty)}</div>` : n(i.Allocated_Qty) ? `<div class="text-[11px] text-sky-600">مخصص ${fmt(i.Allocated_Qty)}</div>` : ""}` },
     { t: "الإجمالي", cls: "whitespace-nowrap num", v: i => { const amt = n(i.Total_Emp_Line_Amount) || (n(i.Unit_Emp_Price) * n(i.Requested_Qty)); return amt > 0 ? `<span class="font-bold text-slate-800">${fmt(amt)}</span> <span class="text-[11px] text-slate-400">ج.م</span>` : `<span class="text-[11.5px] text-slate-400">—</span>`; } },
@@ -3513,6 +3537,7 @@ function epBody(id) {
       ${isTrue(p.Is_Voided) ? pill("", "ملغى", "red") : `<b class="num ${n(p.Amount) < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(p.Amount)}</b><button class="icon-btn w-8 h-8" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة">${ic("printer")}</button>`}</li>`).join("")}</ul>` : UI.empty("wallet", "لا إيصالات");
   if (t === "log") { body = `<div id="epLog">${UI.skeleton(3)}</div>`; setTimeout(async () => { const r = await call("GET_AUDIT_LOG", { empId: id, limit: 200 }); const el = $("#epLog"); if (!el) return; Q.audRows = r.entries || []; el.innerHTML = r.success ? audList(Q.audRows) : esc(r.message); }, 0); }
   if (t === "info") body = `<div class="grid grid-cols-2 gap-2">${UI.stat("الرقم الوظيفي", esc(e.Emp_ID))}${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}${UI.stat("جهة العمل", esc(e.Department || "—"))}${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}${UI.stat("حالة العضوية", esc(e.Employment_Status || "—"))}${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح")}${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}</div>
+    ${ownKids.length ? `<div class="mt-3"><div class="label">الأبناء المسجلون</div><div class="flex flex-wrap gap-1.5">${ownKids.map(k => `<span class="pill pill-brand">${esc(k.label)} (${esc(k.grade)})</span>`).join("")}</div></div>` : ""}
     ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
     ${e.Mobile ? `<div class="mt-3"><div class="label">رسالة واتساب جاهزة</div><div class="flex flex-wrap gap-1.5">${[["ready", "كتبك جاهزة"], ["inst", "تذكير بالقسط"], ["open", "الحجز مفتوح"], ["free", "رسالة حرة"]].map(x => `<button class="btn btn-soft btn-xs" data-act="waEmp" data-id="${esc(e.Emp_ID)}|${x[0]}">${ic("message-circle")} ${x[1]}</button>`).join("")}<a class="btn btn-ghost btn-xs" href="tel:${esc(e.Mobile)}">${ic("phone")} اتصال</a></div></div>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
