@@ -480,6 +480,8 @@ function booksTable() {
     <td class="col-act"></td>
   </tr>` : "";
 
+  if (BK_MOBILE()) return dirtyBanner + bookCardsMobile(list, rcMap, st, canEdit, stageTone);
+  _bkMobLast = false;
   const tbl = UI.table([
     { t: "الكود", cls: "w-20 whitespace-nowrap", v: x => `<span class="inline-flex items-center justify-center rounded-lg px-2 py-0.5 text-[11.5px] font-bold num ring-1 ${stageTone(x.Stage || "")}">${esc(x.Book_ID)}</span>` },
     { t: "الكتاب · الناشر · المادة", v: x => `<div class="flex items-center gap-2">${coverThumb(x)}<div class="min-w-0 flex-1">
@@ -570,6 +572,58 @@ function booksTable() {
   });
   return dirtyBanner + tbl;
 }
+
+// ---------------- بطاقات الكتب على الموبايل (بدل الجدول) ----------------
+const BK_MOBILE = () => window.matchMedia && window.matchMedia("(max-width: 639px)").matches;
+let _bkMobLast = null;
+window.addEventListener("resize", () => { const m = BK_MOBILE(); if (_bkMobLast !== null && m !== _bkMobLast && Router.current === "/a/books") rerenderList("booksList", booksTable); });
+function bookCardsMobile(list, rcMap, st, canEdit, stageTone) {
+  _bkMobLast = true;
+  if (!list.length) return UI.empty("library-big", "لا نتائج", "جرّب تغيير البحث أو الفلاتر.");
+  const lim = Q.bkMobN || 30, shown = list.slice(0, lim);
+  const priced = list.filter(x => x.Book_Status !== "Pricing" && n(x.Cover_Price) > 0).length;
+  const card = x => {
+    const id = esc(x.Book_ID), c = rcMap[x.Book_ID], oh = st[x.Book_ID] ? st[x.Book_ID].onHand : 0, fr = st[x.Book_ID] ? st[x.Book_ID].free : 0;
+    const ed = canEdit && (BK_UI.inlineMode || BK_UI.editingRow === x.Book_ID), dirty = !!BK_UI.dirty[x.Book_ID], dr = rowDraftOf(x), p = bookPrice(dr);
+    const noPrice = x.Book_Status === "Pricing" && !n(x.Cover_Price);
+    const cost = dirty ? p.cost : n(x.Standard_Net_Cost), emp = dirty ? p.emp : n(x.Emp_Selling_Price), mg = dirty ? p.margin : r2(n(x.Emp_Selling_Price) - n(x.Standard_Net_Cost));
+    const loss = !noPrice && mg < 0;
+    const cell = (lbl, val, cls) => `<div class="rounded-xl ${cls || "bg-slate-50"} px-1 py-1.5 text-center min-w-0"><div class="text-[10px] text-slate-500 leading-none mb-1">${lbl}</div><div class="num font-bold text-[14px] leading-none truncate">${val}</div></div>`;
+    const prices = ed ? `<div class="mt-3 rounded-2xl bg-brand-50/60 ring-1 ring-brand-100 p-2.5">
+        <div class="grid grid-cols-2 gap-2"><label class="block"><span class="text-[11px] text-slate-600">السعر قبل الخصم</span><input type="number" step="any" inputmode="decimal" class="input !h-11 num text-center text-[16px] font-bold mt-0.5" data-bk-inline="${id}" data-f="coverPrice" value="${esc(dr.coverPrice)}" placeholder="0"></label>
+          <label class="block"><span class="text-[11px] text-slate-600">خصم المكتبة %</span><input type="number" step="any" inputmode="decimal" class="input !h-11 num text-center text-[16px] font-bold mt-0.5" data-bk-inline="${id}" data-f="supplierDiscountPct" value="${esc(dr.supplierDiscountPct)}" placeholder="%"></label></div>
+        <div class="grid grid-cols-3 gap-1.5 mt-2">${cell("التكلفة", `<span data-bk-cost="${id}">${fmt(p.cost)}</span>`, "bg-white")}${cell("للموظف", `<span data-bk-emp="${id}" class="text-brand-800">${fmt(p.emp)}</span>`, "bg-white")}${cell("الهامش", `<span data-bk-margin="${id}">${fmt(p.margin)}</span>`, "bg-white")}</div>
+        <div class="grid grid-cols-2 gap-2 mt-2.5"><button class="btn btn-primary !h-11" data-act="bkSaveRow" data-id="${id}">${ic("check")} حفظ السعر</button><button class="btn btn-outline !h-11" data-act="bkCancelRow" data-id="${id}">إلغاء</button></div></div>`
+      : noPrice ? (canEdit ? `<button class="mt-3 w-full h-11 rounded-xl bg-amber-50 ring-1 ring-amber-300 text-amber-800 font-bold text-[14px] flex items-center justify-center gap-2 active:scale-[.99]" data-act="bkQuickRow" data-id="${id}">${ic("pencil")} سعّر الكتاب ده</button>` : `<div class="mt-3 text-center text-[12.5px] text-amber-700 bg-amber-50 rounded-xl py-2">جاري التسعير</div>`)
+      : `<button class="mt-3 w-full grid grid-cols-4 gap-1.5 text-right" ${canEdit ? `data-act="bkQuickRow" data-id="${id}"` : ""} aria-label="تعديل السعر">
+          ${cell("قبل الخصم", `<span class="text-slate-500 line-through decoration-slate-300">${fmt(x.Cover_Price)}</span>`)}${cell("للموظف", `<span class="text-brand-800">${fmt(emp)}</span>`, "bg-brand-50")}${cell("التكلفة", fmt(cost))}${cell("الهامش", `<span class="${loss ? "text-rose-600" : "text-emerald-700"}">${fmt(mg)}</span>`, loss ? "bg-rose-50" : "bg-emerald-50")}</button>`;
+    return `<article class="rounded-2xl bg-white p-3 ring-1 ${dirty ? "ring-amber-300 bg-amber-50/30" : loss ? "ring-rose-300" : "ring-slate-200"} shadow-xs" data-book-row="${id}">
+      <div class="flex gap-3">
+        <div class="shrink-0" style="transform:scale(1.35);transform-origin:top right;margin-left:12px;margin-bottom:16px">${coverThumb(x)}</div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-start gap-2"><button class="flex-1 min-w-0 text-right font-bold text-slate-900 text-[14.5px] leading-snug" style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden" data-act="bookRes" data-id="${id}">${esc(x.Book_Name)}</button>
+            <span class="shrink-0 rounded-lg px-1.5 py-0.5 text-[11px] font-bold num ring-1 ${stageTone(x.Stage || "")}">${id}</span></div>
+          <div class="text-[12px] text-slate-500 mt-0.5 truncate">${[x.Publisher, x.Subject, x.Book_Part].filter(Boolean).map(esc).join(" · ")}</div>
+          <div class="flex flex-wrap items-center gap-1 mt-1.5">
+            <span class="rounded-md bg-slate-800 text-white px-1.5 py-0.5 text-[11px] font-bold">${esc(Doc.shortGrade ? Doc.shortGrade(x.Grade) : x.Grade)}</span>
+            <span class="rounded-md ring-1 ring-slate-200 px-1.5 py-0.5 text-[11px] text-slate-600">${esc(x.School_Types || "حكومي")}</span>
+            ${noPrice ? "" : pill(x.Book_Status)}
+            ${c ? `<button class="rounded-md bg-brand-50 text-brand-800 px-1.5 py-0.5 text-[11px] font-bold inline-flex items-center gap-1" data-act="bookRes" data-id="${id}">${ic("users", "!w-3 !h-3")} ${fmt(c.p)} · ${fmt(c.q)} نسخة</button>` : ""}
+          </div>
+        </div>
+      </div>
+      ${prices}
+      <div class="flex items-center justify-between mt-2.5 pt-2.5 border-t border-slate-100">
+        <span class="text-[11.5px] text-slate-500">${ic("package", "!w-3.5 !h-3.5")} المخزن <b class="num text-slate-700">${fmt(oh)}</b>${fr ? ` · حر <b class="num text-emerald-700">${fmt(fr)}</b>` : ""}${!noPrice && !ed ? ` · خصم ${fmt(x.Supplier_Discount_Pct)}%` : ""}</span>
+        <div class="flex items-center gap-1">${canEdit ? `<button class="act-ic act-ic-edit" data-act="bookForm" data-id="${id}" aria-label="تعديل">${ic("pencil")}</button><button class="act-ic act-ic-copy" data-act="bookClone" data-id="${id}" aria-label="نسخ لصف">${ic("copy")}</button>` : ""}${can("DELETE_BOOK") ? `<button class="act-ic act-ic-del" data-act="bookDel" data-id="${id}" aria-label="حذف">${ic("trash-2")}</button>` : ""}</div>
+      </div></article>`;
+  };
+  return `<div class="flex items-center justify-between text-[12px] text-slate-500 mb-2 px-0.5"><span><b class="num text-slate-800">${fmt(list.length)}</b> كتاب · ${fmt(priced)} مسعّر</span><span>اضغط على السعر لتعديله</span></div>
+    <div class="grid gap-2.5">${shown.map(card).join("")}</div>
+    ${list.length > lim ? `<button class="btn btn-outline w-full mt-3" data-act="bkMobMore">عرض ${fmt(Math.min(30, list.length - lim))} كمان (باقي ${fmt(list.length - lim)})</button>` : ""}`;
+}
+on("bkMobMore", () => { Q.bkMobN = (Q.bkMobN || 30) + 30; rerenderList("booksList", booksTable); });
+on("bkCancelRow", id => { delete BK_UI.dirty[id]; BK_UI.editingRow = null; rerenderList("booksList", booksTable); });
 
 /** لوحة الإدخال السريع المدمجة أعلى جدول الكتب (إضافة كتاب أو سلسلة كاملة في ثوانٍ بدون نوافذ منبثقة) */
 function quickBookEntryBarHTML() {
