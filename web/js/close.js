@@ -261,3 +261,104 @@ on("proxyExit", async () => {
 // «حجز لموظف» و«تعديل الحجز» من الإدارة ← وضع النيابة (المحرر السريع القديم متاح باسم resEditQuick)
 ACTIONS.resEditQuick = ACTIONS.resEdit;
 on("resEdit", empId => proxyStart(empId));
+
+// ================================================================ جاهزية الإطلاق (أعلى لوحة القيادة)
+function launchChecks() {
+  const d = A(), sm = d.settingsMap || {}, sup = d.suppliers[0] || {};
+  const pricing = d.books.filter(b => b.Book_Status === "Pricing").length;
+  const defUsers = (d.users || []).filter(u => isTrue(u.Must_Change_Password) && isTrue(u.Is_Active !== "" ? u.Is_Active : true));
+  return [
+    { ok: d.phases.some(p => p.Booking_Open), t: "مرحلة حجز مفتوحة بمواعيدها", tip: "افتح المرحلة وحدد بداية ونهاية الحجز", go: "/a/phases" },
+    { ok: !pricing, t: pricing ? `${fmt(pricing)} كتاب لسه من غير سعر` : "كل الكتب مسعّرة", tip: "التوزيع لا يخصص كتاباً بلا سعر", go: "/a/books" },
+    { ok: !!sm.PICKUP_SCHEDULE, t: "مواعيد ومكان الاستلام", tip: "تظهر للموظف في «حجوزاتي»", go: "/a/slots" },
+    { ok: !!sm.PAY_INSTAPAY_LINK, t: "رابط دفع إنستاباي", tip: "يفتح تطبيق إنستاباي مباشرة للموظف (اختياري)", go: "/a/settings", soft: true },
+    { ok: !!(sup.Phone && sup.Contact_Person), t: "بيانات المكتبة (المسؤول والتليفون)", tip: (sup.Supplier_Name || "المكتبة") + " — تظهر في أوامر التوريد", go: "/a/suppliers" },
+    { ok: !defUsers.length, t: defUsers.length ? `${defUsers.length} حساب إدارة بكلمة سر مؤقتة` : "كلمات سر الإدارة متغيرة", tip: defUsers.map(u => u.Username).join("، ") || "", go: "/a/settings" },
+    { ok: isTrue(sm.RESET_LOCKED), t: "قفل زر تصفير البيانات", tip: "يمنع المسح الكامل بالخطأ بعد الإطلاق", act: "lockReset" }
+  ];
+}
+_wrapA("/a/dash", view => {
+  if (!can("SAVE_SETTING") && APP.user.role !== "Coordinator") return;
+  const cs = launchChecks(), done = cs.filter(c => c.ok).length, all = done === cs.length;
+  let hide = false; try { hide = all && localStorage.getItem("wb_launch_hide") === "1"; } catch (_) {}
+  if (hide) return;
+  const pct = Math.round(done / cs.length * 100);
+  const html = `<section class="card overflow-hidden mb-4 ring-1 ${all ? "ring-emerald-200" : "ring-amber-200"}">
+    <div class="p-4 ${all ? "bg-emerald-50/60" : "bg-gradient-to-l from-amber-50 to-white"} flex items-center gap-3">
+      <div class="relative w-14 h-14 shrink-0">${UI.donut ? "" : ""}<svg viewBox="0 0 36 36" class="w-14 h-14 -rotate-90"><circle cx="18" cy="18" r="15.5" fill="none" stroke="#e2e8f0" stroke-width="4"/><circle cx="18" cy="18" r="15.5" fill="none" stroke="${all ? "#10b981" : "#f59e0b"}" stroke-width="4" stroke-linecap="round" stroke-dasharray="${pct * 0.974} 100"/></svg><b class="absolute inset-0 flex items-center justify-center text-[13px] num">${done}/${cs.length}</b></div>
+      <div class="flex-1 min-w-0"><h3 class="font-bold text-slate-900">${all ? "🚀 المنصة جاهزة للإطلاق" : "🚦 جاهزية الإطلاق"}</h3><p class="text-[12.5px] text-slate-600">${all ? "كل البنود الأساسية تمام — ابعت رسالة الإطلاق وتابع من غرفة المتابعة." : "خلّص البنود دي قبل ما تعلن عن المنصة."}</p></div></div>
+    <ul class="divide-y divide-slate-100">${cs.map(c => `<li class="flex items-center gap-3 px-4 py-2.5"><span class="text-[18px]">${c.ok ? "✅" : c.soft ? "🟡" : "⛔"}</span><div class="flex-1 min-w-0"><div class="text-[13.5px] font-semibold ${c.ok ? "text-slate-500" : "text-slate-900"}">${esc(c.t)}</div>${c.tip && !c.ok ? `<div class="text-[11.5px] text-slate-500">${esc(c.tip)}</div>` : ""}</div>
+      ${c.ok ? "" : c.act ? `<button class="btn btn-dark btn-xs" data-act="${c.act}">نفّذ</button>` : `<a class="btn btn-outline btn-xs" href="#${c.go}">كمّل ${ic("chevron-left")}</a>`}</li>`).join("")}</ul>
+    <div class="flex flex-wrap gap-2 p-3 bg-slate-50/70 border-t border-slate-100"><button class="btn btn-success btn-sm" data-act="launchMsg">${ic("message-circle")} رسالة الإطلاق</button><a class="btn btn-primary btn-sm" href="#/a/live">${ic("activity")} غرفة المتابعة</a>${all ? `<button class="btn btn-ghost btn-sm" data-act="launchHide">إخفاء</button>` : ""}</div></section>`;
+  const h = view.firstElementChild; if (h) h.insertAdjacentHTML("afterend", html); else view.insertAdjacentHTML("afterbegin", html);
+});
+on("launchHide", () => { try { localStorage.setItem("wb_launch_hide", "1"); } catch (_) {} Shell.rerender(); });
+on("lockReset", () => act("SAVE_SETTING", { key: "RESET_LOCKED", value: true }, { title: "قفل التصفير", message: "بعد القفل مش هينفع تصفير بيانات التشغيل إلا لو رجّعت الإعداد RESET_LOCKED لـ false من الإعدادات. تقفل دلوقتي؟", ok: "اقفل" }));
+
+// ================================================================ رسالة الإطلاق (واتساب)
+function launchText() {
+  const d = A(), ph = d.phases.find(p => p.Booking_Open) || d.phases[d.phases.length - 1] || {}, base = location.origin + location.pathname.replace(/index\.html$/, "");
+  const end = ph.End_DateTime ? String(ph.End_DateTime).slice(0, 10) : "";
+  return `📚 *منصة حجز الكتب المخفضة* — النقابة العامة بالدقهلية
+
+كتب ولادك الخارجية *بخصم ${fmt((d.settingsMap || {}).UNIFIED_EMP_DISCOUNT_PCT || 18)}%* وبالتقسيط المريح 💜
+الحجز مفتوح دلوقتي${ph.Phase_Name ? ` لـ «${ph.Phase_Name}»` : ""}${end ? ` لحد ${end}` : ""}
+
+👈 ادخل من موبايلك:
+${base}
+
+✅ ادخل برقمك الوظيفي + آخر 4 أرقام من القومي + موبايلك
+✅ اختار ولادك والمنصة تجهزلك كتب صفهم
+✅ اختار تدفع كاش أو تقسيط وأكّد
+
+🎬 فيديو طريقة الحجز (دقيقة ونص):
+${base}media/booking.mp4
+
+⏱ الأسبقية بالدقيقة — احجز بدري
+❓ مش قادر تدخل؟ اضغط «مش قادر تدخل؟» في صفحة الدخول`;
+}
+on("launchMsg", () => {
+  const t = launchText();
+  const m = UI.open(`<textarea class="input !h-72 text-[13px] leading-relaxed" id="lmTxt">${esc(t)}</textarea>
+    <div class="grid grid-cols-2 gap-2 mt-3"><button class="btn btn-outline" data-lm="copy">${ic("copy")} نسخ</button><a class="btn btn-success" target="_blank" rel="noopener" data-lm="wa" href="https://wa.me/?text=${encodeURIComponent(t)}">${ic("message-circle")} شارك على واتساب</a></div>
+    <p class="text-[12px] text-slate-500 mt-2">عدّل النص براحتك قبل الإرسال. لإرسال تذكير فردي لمن لم يحجز: صفحة «متابعة الأعضاء».</p>`, { title: "رسالة الإطلاق", sub: "جاهزة للجروبات والأعضاء" });
+  const ta = m.root.querySelector("#lmTxt"), wa = m.root.querySelector('[data-lm="wa"]');
+  ta.addEventListener("input", () => { wa.href = "https://wa.me/?text=" + encodeURIComponent(ta.value); });
+  m.root.querySelector('[data-lm="copy"]').addEventListener("click", () => { try { navigator.clipboard.writeText(ta.value); toast("اتنسخت ✅", "success"); } catch (_) { ta.select(); } });
+});
+
+// ================================================================ غرفة المتابعة يوم الإطلاق + مسار الحجز (funnel)
+ADMIN_NAV[0].items.push(["live", "activity", "غرفة المتابعة"]);
+const LIVE = { f: null, at: 0, timer: null };
+async function liveFetch() { const r = await call("GET_FUNNEL", {}); if (r.success) { LIVE.f = r; LIVE.at = Date.now(); } return r; }
+const FUNNEL = [["login", "دخل المنصة"], ["portal", "فتح البوابة"], ["wiz", "بدأ الحجز"], ["review", "وصل للمراجعة"], ["pay", "اختار السداد"], ["submit", "أكّد الحجز"]];
+function funnelHTML(f) {
+  const m = {}; (f.steps || []).forEach(s => { m[s.step] = s.n; }); const top = Math.max(1, m.login || 0, m.portal || 0);
+  return `<div class="space-y-2">${FUNNEL.map(([k, l], i) => { const v = m[k] || 0, prev = i ? (m[FUNNEL[i - 1][0]] || 0) : 0, drop = i && prev ? Math.round((1 - v / prev) * 100) : 0;
+    return `<div><div class="flex justify-between text-[12.5px] mb-1"><span class="font-semibold text-slate-700">${l}</span><span class="num"><b>${fmt(v)}</b>${i && prev && drop > 0 ? ` <span class="text-rose-500 text-[11px]">−${drop}%</span>` : ""}</span></div>
+      <div class="h-3 rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full bg-gradient-to-l from-brand-600 to-gold-400" style="width:${Math.round(v / top * 100)}%"></div></div></div>`; }).join("")}</div>
+    ${(m.review || 0) > (m.submit || 0) ? `<p class="text-[12px] text-amber-700 bg-amber-50 rounded-xl p-2.5 mt-3">💡 ${fmt((m.review || 0) - (m.submit || 0))} وصلوا للمراجعة وما أكّدوش — ابعتلهم تذكير من «متابعة الأعضاء».</p>` : ""}`;
+}
+Router.add("/a/live", view => {
+  const d = A(), today = new Date(Date.now() + 2 * 3600e3).toISOString().slice(0, 10), { e, b } = maps();
+  const f = LIVE.f || { steps: [], recent: [], errs: [], days: [] }, rec = {}; (f.recent || []).forEach(x => { rec[x.step] = x.n; });
+  const items = d.resItems.filter(i => String(i.Priority_Timestamp).slice(0, 10) === today && !String(i.Allocation_Status).startsWith("Cancelled"));
+  const hdrs = d.resHeaders.filter(h => String(h.Last_Modified_At).slice(0, 10) === today).sort((x, y) => String(y.Last_Modified_At).localeCompare(String(x.Last_Modified_At)));
+  const byHour = {}; items.forEach(i => { const h = String(i.Priority_Timestamp).slice(11, 13); byHour[h] = (byHour[h] || 0) + n(i.Requested_Qty); });
+  const topB = {}; items.forEach(i => { topB[i.Book_ID] = (topB[i.Book_ID] || 0) + n(i.Requested_Qty); });
+  const hrs = Object.keys(byHour).sort(), mx = Math.max(1, ...Object.values(byHour));
+  view.innerHTML = UI.pageHead("غرفة المتابعة", `يتحدث كل دقيقة · آخر تحديث ${LIVE.at ? new Date(LIVE.at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }) : "—"}`, `<button class="btn btn-outline btn-sm" data-act="liveNow">${ic("refresh-cw")} تحديث الآن</button>`)
+    + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${UI.kpi("حجوزات اليوم", fmt(new Set(hdrs.map(h => h.Emp_ID)).size), { icon: "notebook-pen", tone: "brand", foot: fmt(items.reduce((s, i) => s + n(i.Requested_Qty), 0)) + " نسخة" })}${UI.kpi("آخر 15 دقيقة", fmt(rec.submit || 0), { icon: "activity", tone: "green", foot: `${fmt(rec.login || 0)} دخول · ${fmt(rec.portal || 0)} فتح` })}${UI.kpi("أخطاء اليوم", fmt((f.errs || []).length), { icon: "triangle-alert", tone: (f.errs || []).length ? "red" : "gray", foot: (f.errs || []).filter(x => x.step === "err:busy").length ? "منها زحمة على الخادم" : "" })}${UI.kpi("زوار اليوم", fmt(((f.steps || []).find(s => s.step === "portal") || {}).n || 0), { icon: "users", tone: "blue" })}</div>
+    <div class="grid gap-4 lg:grid-cols-2">
+      ${UI.section(`${ic("filter", "text-brand-600")} مسار الحجز اليوم`, "فين الناس بتقف قبل ما تأكّد", funnelHTML(f))}
+      ${UI.section(`${ic("chart-column", "text-brand-600")} الحجز بالساعة`, "عدد النسخ المحجوزة اليوم لكل ساعة", hrs.length ? `<div class="flex items-end gap-1.5 h-36">${hrs.map(h => `<div class="flex-1 flex flex-col items-center gap-1"><span class="text-[10px] num text-slate-500">${byHour[h]}</span><div class="w-full rounded-t-lg bg-gradient-to-t from-brand-600 to-brand-400" style="height:${Math.round(byHour[h] / mx * 100)}%"></div><span class="text-[10px] num text-slate-400">${h}</span></div>`).join("")}</div>` : UI.empty("clock", "لا حجوزات اليوم بعد"))}
+      ${UI.section(`${ic("activity", "text-emerald-600")} آخر الحجوزات`, "مباشر", hdrs.length ? `<ul class="divide-y divide-slate-100">${hdrs.slice(0, 12).map(h => `<li class="flex items-center gap-2 py-2"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><div class="flex-1 min-w-0 text-[13px]">${empLink(h.Emp_ID, empName(e, h.Emp_ID))} <span class="text-slate-400 text-[11.5px]">${esc((e[h.Emp_ID] || {}).Department || "")}</span></div><b class="num text-[13px]">${fmt(h.Total_Emp_Value)}</b><span class="num text-[11px] text-slate-400">${esc(String(h.Last_Modified_At).slice(11, 16))}</span></li>`).join("")}</ul>` : UI.empty("activity", "مستني أول حجز 👀"))}
+      ${UI.section(`${ic("zap", "text-amber-500")} الأكثر حجزاً اليوم`, "", Object.keys(topB).length ? `<ul class="space-y-1.5">${Object.entries(topB).sort((x, y) => y[1] - x[1]).slice(0, 8).map(([k, v]) => `<li class="flex justify-between text-[13px]"><span class="truncate">${esc(bookName(b, k))}</span><b class="num">${v}</b></li>`).join("")}</ul>` : UI.empty("zap", "—"))}
+      ${UI.section(`${ic("triangle-alert", "text-rose-500")} مشاكل واجهت الموظفين`, "آخر 24 ساعة — كلّم صاحبها لو اتكررت", (f.errs || []).length ? `<ul class="divide-y divide-slate-100 text-[12.5px]">${f.errs.slice(0, 20).map(x => `<li class="py-1.5 flex gap-2"><span class="num text-slate-400 shrink-0">${esc(new Date(x.at).toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" }))}</span><span class="shrink-0 font-semibold">${esc({ "err:login": "دخول", "err:submit": "حجز", "err:busy": "زحمة", "err:queued": "اتحفظ على الجهاز" }[x.step] || x.step)}</span><span class="text-slate-600 flex-1 min-w-0">${x.emp_id ? empLink(x.emp_id, empName(e, x.emp_id)) + " · " : ""}${esc(x.detail || "")}</span></li>`).join("")}</ul>` : `<div class="text-center text-emerald-700 py-4">✅ مفيش مشاكل</div>`)}
+      ${UI.section(`${ic("trending-up", "text-brand-600")} آخر 14 يوم`, "دخول مقابل تأكيد حجز", (f.days || []).length ? (() => { const dd = {}; f.days.forEach(x => { (dd[x.day] = dd[x.day] || {})[x.step] = x.n; }); return `<ul class="text-[12.5px] space-y-1">${Object.keys(dd).map(k => `<li class="flex justify-between"><span class="num">${k.slice(5)}</span><span>دخل <b class="num">${dd[k].login || 0}</b> · حجز <b class="num text-emerald-700">${dd[k].submit || 0}</b></span></li>`).join("")}</ul>`; })() : UI.empty("trending-up", "البيانات بتبدأ تتجمع من النهارده"))}
+    </div>`;
+  if (!LIVE.f && !LIVE.tried) { LIVE.tried = 1; liveFetch().then(r => { if (r.success && Router.current === "/a/live") Shell.rerender(); }); }
+  clearInterval(LIVE.timer);
+  LIVE.timer = setInterval(async () => { if (Router.current !== "/a/live") return clearInterval(LIVE.timer); await Promise.all([liveFetch(), Admin.load()]); if (Router.current === "/a/live") Shell.rerender(); }, 60000);
+});
+on("liveNow", async () => { await Promise.all([liveFetch(), Admin.load()]); Shell.rerender(); });

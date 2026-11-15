@@ -596,3 +596,6 @@ on("rate", async v => {
 });
 _wrap("/e/home", view => afterHead(view, feedbackCard()));
 _wrap("/e/orders", view => afterHead(view, feedbackCard()));
+
+// خطوات المعالج لمسار الحجز (funnel)
+_wrap("/e/wiz", () => { try { const st = WZ.step; Track.send(st === "review" ? "review" : st === "pay" ? "pay" : "wiz"); } catch (_) {} });

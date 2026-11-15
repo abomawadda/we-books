@@ -116,12 +116,24 @@ return { callServerApi, DB_Engine, SYSTEM_CONFIG, Util, AuthEngine, TEXT_COLUMNS
   });
 
   // ---------------- النطاق المحدود ليوم الحجز ----------------
-  const EMP_SCOPED = { SUBMIT_OR_UPDATE_RESERVATION: [S.EMPLOYEES, S.RES_HEADER, S.RES_ITEMS, S.EMP_INVOICES, S.INSTALLMENTS] };
+  // عمليات الموظف تُحمَّل بصفوفه هو فقط (بدل الجدول كاملاً) — هذا ما يمنع امتلاء ذاكرة الخادم يوم الحجز
+  const MINE = [S.EMPLOYEES, S.RES_HEADER, S.EMP_INVOICES, S.INSTALLMENTS, S.EMP_PAYMENTS];
+  const EMP_SCOPED = {
+    SUBMIT_OR_UPDATE_RESERVATION: [S.EMPLOYEES, S.RES_HEADER, S.RES_ITEMS, S.EMP_INVOICES, S.INSTALLMENTS],
+    LOGIN_EMPLOYEE: [S.EMPLOYEES],
+    GET_EMPLOYEE_PORTAL_DATA: MINE, ADMIN_EMP_PORTAL: MINE
+  };
+  // قوائم الجداول مسبقاً: بدونها تحمّل أول عملية في كل نسخة جديدة من الخادم كل الجداول
   const hints = new Map();
   hints.set('SUBMIT_OR_UPDATE_RESERVATION', [S.SETTINGS, S.EMPLOYEES, S.PHASES, S.BOOKS, S.RES_HEADER, S.RES_ITEMS, S.EMP_INVOICES, S.INSTALLMENTS]);
+  hints.set('LOGIN_EMPLOYEE', [S.SETTINGS, S.EMPLOYEES]);
+  const PORTAL = [S.SETTINGS, S.PO_SNAPSHOT, S.PHASES, S.RES_ITEMS, S.BOOKS, S.EMPLOYEES, S.RES_HEADER, S.EMP_INVOICES, S.INSTALLMENTS, S.EMP_PAYMENTS, S.INVENTORY];
+  hints.set('GET_EMPLOYEE_PORTAL_DATA', PORTAL); hints.set('ADMIN_EMP_PORTAL', PORTAL);
   function scopeFor(action, payload, session) {
     const tables = EMP_SCOPED[action];
-    if (!tables || !session) return null;
+    if (!tables) return null;
+    if (action === 'LOGIN_EMPLOYEE') { const e = String((payload && payload.empId) || '').trim(); return e ? { empId: e, tables } : null; }
+    if (!session) return null;
     const empId = String(session.userType === 'EMPLOYEE' ? session.empId : (payload && payload.empId) || '').trim();
     return empId ? { empId, tables } : null;
   }

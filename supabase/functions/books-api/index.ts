@@ -195,12 +195,33 @@ async function health() {
   return { success: Object.values(jobs).every((j: any) => j.ok), jobs };
 }
 
-const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
+const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'ADMIN_EMP_PORTAL', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
 const reply = (o: any, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } });
 
 async function handle(action: string, payload: any, token: string, clientIp = '') {
+  // مسار الحجز (funnel) وأخطاء الموظفين: كتابة مباشرة خفيفة بلا محرك ولا أقفال — مرة واحدة لكل موظف/خطوة/يوم
+  if (action === 'TRACK') {
+    const step = String(payload?.step || '').slice(0, 40);
+    if (!/^[a-z_:]+$/.test(step)) return { success: false };
+    const s: any = token ? await verify(token).catch(() => null) : null;
+    const [c] = await sql`select count(*)::int as n from books.funnel where ip = ${clientIp} and at > now() - interval '10 minutes'`;
+    if (c.n > 300) return { success: true };
+    await sql`insert into books.funnel (emp_id, step, detail, ip) values (${s && s.empId ? String(s.empId) : null}, ${step}, ${String(payload?.detail || '').slice(0, 200)}, ${clientIp}) on conflict do nothing`;
+    return { success: true };
+  }
+  if (action === 'GET_FUNNEL') {
+    const s: any = await verify(token);
+    if (!s) return EXPIRED;
+    if (s.userType !== 'ADMIN') return { success: false, message: 'غير مصرح.' };
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(payload?.day || '')) ? String(payload.day) : null;
+    const steps = await sql`select step, count(distinct coalesce(emp_id, ip))::int as n from books.funnel where day = coalesce(${day}::date, (now() at time zone 'Africa/Cairo')::date) group by step`;
+    const days = await sql`select day::text as day, step, count(distinct coalesce(emp_id, ip))::int as n from books.funnel where day >= (now() at time zone 'Africa/Cairo')::date - 13 and step in ('login','submit') group by 1, 2 order by 1`;
+    const recent = await sql`select step, count(*)::int as n from books.funnel where at > now() - interval '15 minutes' group by step`;
+    const errs = await sql`select at, emp_id, step, detail from books.funnel where step like 'err%' and at > now() - interval '24 hours' order by at desc limit 40`;
+    return { success: true, steps, days, recent, errs };
+  }
   const rt = await runtime();
   if (action === 'LOGOUT') return { success: true };
   // المهمة اليومية (pg_cron): محمية بمفتاح في books.config لا يعرفه إلا قاعدة البيانات
@@ -282,7 +303,7 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
   if (action === 'LOGIN_EMPLOYEE' || action === 'LOGIN_ADMIN') {
     const fk = failKey(action, payload);
     if (await isLocked(fk)) return LOCKED;
-    const res = await rt.run(store, action, rt.apiFn(action, payload, null), { readOnly: READ_ONLY.has(action) });
+    const res = await rt.run(store, action, rt.apiFn(action, payload, null), { readOnly: READ_ONLY.has(action), scope: rt.scopeFor(action, payload, null) });
     if (res && res.success) { await clearFails(fk); res.sessionToken = await issue(res.user); }
     else if (res && /غير مطابقة|غير صحيحة/.test(res.message || '')) await registerFail(fk);
     return res;
