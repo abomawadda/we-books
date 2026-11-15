@@ -190,3 +190,25 @@ _wrapA("/a/dash", view => {
   if (!fb.length) return; const { e } = maps(), avg = fb.reduce((s, x) => s + x.stars, 0) / fb.length, notes = fb.filter(x => x.note).sort((a, b) => String(b.at).localeCompare(a.at)).slice(0, 6);
   view.insertAdjacentHTML("beforeend", `<div class="mt-4 sm:mt-6">${UI.section(`⭐ رأي الموظفين بعد الاستلام`, `${fmt(fb.length)} تقييم · المتوسط ${avg.toFixed(1)} من 5`, `<div class="flex gap-1 mb-3">${[5, 4, 3, 2, 1].map(s => { const c = fb.filter(x => x.stars === s).length; return `<div class="flex-1 rounded-xl bg-slate-50 text-center py-2"><div class="text-[11px]">${s} ⭐</div><b class="num">${c}</b></div>`; }).join("")}</div>${notes.length ? `<ul class="divide-y divide-slate-100 text-[13px]">${notes.map(x => `<li class="py-2"><b>${esc(empName(e, x.emp))}</b> ${"⭐".repeat(x.stars)}<div class="text-slate-600">${esc(x.note)}</div></li>`).join("")}</ul>` : ""}`)}</div>`);
 });
+
+// ================================================================ تبويبات الموبايل بدل القوائم المتراصة
+Q.mtab = Q.mtab || {};
+function mobileTabs(view, key, tabs) {
+  tabs = tabs.filter(t => t.els.every(Boolean)); if (tabs.length < 2) return;
+  const cur = Math.min(Q.mtab[key] || 0, tabs.length - 1);
+  tabs.forEach((t, i) => t.els.forEach(el => el.classList.toggle("mt-off", i !== cur)));
+  const bar = document.createElement("div");
+  bar.className = "lg:hidden sticky top-[3.6rem] z-[5] -mx-1 mb-3 p-1 rounded-2xl bg-white/90 backdrop-blur ring-1 ring-slate-200 shadow-sm flex gap-1";
+  bar.innerHTML = tabs.map((t, i) => `<button class="flex-1 h-10 rounded-xl text-[13px] font-bold transition ${i === cur ? "bg-brand-700 text-white shadow" : "text-slate-600"}" data-mt="${i}">${t.label}${t.count != null ? ` <span class="num ${i === cur ? "text-gold-300" : "text-slate-400"}">${fmt(t.count)}</span>` : ""}</button>`).join("");
+  bar.addEventListener("click", ev => { const b = ev.target.closest("[data-mt]"); if (!b) return; Q.mtab[key] = +b.dataset.mt; Shell.rerender(); window.scrollTo({ top: 0, behavior: "smooth" }); });
+  const head = view.firstElementChild; head.insertAdjacentElement("afterend", bar);
+}
+_wrapA("/a/delivery", view => {
+  const k = [...view.children];
+  const docs = A().deliveryReturns.filter(x => x.Phase_ID === APP.phaseId).length;
+  mobileTabs(view, "delivery", [{ label: "👥 التسليم", els: [k[1], k[2]] }, { label: "📄 المستندات", count: docs, els: [k[4]] }]);
+});
+_wrapA("/a/cash", view => {
+  const g = view.querySelector(".grid.items-start"); if (!g || g.children.length < 2) return;
+  mobileTabs(view, "cash", [{ label: "🧾 الإيصالات", count: A().empPayments.length, els: [g.children[0]] }, { label: "🔒 إقفال اليوم", els: [g.children[1]] }]);
+});

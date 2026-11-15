@@ -3073,12 +3073,22 @@ on("override", async id => {
 });
 
 // ============================================================ التسليم والمرتجعات
+/** حالة الموظف في التسليم: ready = مسموح · nodown = لم يسدد المقدم · done = استلم كل المخصص */
+function delState(id, list) {
+  const inv = A().empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || {};
+  const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
+  return rem <= 0 ? "done" : n(inv.Total_Paid_Amount) >= n(inv.Down_Payment_Required) ? "ready" : "nodown";
+}
+function delCounts() {
+  const by = {}; phaseItems().filter(i => n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0).forEach(i => (by[i.Emp_ID] = by[i.Emp_ID] || []).push(i));
+  const c = { "": 0, ready: 0, nodown: 0, done: 0 }; Object.keys(by).forEach(id => { c[""]++; c[delState(id, by[id])]++; }); return c;
+}
 function deliveryList() {
   const { e, b } = maps(), q = (Q.del || "").toLowerCase(), d = A();
   const items = phaseItems().filter(i => n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0);
   const byEmp = {}; items.forEach(i => (byEmp[i.Emp_ID] = byEmp[i.Emp_ID] || []).push(i));
   let ids = Object.keys(byEmp).filter(id => !q || (id + empName(e, id)).toLowerCase().includes(q));
-  if (Q.delF === "pending") ids = ids.filter(id => byEmp[id].some(i => n(i.Allocated_Qty) > n(i.Delivered_Qty)));
+  if (Q.delF) ids = ids.filter(id => delState(id, byEmp[id]) === Q.delF || (Q.delF === "pending" && delState(id, byEmp[id]) !== "done"));
   if (!ids.length) return UI.empty("package-check", q ? "لا نتائج" : "لا توجد كتب مخصصة", q ? "" : "شغّل التوزيع أولاً لتظهر الكتب الجاهزة للتسليم.");
   return `<div class="grid gap-3 sm:gap-4 xl:grid-cols-2">${ids.slice(0, q ? 60 : 30).map(id => {
     const list = byEmp[id], inv = d.empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || {};
@@ -3100,7 +3110,7 @@ Router.add("/a/delivery", view => {
   const docs = d.deliveryReturns.filter(x => x.Phase_ID === APP.phaseId).slice(-80).reverse();
   view.innerHTML = UI.pageHead("التسليم والمرتجعات", "لا يتم التسليم قبل سداد المقدم أو كامل القيمة، ولمن ليس عليه متأخرات")
     + `<div class="flex flex-wrap items-center gap-3 mb-4">${searchBox("qDel", Q.del, "ابحث برقم الموظف أو اسمه")}
-      <div class="flex gap-2">${[["", "الكل"], ["pending", "بانتظار التسليم"]].map(f => `<button class="chip" data-act="delF" data-id="${f[0]}" aria-pressed="${(Q.delF || "") === f[0]}">${f[1]}</button>`).join("")}</div></div>
+      <div class="flex gap-2 overflow-x-auto max-w-full pb-1 -mx-1 px-1">${(() => { const c = delCounts(); return [["", "الكل"], ["ready", "✅ جاهز للتسليم"], ["nodown", "⛔ لم يسدد المقدم"], ["done", "استلم"]].map(f => `<button class="chip" data-act="delF" data-id="${f[0]}" aria-pressed="${(Q.delF || "") === f[0]}">${f[1]} <span class="num opacity-70">${fmt(c[f[0]])}</span></button>`).join(""); })()}</div></div>
     <div id="delList">${deliveryList()}</div><div class="h-5"></div>`
     + UI.section(`${ic("file-text", "text-brand-600")} مستندات التسليم والمرتجعات`, "آخر 80 مستند في المرحلة", UI.table([
       { t: "المستند", v: x => `<b class="num">${esc(x.Printed_Receipt_No)}</b>` },
