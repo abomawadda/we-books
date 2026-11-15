@@ -2600,8 +2600,18 @@ Router.add("/a/receive", view => {
   const canSubmit = can("SUBMIT_SUPPLIER_INVOICE");
   const defVol = sup.Volume_Discount_Pct !== undefined && sup.Volume_Discount_Pct !== "" ? n(sup.Volume_Discount_Pct) : 3;
   const phaseInvs = d.supInvHeaders.filter(h => h.Phase_ID === APP.phaseId).slice().reverse();
+  const totalOrd = books.reduce((s, b) => s + n((poMap[b.Book_ID] || {}).Outstanding_Qty), 0);
+  const uniq = fn => [...new Set(books.map(fn).filter(Boolean))].sort((a, c) => String(a).localeCompare(String(c), "ar"));
+  const pubs = uniq(b => b.Publisher), subjs = uniq(b => b.Subject), grades = uniq(b => b.Grade);
+  SI_STATE_FILTER = "all";
 
   view.innerHTML = UI.pageHead("فاتورة المكتبة والجرد", `المرحلة: ${ph.Phase_Name || APP.phaseId} · تظهر فقط الكتب المطلوبة بأمر التوريد خلال هذه المرحلة`)
+  + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      <div class="card p-3.5 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">${ic("book-open")}</span><div><div class="text-[11.5px] text-slate-500 font-semibold">كتب بأمر التوريد</div><div class="text-lg font-bold text-slate-900 num">${fmt(books.length)} <span class="text-xs font-normal text-slate-500">(${fmt(totalOrd)} نسخة)</span></div></div></div>
+      <div class="card p-3.5 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">${ic("package-check")}</span><div><div class="text-[11.5px] text-slate-500 font-semibold">سليم للاستلام</div><div class="text-lg font-bold text-emerald-700 num"><span id="siKpiRec">0</span> <span class="text-xs font-normal text-slate-500">نسخة</span></div></div></div>
+      <div class="card p-3.5 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">${ic("triangle-alert")}</span><div><div class="text-[11.5px] text-slate-500 font-semibold">تالف (مطالبة)</div><div class="text-lg font-bold text-rose-700 num"><span id="siKpiDmg">0</span> <span class="text-xs font-normal text-slate-500">نسخة</span></div></div></div>
+      <div class="card p-3.5 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">${ic("clock")}</span><div><div class="text-[11.5px] text-slate-500 font-semibold">لم يُطبع بعد (مُرحَّل)</div><div class="text-lg font-bold text-amber-700 num"><span id="siKpiNp">0</span> <span class="text-xs font-normal text-slate-500">كتاب (<span id="siKpiNpQty">0</span> نسخة)</span></div></div></div>
+    </div>`
   + `<section class="card card-pad mb-4">
       <div class="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <div class="col-span-2 lg:col-span-1"><label class="label">المكتبة</label><select class="input" data-change="pickSup">${d.suppliers.map(s => `<option value="${esc(s.Supplier_ID)}" ${s.Supplier_ID === sid ? "selected" : ""}>${esc(s.Supplier_Name)}</option>`).join("")}</select></div>
@@ -2621,27 +2631,57 @@ Router.add("/a/receive", view => {
       <div id="siDiffBadge" class="mt-3 flex items-center justify-end"></div>
     </section>
 
-    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
-      <div class="flex items-center gap-2 flex-1 max-w-sm">
-        <div class="relative w-full">
-          <input id="siSearch" class="input input-sm !h-9 pr-8 text-xs" placeholder="بحث باسم الكتاب أو الكود أو الناشر…" data-input="siFilter">
+    ${books.length ? `<section class="card p-3 sm:p-4 mb-4 space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex flex-wrap items-center gap-1.5" id="siStateBar">
+          ${[["all", "الكل", "siCntAll"], ["open", "متبقي للاستلام", "siCntOpen"], ["diff", "به فروق", "siCntDiff"], ["np", "لم يُطبع بعد", "siCntNp"], ["done", "مكتمل", "siCntDone"]].map(([k, lbl, cid]) =>
+            `<button type="button" class="chip !h-8 !px-3 !text-xs" data-act="siState" data-s="${k}" aria-pressed="${k === "all"}">${lbl} <span id="${cid}" class="num font-bold opacity-75">0</span></button>`).join("")}
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" class="btn btn-outline btn-xs" data-act="siFillReq">${ic("check-check")} مطابقة المطلوب</button>
+          <button type="button" class="btn btn-outline btn-xs" data-act="siZeroReq">${ic("rotate-ccw")} تصفير السليم</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
+        <div class="relative">
+          <input id="siSearch" class="input input-sm !h-9 pr-8 text-xs" placeholder="بحث بالاسم أو الكود أو الناشر…" data-input="siFilter">
           <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">${ic("search")}</span>
         </div>
+        <select id="siPubFilter" class="input input-sm !h-9 text-xs" data-change="siFilter">
+          <option value="">كل الناشرين (${pubs.length})</option>
+          ${pubs.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join("")}
+        </select>
+        <select id="siSubjFilter" class="input input-sm !h-9 text-xs" data-change="siFilter">
+          <option value="">كل المواد (${subjs.length})</option>
+          ${subjs.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join("")}
+        </select>
+        <select id="siGradeFilter" class="input input-sm !h-9 text-xs" data-change="siFilter">
+          <option value="">كل الصفوف (${grades.length})</option>
+          ${grades.map(g => `<option value="${esc(g)}">${esc(g)}</option>`).join("")}
+        </select>
       </div>
-      <div class="flex items-center gap-2">
-        <button type="button" class="btn btn-outline btn-xs" data-act="siFillReq">${ic("check-check")} مطابقة المطلوب لكل الكتب</button>
-        <button type="button" class="btn btn-outline btn-xs" data-act="siZeroReq">${ic("rotate-ccw")} تصفير السليم</button>
+      <div class="flex items-center justify-between text-[12px] text-slate-500 pt-0.5">
+        <span id="siFilterSummary"></span>
+        <button type="button" id="siResetFilters" class="text-brand-700 font-semibold hover:underline hidden" data-act="siResetFilters">${ic("x")} مسح التصفيات</button>
       </div>
-    </div>
+    </section>` : ""}
 
-  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const po = poMap[b.Book_ID] || {}, o = n(po.Outstanding_Qty), ordTot = n(po.Net_Order_To_Supplier_Qty), recTot = n(po.Received_Qty_To_Date); return `<article class="card p-4 si-row" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "")).toLowerCase())}">
-      <div class="flex items-start justify-between gap-2">
+  ${books.length ? `<div id="siBody" class="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">${books.map(b => { const po = poMap[b.Book_ID] || {}, o = n(po.Outstanding_Qty), ordTot = n(po.Net_Order_To_Supplier_Qty), recTot = n(po.Received_Qty_To_Date); return `<article class="card p-4 si-row transition-all" data-id="${esc(b.Book_ID)}" data-ord="${o}" data-pub="${esc(b.Publisher || "")}" data-subj="${esc(b.Subject || "")}" data-grade="${esc(b.Grade || "")}" data-status="${esc(po.Line_Status || "Open")}" data-search="${esc((b.Book_ID + " " + b.Book_Name + " " + (b.Publisher || "") + " " + (b.Subject || "") + " " + (b.Grade || "")).toLowerCase())}">
+      <div class="flex items-start justify-between gap-2.5">
         <div class="min-w-0">
           <h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name)}</h3>
-          <div class="text-[11.5px] text-slate-500 flex items-center gap-2 mt-0.5"><code class="num font-bold text-brand-700">${esc(b.Book_ID)}</code>${b.Publisher ? `<span>· ${esc(b.Publisher)}</span>` : ""}${b.Grade ? `<span>· ${esc(b.Grade)}</span>` : ""}</div>
-          ${recTot > 0 || po.Line_Status === "Fulfilled" || po.Line_Status === "Cancelled" ? `<div class="text-[11px] text-slate-500 mt-1">أمر التوريد: <b class="num">${ordTot}</b> · مستلم سابقاً: <b class="num text-emerald-700">${recTot}</b>${po.Line_Status === "Cancelled" ? ` · <span class="text-rose-600 font-semibold">ملغى</span>` : ""}</div>` : ""}
+          <div class="text-[11.5px] text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+            <code class="num font-bold text-brand-700 bg-brand-50 px-1.5 py-0.5 rounded">${esc(b.Book_ID)}</code>
+            ${b.Publisher ? `<span class="font-medium text-slate-700">${esc(b.Publisher)}</span>` : ""}
+            ${b.Subject ? `<span>· ${esc(b.Subject)}</span>` : ""}
+            ${b.Grade ? `<span>· ${esc(b.Grade)}</span>` : ""}
+          </div>
+          ${recTot > 0 || po.Line_Status === "Fulfilled" || po.Line_Status === "Cancelled" ? `<div class="text-[11px] text-slate-500 mt-1.5">أمر التوريد: <b class="num">${ordTot}</b> · مستلم سابقاً: <b class="num text-emerald-700">${recTot}</b>${po.Line_Status === "Cancelled" ? ` · <span class="text-rose-600 font-semibold">ملغى</span>` : ""}</div>` : ""}
         </div>
-        <div class="text-left shrink-0"><div class="text-[11px] text-slate-500 font-semibold">المطلوب</div><div class="font-bold text-lg num text-brand-800">${o}</div></div>
+        <div class="text-center shrink-0 bg-brand-50 border border-brand-200 rounded-xl px-2.5 py-1 min-w-[58px]">
+          <div class="text-[10.5px] text-brand-700 font-semibold">المطلوب</div>
+          <div class="font-bold text-lg num text-brand-900 leading-tight">${o}</div>
+        </div>
       </div>
       <div class="grid grid-cols-4 gap-2 mt-3">
         <div><label class="text-[11px] font-semibold text-emerald-700">سليم</label><input type="number" min="0" class="input input-sm num font-bold text-emerald-800 si-rec" value="${o}" data-input="recalcSI"></div>
@@ -2649,15 +2689,19 @@ Router.add("/a/receive", view => {
         <div><label class="text-[11px] font-semibold text-slate-500">قبل الخصم</label><input type="number" step="any" class="input input-sm num si-cover" value="${n(b.Cover_Price)}" data-input="recalcSI"></div>
         <div><label class="text-[11px] font-semibold text-slate-500">خصم %</label><input type="number" step="any" class="input input-sm num si-disc" value="${n(b.Supplier_Discount_Pct)}" data-input="recalcSI"></div>
       </div>
-      <div class="flex items-center justify-between mt-3 text-[12.5px] border-t border-slate-100 pt-2.5">
-        <label class="flex items-center gap-1.5 text-slate-600 text-xs font-semibold cursor-pointer"><input type="checkbox" class="w-4 h-4 accent-brand-700 si-np"> لم يُطبع بعد</label>
-        <div class="flex items-center gap-2 text-slate-500 text-xs">
-          <span>تكلفة النسخة: <b class="si-unit num text-slate-800 font-bold"></b></span>
+      <div class="si-np-note hidden mt-2.5 rounded-xl bg-amber-50 border border-amber-200 px-2.5 py-1.5 text-[11.5px] font-semibold text-amber-800 flex items-center gap-1.5">
+        ${ic("clock", "shrink-0")} <span>تم تصفير التسليم إلى 0 — يبقى المطلوب (<b class="num">${o}</b>) وسيُرحَّل للمرحلة التالية</span>
+      </div>
+      <div class="flex items-center justify-between gap-2 mt-3 text-[12.5px] border-t border-slate-100 pt-2.5">
+        <label class="inline-flex items-center gap-1.5 text-slate-700 text-xs font-semibold cursor-pointer select-none"><input type="checkbox" class="w-4 h-4 accent-amber-600 si-np" data-change="siNotPrinted"> لم يُطبع بعد</label>
+        <div class="flex items-center gap-1.5 text-slate-500 text-xs">
+          <span>النسخة: <b class="si-unit num text-slate-800 font-bold"></b></span>
           <span>·</span>
           <span>الإجمالي: <b class="si-line num text-brand-800 font-bold"></b></span>
         </div>
         <span class="si-var"></span>
-      </div></article>`; }).join("")}</div>`
+      </div></article>`; }).join("")}</div>
+    <div id="siNoMatch" class="card hidden">${UI.empty("filter", "لا توجد كتب تطابق التصفية الحالية", `<button type="button" class="btn btn-outline btn-sm" data-act="siResetFilters">إظهار كل الكتب</button>`)}</div>`
     : `<div class="card">${UI.empty("truck", "لا توجد كتب مطلوبة بأمر توريد لهذه المكتبة في المرحلة الحالية", `<button class="btn btn-outline btn-sm" data-go="/a/po">${ic("file-text")} الانتقال لأمر التوريد</button>`)}</div>`}
   <div class="sticky bottom-[calc(4.3rem+env(safe-area-inset-bottom))] md:bottom-4 z-20 mt-4">
     <div class="card p-3.5 sm:p-4 shadow-lift flex flex-wrap items-center gap-x-6 gap-y-2 bg-white/95 backdrop-blur-sm ring-1 ring-brand-200">
@@ -2680,6 +2724,38 @@ Router.add("/a/receive", view => {
   ], phaseInvs, { maxH: 420, emptyIcon: "receipt", empty: "لا فواتير مسجلة لهذه المرحلة" }))}`;
   recalcSI();
 });
+let SI_STATE_FILTER = "all";
+function applySIFilters() {
+  const q = String(($("#siSearch") || {}).value || "").trim().toLowerCase();
+  const pub = ($("#siPubFilter") || {}).value || "";
+  const subj = ($("#siSubjFilter") || {}).value || "";
+  const grade = ($("#siGradeFilter") || {}).value || "";
+  const st = SI_STATE_FILTER || "all";
+  let vis = 0, tot = 0, visOrd = 0;
+  $$(".si-row").forEach(el => {
+    tot++;
+    const ord = n(el.dataset.ord);
+    const rec = n((el.querySelector(".si-rec") || {}).value);
+    const dmg = n((el.querySelector(".si-dmg") || {}).value);
+    const np = !!(el.querySelector(".si-np") || {}).checked;
+    const matchText = !q || (el.dataset.search || "").includes(q);
+    const matchPub = !pub || el.dataset.pub === pub;
+    const matchSubj = !subj || el.dataset.subj === subj;
+    const matchGrade = !grade || el.dataset.grade === grade;
+    let matchState = true;
+    if (st === "open") matchState = ord > 0 && !np;
+    else if (st === "diff") matchState = (ord > 0 || rec > 0 || dmg > 0) && (rec + dmg !== ord);
+    else if (st === "np") matchState = np;
+    else if (st === "done") matchState = ord === 0 && el.dataset.status === "Fulfilled";
+    const show = matchText && matchPub && matchSubj && matchGrade && matchState;
+    el.classList.toggle("hidden", !show);
+    if (show) { vis++; visOrd += ord; }
+  });
+  const hasFilter = !!(q || pub || subj || grade || st !== "all");
+  if ($("#siResetFilters")) $("#siResetFilters").classList.toggle("hidden", !hasFilter);
+  if ($("#siNoMatch")) $("#siNoMatch").classList.toggle("hidden", vis > 0 || tot === 0);
+  if ($("#siFilterSummary")) $("#siFilterSummary").textContent = tot ? `يعرض ${fmt(vis)} من ${fmt(tot)} كتاب · المطلوب في المعروض ${fmt(visOrd)} نسخة` : "";
+}
 on("pickSup", v => { Q.sup = v; Shell.rerender(); });
 on("siVolPreset", (v, btn) => {
   const inp = $("#siVol");
@@ -2688,15 +2764,36 @@ on("siVolPreset", (v, btn) => {
     recalcSI();
   }
 });
-on("siFilter", v => {
-  const q = String(v || "").trim().toLowerCase();
-  $$(".si-row").forEach(el => {
-    const s = el.dataset.search || "";
-    el.classList.toggle("hidden", !!q && !s.includes(q));
-  });
+on("siFilter", () => applySIFilters());
+on("siState", (v, btn) => {
+  SI_STATE_FILTER = btn.dataset.s || "all";
+  $$("#siStateBar [data-act='siState']").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  applySIFilters();
+});
+on("siResetFilters", () => {
+  SI_STATE_FILTER = "all";
+  if ($("#siSearch")) $("#siSearch").value = "";
+  if ($("#siPubFilter")) $("#siPubFilter").value = "";
+  if ($("#siSubjFilter")) $("#siSubjFilter").value = "";
+  if ($("#siGradeFilter")) $("#siGradeFilter").value = "";
+  $$("#siStateBar [data-act='siState']").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.s === "all")));
+  applySIFilters();
+});
+on("siNotPrinted", (v, el) => {
+  const card = el.closest(".si-row");
+  if (!card) return;
+  const rec = card.querySelector(".si-rec"), dmg = card.querySelector(".si-dmg");
+  if (el.checked) {
+    if (rec) rec.value = "0";
+    if (dmg) dmg.value = "0";
+  } else {
+    if (rec && n(rec.value) === 0) rec.value = card.dataset.ord || "0";
+  }
+  recalcSI();
 });
 on("siFillReq", () => {
   $$(".si-row:not(.hidden)").forEach(el => {
+    if ((el.querySelector(".si-np") || {}).checked) return;
     const rec = el.querySelector(".si-rec"), dmg = el.querySelector(".si-dmg");
     if (rec) rec.value = el.dataset.ord || "0";
     if (dmg) dmg.value = "0";
@@ -2714,23 +2811,52 @@ on("siZeroReq", () => {
 
 function recalcSI() {
   const vol = n(($("#siVol") || {}).value);
-  let after = 0, dmgAmt = 0;
+  let after = 0, dmgAmt = 0, totRec = 0, totDmg = 0, npCount = 0, npQty = 0;
+  let cAll = 0, cOpen = 0, cDiff = 0, cNp = 0, cDone = 0;
   $$(".si-row").forEach(tr => {
+    cAll++;
     const g = c => n(tr.querySelector(c).value), rec = g(".si-rec"), dmg = g(".si-dmg"), cover = g(".si-cover"), disc = g(".si-disc"), ord = n(tr.dataset.ord);
+    const np = !!(tr.querySelector(".si-np") || {}).checked;
     const first = r2(cover * (1 - disc / 100));
     const lineTotal = r2(first * (rec + dmg));
     after += lineTotal;
     dmgAmt += r2(first * dmg);
+    totRec += rec;
+    totDmg += dmg;
+    if (np) { npCount++; npQty += ord; }
+    if (ord > 0 && !np) cOpen++;
+    if ((ord > 0 || rec > 0 || dmg > 0) && (rec + dmg !== ord)) cDiff++;
+    if (np) cNp++;
+    if (ord === 0 && tr.dataset.status === "Fulfilled") cDone++;
+
     tr.querySelector(".si-unit").textContent = fmt(first) + " ج.م";
     tr.querySelector(".si-line").textContent = fmt(lineTotal) + " ج.م";
+    const npNote = tr.querySelector(".si-np-note");
+    if (npNote) npNote.classList.toggle("hidden", !np);
+    tr.classList.toggle("ring-2", np);
+    tr.classList.toggle("ring-amber-300", np);
+    tr.classList.toggle("bg-amber-50/40", np);
+
     const v = rec + dmg - ord;
-    tr.querySelector(".si-var").innerHTML = !ord && !rec && !dmg ? "" : v === 0 ? pill("EXACT") : pill("", (v > 0 ? "+" : "") + v, v < 0 ? "red" : "amber");
+    tr.querySelector(".si-var").innerHTML = np
+      ? pill("", "مُرحَّل · لم يُطبع", "amber")
+      : !ord && !rec && !dmg ? "" : v === 0 ? pill("EXACT") : pill("", (v > 0 ? "+" : "") + v, v < 0 ? "red" : "amber");
   });
   after = r2(after);
   const va = r2(after * vol / 100);
   const net = r2(after - va);
   const stated = n(($("#siStated") || {}).value);
   const diff = stated ? r2(stated - net) : 0;
+
+  if ($("#siKpiRec")) $("#siKpiRec").textContent = fmt(totRec);
+  if ($("#siKpiDmg")) $("#siKpiDmg").textContent = fmt(totDmg);
+  if ($("#siKpiNp")) $("#siKpiNp").textContent = fmt(npCount);
+  if ($("#siKpiNpQty")) $("#siKpiNpQty").textContent = fmt(npQty);
+  if ($("#siCntAll")) $("#siCntAll").textContent = fmt(cAll);
+  if ($("#siCntOpen")) $("#siCntOpen").textContent = fmt(cOpen);
+  if ($("#siCntDiff")) $("#siCntDiff").textContent = fmt(cDiff);
+  if ($("#siCntNp")) $("#siCntNp").textContent = fmt(cNp);
+  if ($("#siCntDone")) $("#siCntDone").textContent = fmt(cDone);
 
   if ($("#siAfter")) $("#siAfter").textContent = moneyTxt(after);
   if ($("#siVolAmt")) $("#siVolAmt").textContent = moneyTxt(va);
@@ -2746,6 +2872,7 @@ function recalcSI() {
       $("#siDiffBadge").innerHTML = `<span class="pill pill-red">${ic("triangle-alert")} فرق مع فاتورة المكتبة: ${diff > 0 ? "+" : ""}${fmt(diff)} ج.م (المُدخل ${fmt(stated)} مقابل صافي محسوب ${fmt(net)})</span>`;
     }
   }
+  applySIFilters();
 }
 on("recalcSI", () => recalcSI());
 on("submitSI", async () => {
