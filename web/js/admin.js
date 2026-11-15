@@ -2902,7 +2902,7 @@ function supInvData(id) {
   const d = A(), h = d.supInvHeaders.find(x => x.Sup_Inv_ID === id); if (!h) return null;
   const { b, s } = maps(), ph = d.phases.find(p => p.Phase_ID === h.Phase_ID) || {};
   const lines = d.supInvItems.filter(x => x.Sup_Inv_ID === id).map(x => ({
-    code: x.Book_ID, name: bookName(b, x.Book_ID), ord: n(x.Ordered_Qty), rec: n(x.Received_Qty), dmg: n(x.Damaged_Qty),
+    code: x.Book_ID, name: bookName(b, x.Book_ID), meta: bookMeta(b, x.Book_ID), ord: n(x.Ordered_Qty), rec: n(x.Received_Qty), dmg: n(x.Damaged_Qty),
     cover: n(x.Cover_Price_Invoiced), disc: n(x.Item_Discount_Pct_Invoiced), unit: n(x.Unit_Price_After_First_Disc),
     total: n(x.Total_Line_Net_Cost), flag: x.Matching_Flag, mismatch: x.Price_Mismatch
   }));
@@ -2911,7 +2911,8 @@ function supInvData(id) {
     status: h.Status, supplier: (s[h.Supplier_ID] || {}).Supplier_Name || h.Supplier_ID,
     volPct: h.Volume_Discount_Pct !== undefined && h.Volume_Discount_Pct !== "" ? n(h.Volume_Discount_Pct) : 3,
     volAmt: n(h.Volume_Discount_Amount), afterFirst: n(h.Total_After_Item_Discount), net: n(h.Net_Payable_Amount),
-    damaged: n(h.Damaged_Claim_Amount), stated: n(h.Supplier_Stated_Net), variance: n(h.Variance_Amount), by: h.Approved_By, lines
+    damaged: n(h.Damaged_Claim_Amount), stated: n(h.Supplier_Stated_Net), variance: n(h.Variance_Amount), by: h.Approved_By,
+    voidReason: h.Void_Reason || "", lines
   };
 }
 on("printSupInv", id => {
@@ -2922,15 +2923,24 @@ let SI_MODAL = null;
 on("viewSupInv", id => {
   const d = A(), h = d.supInvHeaders.find(x => x.Sup_Inv_ID === id), dt = supInvData(id);
   if (!h || !dt) return;
-  const body = `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+  const totOrd = dt.lines.reduce((s, l) => s + l.ord, 0);
+  const totRec = dt.lines.reduce((s, l) => s + l.rec, 0);
+  const totDmg = dt.lines.reduce((s, l) => s + l.dmg, 0);
+  const notPrinted = dt.lines.filter(l => l.flag === "NOT_PRINTED").length;
+  const mismatchCnt = dt.lines.filter(l => l.mismatch).length;
+  const body = `${h.Status === "Voided" ? `<div class="mb-3 rounded-2xl bg-rose-50 ring-1 ring-rose-200 text-rose-900 px-3.5 py-2.5 text-[13px] flex items-center gap-2">${ic("ban", "text-rose-600 shrink-0")}<span><b>فاتورة مُلغاة ومعكوسة</b>${dt.voidReason ? ` — السبب: ${esc(dt.voidReason)}` : ""}</span></div>` : ""}
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
       ${UI.stat("المكتبة", esc(dt.supplier))}
+      ${UI.stat("المرحلة", esc(dt.phase || "—"))}
+      ${UI.stat("تاريخ الفاتورة", `<span class="num">${esc(day(dt.date) || dt.date || "—")}</span>`)}
       ${UI.stat("المرجع الداخلي", `<span class="num">${esc(dt.ref)}</span>`)}
-      ${UI.stat("الصافي المستحق", `<span class="text-brand-800">${moneyTxt(dt.net)}</span>`)}
-      ${UI.stat("الحالة", h.Status === "Voided" ? pill("", "ملغاة", "red") : pill(h.Status))}
+      ${UI.stat("المُعتمد", esc(dt.by || "—"))}
+      ${UI.stat("الحالة", pill(h.Status))}
     </div>
+    ${mismatchCnt ? `<div class="mb-3 rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 px-3.5 py-2 text-[12.5px] flex items-center gap-2">${ic("triangle-alert", "text-amber-600 shrink-0")}<span>يوجد <b>${fmt(mismatchCnt)}</b> صنف بسعر مختلف عن الكتالوج المسجل.</span></div>` : ""}
     ${UI.table([
-      { t: "الكود", cls: "num", v: l => `<code>${esc(l.code)}</code>` },
-      { t: "الكتاب", v: l => `<b>${esc(l.name)}</b>${l.mismatch ? ` <span class="pill pill-amber">${esc(l.mismatch)}</span>` : ""}` },
+      { t: "الكود", cls: "whitespace-nowrap", v: l => `<span class="inline-flex items-center rounded-lg bg-brand-50 text-brand-800 ring-1 ring-brand-200/80 px-2 py-0.5 text-[12px] font-bold num" dir="ltr">${esc(l.code)}</span>` },
+      { t: "الكتاب", v: l => `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(l.name)}</div>${(l.meta || l.mismatch) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${l.meta ? `<span>${esc(l.meta)}</span>` : ""}${l.mismatch ? `<span class="pill pill-amber !text-[10.5px]">${esc(l.mismatch)}</span>` : ""}</div>` : ""}</div>` },
       { t: "مطلوب", cls: "num", v: l => fmt(l.ord) },
       { t: "سليم", cls: "num", v: l => `<b class="text-emerald-700">${fmt(l.rec)}</b>` },
       { t: "تالف", cls: "num", v: l => l.dmg ? `<b class="text-rose-600">${fmt(l.dmg)}</b>` : "—" },
@@ -2939,12 +2949,28 @@ on("viewSupInv", id => {
       { t: "التكلفة", cls: "num", v: l => fmt(l.unit) },
       { t: "الإجمالي", cls: "num", v: l => `<b>${fmt(l.total)}</b>` },
       { t: "المطابقة", v: l => pill(l.flag) }
-    ], dt.lines, { maxH: 360, empty: "لا توجد بنود" })}`;
+    ], dt.lines, { maxH: 340, empty: "لا توجد بنود" })}
+    <div class="mt-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200/80 p-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-wrap items-center gap-2 text-[12px]">
+        <span class="pill pill-gray num">${fmt(dt.lines.length)} صنف</span>
+        <span class="pill pill-gray num">مطلوب ${fmt(totOrd)}</span>
+        <span class="pill pill-green num">سليم ${fmt(totRec)}</span>
+        ${totDmg ? `<span class="pill pill-red num">تالف ${fmt(totDmg)}</span>` : ""}
+        ${notPrinted ? `<span class="pill pill-amber num">لم يُطبع ${fmt(notPrinted)}</span>` : ""}
+      </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] mr-auto">
+        <span class="text-slate-500">بعد خصم الأصناف: <b class="text-slate-800 num">${moneyTxt(dt.afterFirst)}</b></span>
+        <span class="text-slate-500">خصم الكمية (${fmt(dt.volPct)}%): <b class="text-emerald-700 num">− ${moneyTxt(dt.volAmt)}</b></span>
+        ${dt.damaged ? `<span class="text-slate-500">مطالبة تالف: <b class="text-rose-600 num">${moneyTxt(dt.damaged)}</b></span>` : ""}
+        ${dt.variance ? `<span class="text-slate-500">فرق المكتبة: <b class="text-amber-700 num">${moneyTxt(dt.variance)}</b></span>` : ""}
+        <span class="text-slate-900 font-bold">الصافي المستحق: <span class="text-brand-800 text-[15px] num">${moneyTxt(dt.net)}</span></span>
+      </div>
+    </div>`;
   const footer = `<div class="flex flex-wrap items-center justify-between gap-2 w-full">
       <div>${h.Status !== "Voided" && can("VOID_SUPPLIER_INVOICE") ? `<button class="btn btn-danger btn-sm" data-act="voidSupInv" data-id="${esc(id)}">${ic("rotate-ccw")} عكس وإلغاء الفاتورة</button>` : ""}</div>
       <div class="flex items-center gap-2"><button class="btn btn-primary btn-sm" data-act="printSupInv" data-id="${esc(id)}">${ic("printer")} طباعة / PDF</button><button class="btn btn-ghost btn-sm" data-close>إغلاق</button></div>
     </div>`;
-  SI_MODAL = UI.open(body, { title: `فاتورة المكتبة ${dt.no}`, wide: true, footer });
+  SI_MODAL = UI.open(body, { title: `فاتورة المكتبة ${dt.no}`, sub: `${esc(dt.phase || "")}${dt.date ? " · " + esc(day(dt.date) || dt.date) : ""}`, wide: true, footer });
 });
 on("voidSupInv", async id => {
   const v = await UI.form({ title: "عكس وإلغاء فاتورة المكتبة", tone: "danger", intro: "سيتم إخراج الكمية السليمة من المخزن وإعادتها للمستحق بأمر التوريد وعكس القيد المالي للمكتبة (يُسمح فقط إذا لم تُوزَّع الكمية).", fields: [{ name: "reason", label: "سبب الإلغاء", required: true, placeholder: "مثال: خطأ في رقم الفاتورة أو نسبة خصم الكمية" }], ok: "تأكيد العكس" });

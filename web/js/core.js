@@ -64,6 +64,7 @@ const AR = {
   Available: "متاح", Pricing: "جاري التسعير", Not_Yet_Printed: "لم يُطبع بعد", Suspended: "موقوف مؤقتاً", Discontinued: "ملغى",
   EXACT: "مطابق", SHORTAGE: "نقص", SURPLUS: "زيادة", NOT_PRINTED: "لم يُطبع", NOT_RECEIVED: "لم يصل", UNORDERED_ITEM: "غير مطلوب",
   Fulfilled: "مكتمل", Covered_From_Stock: "مغطى من المخزون", Cancelled: "ملغى",
+  Approved: "معتمدة", Approved_With_Variance: "معتمدة بفرق", Voided: "ملغاة",
   Admin: "مدير المنظومة", Coordinator: "مسؤول المبادرة", Finance: "أمين الصندوق", Warehouse: "أمين المخزن", Employee: "موظف"
 };
 const ar = k => AR[k] || k || "—";
@@ -72,7 +73,8 @@ const TONE = {
   Fully_Allocated: "green", Partially_Allocated: "amber", Waitlisted: "gray", Pending: "blue", Cancelled_By_Employee: "red", Carried_Forward: "gray",
   Paid_In_Full: "green", Paid: "green", Partially_Paid: "amber", Partial: "amber", Unpaid: "gray", Overdue: "red", Refund_Due: "blue", Zero_Allocation: "gray",
   Available: "green", Pricing: "amber", Not_Yet_Printed: "amber", Suspended: "gray", Discontinued: "red",
-  EXACT: "green", SHORTAGE: "red", SURPLUS: "amber", NOT_PRINTED: "amber", NOT_RECEIVED: "red", Fulfilled: "green", Covered_From_Stock: "blue", Cancelled: "gray"
+  EXACT: "green", SHORTAGE: "red", SURPLUS: "amber", NOT_PRINTED: "amber", NOT_RECEIVED: "red", Fulfilled: "green", Covered_From_Stock: "blue", Cancelled: "gray",
+  Approved: "green", Approved_With_Variance: "amber", Voided: "red"
 };
 const pill = (code, label, tone) => `<span class="pill pill-${tone || TONE[code] || "gray"}">${esc(label || ar(code))}</span>`;
 const PHASE_STATUS_LABEL = { Open: "الحجز مفتوح", Scheduled: "لم يبدأ", Closed: "الحجز مغلق" };

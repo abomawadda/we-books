@@ -228,7 +228,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
   /** فاتورة توريد مكتبة (A4): d = {ref,no,date,phase,status,supplier,volPct,volAmt,afterFirst,net,damaged,stated,variance,by,lines:[{code,name,ord,rec,dmg,cover,disc,unit,total,flag,mismatch}]} */
   supplierInvoice(d) {
     let i = 0;
-    const rows = d.lines.map(l => `<tr><td class="c num">${++i}</td><td class="code num">${esc(l.code)}</td><td><b>${esc(l.name)}</b>${l.mismatch ? ` <span class="badge a">سعر مختلف</span>` : ""}</td>
+    const rows = d.lines.map(l => `<tr><td class="c num">${++i}</td><td class="code num">${esc(l.code)}</td><td><b>${esc(l.name)}</b>${l.mismatch ? ` <span class="badge a">سعر مختلف</span>` : ""}${l.meta ? `<div class="sub">${esc(l.meta)}</div>` : ""}</td>
       <td class="c num">${l.ord}</td><td class="c num"><b>${l.rec}</b></td><td class="c num">${l.dmg || "—"}</td>
       <td class="l num">${Doc.money(l.cover)}</td><td class="c num">${Doc.money(l.disc)}%</td><td class="l num">${Doc.money(l.unit)}</td><td class="l num"><b>${Doc.money(l.total)}</b></td></tr>`).join("");
     return Doc.page(`${Doc.head("فاتورة توريد وجرد", d.ref, `<div style="margin-top:1mm"><span class="badge ${d.status === "Voided" ? "r" : d.status === "Approved_With_Variance" ? "a" : "g"}">${esc(ar(d.status))}</span></div>`)}
