@@ -167,3 +167,39 @@ function thanksCard() {
   return `<section class="card mb-4 overflow-hidden"><div class="p-4 flex items-center gap-3" style="background:linear-gradient(135deg,#fef9c3,#ede9fe)"><span class="text-[38px] leading-none">${m[0]}</span><div class="flex-1 min-w-0"><div class="font-display font-bold text-[16px] text-slate-900">${m[1]}</div><div class="text-[12.5px] text-slate-600 mt-0.5 leading-relaxed">${m[2]}</div></div></div></section>`;
 }
 _wrap("/e/home", view => { const c = thanksCard(); if (!c) return; const h = view.firstElementChild; if (h) h.insertAdjacentHTML("afterend", c); else view.insertAdjacentHTML("afterbegin", c); });
+
+// ---------------------------------------------------------------- إلغاء الطلب (قبل وبعد الإرسال) — بحسب مرحلة الطلب
+function cancelRequestOf() { const h = (APP.emp.myReservations || []).find(x => x.Phase_ID === APP.phaseId); try { return h && JSON.parse(h.Cancel_Request || "null"); } catch (_) { return null; } }
+function cancelBox() {
+  const ph = (APP.emp || {}).activePhase || {}, st = ph.Effective_Status || ph.Phase_Status;
+  const items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  const und = items.reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Delivered_Qty)), 0);
+  const cr = cancelRequestOf();
+  if (cr && cr.status === "Pending") return `<div class="mt-4 rounded-2xl bg-amber-50 ring-1 ring-amber-200 p-3.5 text-[13px] text-amber-900">${ic("hourglass")} <b>طلب الإلغاء عند المسؤول</b> — اتسجّل ${esc(String(cr.at || "").slice(0, 10))} وهيتراجع قريب.</div>`;
+  if (cr && cr.status === "Rejected") return `<div class="mt-4 rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3.5 text-[13px] text-slate-700">${ic("info")} المسؤول ما وافقش على الإلغاء${cr.note ? ": " + esc(cr.note) : ""}.</div>`;
+  if (!und || st === "Completed") return "";
+  const how = ph.Booking_Open || !ph.Po_Frozen ? "الإلغاء فوري ومن غير أي التزام 👌" : st === "Delivering" ? "الكتب اتطلبت ووصلت — الإلغاء محتاج موافقة المسؤول، واللي استلمته يتعامل كمرتجع." : "الكتب اتطلبت من المكتبة — الإلغاء محتاج موافقة المسؤول.";
+  return `<div class="mt-5 text-center"><button class="text-[13px] text-rose-600 font-semibold underline underline-offset-4" data-act="empCancel">${ic("x")} ${ph.Booking_Open || !ph.Po_Frozen ? "إلغاء طلبي" : "طلب إلغاء"}</button><div class="text-[11.5px] text-slate-500 mt-1">${how}</div></div>`;
+}
+on("empCancel", async () => {
+  const ph = APP.emp.activePhase || {}, direct = ph.Booking_Open || !ph.Po_Frozen;
+  const v = await UI.form({ title: direct ? "إلغاء الطلب" : "طلب إلغاء", danger: true,
+    intro: direct ? "هنلغي كل الكتب اللي في طلبك في المرحلة دي. تقدر تحجز تاني في أي وقت طول ما الحجز مفتوح." : "طلبك هيروح للمسؤول يراجعه. لو اتوافق عليه هيتلغي اللي ما استلمتهوش بس، وأي فلوس زيادة دفعتها هترجعلك كرصيد.",
+    fields: [{ name: "reason", label: "السبب (اختياري)", placeholder: "مثال: اشتريت الكتب من مكان تاني" }], ok: direct ? "إلغاء الطلب" : "إرسال الطلب", icon: "x" });
+  if (!v) return;
+  const r = await call("EMP_CANCEL_REQUEST", { phaseId: APP.phaseId, reason: v.reason }, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  await reloadData();
+  r.immediate ? happyDialog("💜", "اتلغى طلبك", "ولا يهمك — شكراً إنك كنت معانا، والمبادرة مستنياك في أي وقت 🌷") : happyDialog("📨", "طلبك وصل للمسؤول", "هيراجعه ويبلغك — وطلبك فاضل زي ما هو لحد ما يتم الرد.");
+});
+_wrap("/e/orders", view => { const c = cancelBox(); if (c) view.insertAdjacentHTML("beforeend", c); });
+
+// ---------------------------------------------------------------- إلغاء قبل التأكيد: يرجع السلة لآخر حجز محفوظ (أو يفرّغها)
+on("discardDraft", async () => {
+  const had = (APP.emp.myReservations || []).some(x => x.Phase_ID === APP.phaseId);
+  if (!await UI.confirm({ title: had ? "تراجع عن التعديلات" : "إلغاء الطلب", message: had ? "هنرجّع حجزك زي ما كان محفوظ آخر مرة." : "هنفضّي السلة ومش هيتسجل أي حجز.", ok: "أيوه", tone: "danger" })) return;
+  if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
+  Emp.resetCart(); try { wzClear(); } catch (_) {} Emp.wzManual = false;
+  Router.go("/e/home"); Shell.rerender();
+  toast(had ? "رجعنا حجزك زي ما كان 👌" : "اتلغى الطلب — ولا يهمك 🌷", "success");
+});

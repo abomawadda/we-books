@@ -556,6 +556,27 @@ passed++;
   } else console.log('  (no waitlisted items to test decision)');
 }
 fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad choice rejected');
+// إلغاء الموظف لطلبه: فوري قبل طلب التوريد، ومعلّق بعده حتى يعتمده المسؤول
+{
+  const ph3 = rows(S.PHASES).find(p => p.Phase_ID === 'PH-03');
+  const bk = rows(S.BOOKS).find(b => Number(b.Emp_Selling_Price) > 0 && ['Available', 'Active', 'Open'].indexOf(b.Book_Status) !== -1) || rows(S.BOOKS).find(b => Number(b.Emp_Selling_Price) > 0);
+  const sv = api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: bk.Book_ID, qty: 1 }], paymentMethod: 'CASH' }, e2);
+  if (sv.success) {
+    const c1 = ok(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-03', reason: 'تجربة' }, e2), 'emp cancel immediate (no PO)');
+    assert.ok(c1.immediate); passed++;
+    assert.ok(!rows(S.RES_ITEMS).some(i => i.Emp_ID === '1002' && i.Phase_ID === 'PH-03' && !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > 0)); passed++;
+  } else console.log('  (skip immediate cancel:', sv.message, ')');
+  // بعد طلب التوريد (PH-01): طلب معلّق ثم اعتماد
+  const emp1 = rows(S.RES_ITEMS).find(i => i.Phase_ID === 'PH-01' && !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > Number(i.Delivered_Qty));
+  if (emp1 && rows(S.PHASES).find(p => p.Phase_ID === 'PH-01').Phase_Status !== 'Completed') {
+    const tok = emp1.Emp_ID === '1001' ? e1 : emp1.Emp_ID === '1002' ? e2 : e3;
+    const c2 = ok(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01', reason: 'ظروف' }, tok), 'emp cancel request pending');
+    assert.ok(!c2.immediate); passed++;
+    fail(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01' }, tok), 'duplicate pending request');
+    ok(api('RESOLVE_CANCEL_REQUEST', { empId: emp1.Emp_ID, phaseId: 'PH-01', approve: true }, coord), 'admin approves cancel');
+    assert.ok(rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp1.Emp_ID && i.Phase_ID === 'PH-01' && !String(i.Allocation_Status).startsWith('Cancelled') && i.Allocation_Status !== 'Carried_Forward').every(i => Number(i.Requested_Qty) <= Number(i.Delivered_Qty))); passed++;
+  } else console.log('  (skip pending cancel)');
+}
 console.log('\nALL PASSED:', passed, 'checks');
 
 

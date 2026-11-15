@@ -161,6 +161,12 @@ async function reloadData() {
   if (APP.user.userType === "ADMIN") { await loadAdminBundle(); await Admin.load(); } else await Emp.load();
 }
 
+/** علامة صغيرة للبند المُرحَّل من مرحلة سابقة (موظف وإدارة) */
+function carriedTag(i) {
+  if (!i || !i.Carried_From_Item_ID) return "";
+  const from = (String(i.Carried_From_Item_ID).match(/RES-([^-]+-\d+)-/) || [])[1] || "";
+  return ` <span class="inline-flex items-center gap-0.5 align-middle rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200 px-1.5 py-px text-[10.5px] font-bold whitespace-nowrap" title="مُرحَّل من ${from} بأسبقيته الأصلية">↪ مُرحَّل${from ? " من " + from : ""}</span>`;
+}
 // ---------------------------------------------------------------- مكونات العرض
 const UI = {
   empty(icon, title, sub, action) {

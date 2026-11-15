@@ -78,3 +78,18 @@ on("admWait", async v => {
   if (choice === "cancel" && !await UI.confirm({ title: "إنهاء الحجز على المتاح", message: "ستُلغى الكتب التي لم تصل من حجز هذا الموظف ولن تُرحَّل.", ok: "إنهاء", tone: "danger" })) return;
   await act("WAITLIST_DECISION", { empId, choice, phaseId: APP.phaseId });
 });
+
+// ---------------------------------------------------------------- طلبات إلغاء الموظفين بعد طلب التوريد
+const cancelReqs = () => A().resHeaders.filter(h => { try { const c = JSON.parse(h.Cancel_Request || "null"); return c && c.status === "Pending"; } catch (_) { return false; } });
+function cancelReqBox() {
+  const list = cancelReqs(); if (!list.length) return "";
+  const { e } = maps();
+  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("x", "text-rose-500")} طلبات إلغاء من الموظفين (${fmt(list.length)})`, "بعد طلب التوريد — الاعتماد يلغي غير المُسلَّم فقط ويعيد حساب الفاتورة", `<ul class="divide-y divide-slate-100">${list.map(h => { const c = JSON.parse(h.Cancel_Request); return `<li class="flex flex-wrap items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(h.Emp_ID, empName(e, h.Emp_ID))} <span class="text-[11px] text-slate-400 num">${esc(h.Phase_ID)}</span></div><div class="text-[12px] text-slate-500">${esc(c.reason)} · <span class="num">${esc(String(c.at).slice(0, 16))}</span></div></div>
+      <button class="btn btn-primary btn-xs" data-act="cancelRes" data-id="${esc(h.Emp_ID)}|${esc(h.Phase_ID)}|1">${ic("check")} اعتماد</button><button class="btn btn-outline btn-xs" data-act="cancelRes" data-id="${esc(h.Emp_ID)}|${esc(h.Phase_ID)}|0">رفض</button></li>`; }).join("")}</ul>`)}</div>`;
+}
+on("cancelRes", async v => {
+  const [empId, phaseId, ap] = v.split("|");
+  const f = await UI.form({ title: ap === "1" ? "اعتماد الإلغاء" : "رفض الإلغاء", intro: ap === "1" ? "يُلغى غير المُسلَّم من طلب الموظف، وتتحرر نسخه المخصصة للمنتظرين، ويُعاد حساب فاتورته. المُسلَّم يُعالج كمرتجع من صفحة التسليم." : "يبقى طلب الموظف كما هو.", fields: [{ name: "note", label: "ملاحظة للموظف (اختياري)" }], ok: ap === "1" ? "اعتماد" : "رفض", danger: ap === "1" });
+  if (!f) return;
+  await act("RESOLVE_CANCEL_REQUEST", { empId, phaseId, approve: ap === "1", note: f.note });
+});
