@@ -542,10 +542,16 @@ passed++;
   const ph = rows(S.PHASES).find(p => ri.some(i => i.Phase_ID === p.Phase_ID) && p.Phase_Status !== 'Open');
   if (ph) {
     const emp = ri.find(i => i.Phase_ID === ph.Phase_ID).Emp_ID;
-    ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'carry' }, coord), 'admin carry decision');
-    assert.ok(rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp && i.Phase_ID === ph.Phase_ID && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty))).every(i => i.Waitlist_Choice === 'carry')); passed++;
-    ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'cancel' }, coord), 'admin cancel decision');
-    assert.ok(!rows(S.RES_ITEMS).some(i => i.Emp_ID === emp && i.Phase_ID === ph.Phase_ID && !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty)))); passed++;
+    const openPh = rows(S.PHASES).find(p => p.Phase_ID !== ph.Phase_ID && p.Phase_Status === 'Open');
+    const dc = ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'carry' }, coord), 'admin carry decision');
+    if (openPh) {
+      assert.strictEqual(dc.carriedTo && dc.carriedTo.id, openPh.Phase_ID); passed++;
+      assert.ok(rows(S.RES_ITEMS).some(i => i.Emp_ID === emp && i.Phase_ID === openPh.Phase_ID && i.Carried_From_Item_ID)); passed++;
+      assert.ok(!rows(S.RES_ITEMS).some(i => i.Emp_ID === emp && i.Phase_ID === ph.Phase_ID && !String(i.Allocation_Status).startsWith('Cancelled') && i.Allocation_Status !== 'Carried_Forward' && Number(i.Requested_Qty) > Math.max(Number(i.Allocated_Qty), Number(i.Delivered_Qty)))); passed++;
+    } else {
+      assert.ok(!dc.carriedTo); passed++;
+      ok(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'cancel' }, coord), 'admin cancel decision');
+    }
     fail(api('WAITLIST_DECISION', { empId: emp, phaseId: ph.Phase_ID, choice: 'carry' }, coord), 'nothing left to decide');
   } else console.log('  (no waitlisted items to test decision)');
 }

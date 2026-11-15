@@ -86,9 +86,29 @@ function waitBox() {
 on("waitDecide", async v => {
   if (v === "cancel" && !await UI.confirm({ title: "إنهاء الحجز على المتاح", message: "الكتب اللي لسه موصلتش هتتلغي من حجزك ومش هتترحّل. متأكد؟", ok: "أيوه، ألغيها", tone: "danger" })) return;
   const r = await call("WAITLIST_DECISION", { choice: v, phaseId: APP.phaseId }, { block: true });
-  toast(r.message, r.success ? "success" : "danger");
-  if (r.success) await reloadData();
+  if (!r.success) return toast(r.message, "danger");
+  if (v === "cancel") { await reloadData(); return happyDialog("💜", "ولا يهمك أبداً!", "قفلنا حجزك على الكتب اللي وصلت. شكراً إنك كنت معانا — وأي وقت تحتاج كتب، المبادرة مستنياك 🌷"); }
+  if (r.carriedTo) {
+    // انتقل للمرحلة المفتوحة فوراً: كتبه المرحّلة جاهزة في حجزه الجديد لكل ابن
+    APP.phaseId = r.carriedTo.id; APP.phasePicked = true; Emp.dirty = false;
+    await Emp.load();
+    const m = UI.open(`<div class="text-center"><div class="text-[48px] leading-none">🚚</div>
+      <div class="font-display font-bold text-[19px] mt-2">كتبك اترحّلت بنجاح!</div>
+      <p class="text-[13.5px] text-slate-600 mt-2 leading-relaxed">${booksWord(r.count || 0)} دخلت حجزك في <b>«${esc(r.carriedTo.name)}»</b> بأسبقيتك الأصلية، كل كتاب باسم صاحبه 👦👧</p>
+      <p class="text-[13.5px] font-semibold text-slate-800 mt-3">عايز تزوّد كتب في المرحلة دي، ولا تراجع حجزك وتنهي؟</p></div>
+      <div class="grid gap-2 mt-4"><button class="btn btn-primary !h-12" data-go="/e/wiz">${ic("plus")} أزوّد كتب</button>
+      <button class="btn btn-outline !h-11" data-go="/e/orders">${ic("check")} أراجع حجزي وخلاص كده</button></div>`, { title: "تم الترحيل 🎉" });
+    $$("[data-go]", m.root).forEach(b => b.addEventListener("click", () => { m.close(); setTimeout(() => Router.go(b.dataset.go), 300); }));
+    return;
+  }
+  await reloadData();
+  happyDialog("📦", "اتحجزت لك في الدفعة الجديدة!", "كتبك اللي لسه موصلتش محفوظة بأسبقيتك، وأول ما المرحلة الجديدة تتفتح هتلاقيها في حجزك وهنبلغك على طول 🔔");
 });
+/** نافذة مبهجة قصيرة */
+function happyDialog(emoji, title, body, cta) {
+  return UI.open(`<div class="text-center"><div class="text-[48px] leading-none">${emoji}</div><div class="font-display font-bold text-[19px] mt-2">${esc(title)}</div>
+    <p class="text-[13.5px] text-slate-600 mt-2 leading-relaxed">${esc(body)}</p><button class="btn btn-primary w-full mt-4 !h-11" data-close>${esc(cta || "تمام 👌")}</button></div>`, { title: " " });
+}
 _wrap("/e/orders", view => afterHead(view, waitBox()));
 
 // ---------------------------------------------------------------- الانتقال بين المراحل: الموظف في قلب الحدث
@@ -132,3 +152,18 @@ Notif.list = function () {
   if (APP.user && APP.user.userType === "EMPLOYEE" && APP.emp) (APP.emp.phases || []).filter(p => p.Booking_Open).forEach(p => out.unshift({ id: "open-" + p.Phase_ID, icon: "calendar-check", tone: "green", title: `فُتح الحجز: ${p.Phase_Name} 🎉`, body: `الحجز متاح لحد ${day(p.End_DateTime)}`, href: "#/e/books" }));
   return out;
 };
+
+// ---------------------------------------------------------------- كلمة شكر عند كل محطة
+function thanksCard() {
+  const items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  if (!items.length) return "";
+  const inv = Emp.invoice(), req = items.reduce((s, i) => s + n(i.Requested_Qty), 0), dl = items.reduce((s, i) => s + n(i.Delivered_Qty), 0);
+  const allDelivered = req > 0 && dl >= req, paid = inv && n(inv.Net_Final_Invoice_Amount) > 0 && n(inv.Remaining_Balance) <= 0;
+  let m = null;
+  if (allDelivered && paid) m = ["🏆", "خلّصت كل حاجة — شكراً من القلب!", "استلمت كل الكتب وسددت بالكامل. ربنا يوفّق ولادك في سنة مليانة نجاح 📚✨"];
+  else if (paid) m = ["💳", "شكراً على السداد الكامل!", "حسابك مقفول تماماً — ومفيش عليك ولا قرش 🎉"];
+  else if (allDelivered) m = ["📚", "شكراً لاستلامك كتبك!", "كل كتب أولادك وصلتك. بالتوفيق ليهم، ومتنساش متابعة الأقساط من «مدفوعاتي» 💜"];
+  if (!m) return "";
+  return `<section class="card mb-4 overflow-hidden"><div class="p-4 flex items-center gap-3" style="background:linear-gradient(135deg,#fef9c3,#ede9fe)"><span class="text-[38px] leading-none">${m[0]}</span><div class="flex-1 min-w-0"><div class="font-display font-bold text-[16px] text-slate-900">${m[1]}</div><div class="text-[12.5px] text-slate-600 mt-0.5 leading-relaxed">${m[2]}</div></div></div></section>`;
+}
+_wrap("/e/home", view => { const c = thanksCard(); if (!c) return; const h = view.firstElementChild; if (h) h.insertAdjacentHTML("afterend", c); else view.insertAdjacentHTML("afterbegin", c); });

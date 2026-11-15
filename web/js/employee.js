@@ -835,8 +835,8 @@ on("submitRes", async () => {
   if (Router.current === "/e/cart" || Router.current === "/e/wiz") Router.go("/e/home");
   (r.warnings || []).forEach(w => toast(w, "warning"));
   await Emp.load();
-  if (!items.length) { UI.open(`<div class="text-center py-4"><div class="text-4xl">🗑️</div><h3 class="text-xl font-bold mt-3">تم إلغاء الحجز</h3><p class="text-sm text-slate-500 mt-2">${esc(r.message || "")}</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تم</button>` }); return; }
-  UI.open(resSummaryHTML(cartLines(), { title: "تمام! حجزك اتسجل 🎉", msg: r.message }), { title: "تأكيد الحجز",
+  if (!items.length) { UI.open(`<div class="text-center py-4"><div class="text-4xl">🗑️</div><h3 class="text-xl font-bold mt-3">تم إلغاء الحجز</h3><p class="text-sm text-slate-600 mt-1">ولا يهمك — شكراً إنك كنت معانا، والمبادرة مستنياك في أي وقت 🌷</p><p class="text-sm text-slate-500 mt-2">${esc(r.message || "")}</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تم</button>` }); return; }
+  UI.open(resSummaryHTML(cartLines(), { title: "تمام! حجزك اتسجل 🎉 — شكراً لثقتك 💜", msg: r.message }), { title: "تأكيد الحجز",
     footer: `<div class="grid grid-cols-2 gap-2 mb-2"><button data-act="printRes" class="btn btn-outline">${ic("download")} صورة / PDF</button><button data-act="shareWa" class="btn btn-success">${ic("message-circle")} أرسله واتساب</button></div><div class="flex gap-2"><a href="#/e/orders" data-act="goClose" data-id="/e/orders" class="btn btn-primary flex-1">متابعة حجوزاتي</a><button data-close class="btn btn-outline">تم</button></div>` });
   wzClear(); Emp.wzManual = false;
 });
