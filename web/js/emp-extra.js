@@ -250,3 +250,41 @@ on("retReq", async id => {
   if (!r.success) return toast(r.message, "danger");
   await reloadData(); happyDialog("📦", "طلب المرتجع وصل", "هات الكتاب للمسؤول، وبعد المراجعة هيتخصم من فاتورتك تلقائياً 👌");
 });
+
+// ---------------------------------------------------------------- ترحيل تلقائي للكتب المعلّقة لما تتفتح مرحلة جديدة
+/** بنود في مرحلة قديمة اختار الموظف ترحيلها ولم تُنقل بعد (اختار قبل فتح المرحلة الجديدة) */
+function pendingCarry() {
+  const r = APP.emp || {}, open = (r.phases || []).find(p => p.Booking_Open);
+  if (!open) return null;
+  const its = (r.myReservationItems || []).filter(i => i.Phase_ID !== open.Phase_ID && i.Waitlist_Choice === "carry" && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+  if (!its.length) return null;
+  return { open, from: [...new Set(its.map(i => i.Phase_ID))], qty: its.reduce((s, i) => s + n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)), 0) };
+}
+let _carrying = false;
+async function autoCarry() {
+  const pc = pendingCarry(); if (!pc || _carrying) return false;
+  _carrying = true;
+  try {
+    for (const pid of pc.from) await call("WAITLIST_DECISION", { choice: "carry", phaseId: pid });
+    APP.phaseId = pc.open.Phase_ID; APP.phasePicked = true; Emp.dirty = false;
+    await Emp.load();
+    toast(`🚚 ${booksWord(pc.qty)} من حجزك السابق اترحّلت لـ «${pc.open.Phase_Name}» بأسبقيتك`, "success");
+    return true;
+  } finally { _carrying = false; }
+}
+const _empLoadBase = Emp.load;
+Emp.load = async function () {
+  await _empLoadBase.apply(Emp, arguments);
+  if (pendingCarry()) await autoCarry();
+};
+/** «كمّل الحجز» من مرحلة مقفولة يفتح المرحلة المفتوحة بكتبه المرحّلة */
+const _wizStartBase = ACTIONS.wizStart;
+on("wizStart", async (...a) => {
+  const r = APP.emp || {}, open = (r.phases || []).find(p => p.Booking_Open);
+  if (open && open.Phase_ID !== APP.phaseId) {
+    await autoCarry();
+    if (APP.phaseId !== open.Phase_ID) { APP.phaseId = open.Phase_ID; APP.phasePicked = true; Emp.dirty = false; await Emp.load(); }
+    try { wzClear(); } catch (_) {}
+  }
+  return _wizStartBase(...a);
+});
