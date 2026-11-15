@@ -279,7 +279,7 @@ on("pickPhase", () => {
 });
 on("setPhase", async id => {
   if (Shell._phaseSheet) { Shell._phaseSheet.close(); Shell._phaseSheet = null; }
-  APP.phaseId = id; APP.settlement = null;
+  APP.phaseId = id; APP.settlement = null; APP.phasePicked = true;
   if (typeof Emp !== "undefined") Emp.dirty = false;
   if (APP.user.userType === "ADMIN") Shell.rerender(); else await Emp.load();
 });

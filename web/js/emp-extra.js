@@ -90,3 +90,45 @@ on("waitDecide", async v => {
   if (r.success) await reloadData();
 });
 _wrap("/e/orders", view => afterHead(view, waitBox()));
+
+// ---------------------------------------------------------------- الانتقال بين المراحل: الموظف في قلب الحدث
+/** ملخص حجز الموظف في مرحلة: محجوز/مُسلَّم/منتظر/مُرحَّل */
+function phaseSummary(pid) {
+  const its = (APP.emp.myReservationItems || []).filter(i => i.Phase_ID === pid && !String(i.Allocation_Status).startsWith("Cancelled"));
+  const s = { req: 0, deliv: 0, wait: 0, carried: 0, ready: 0 };
+  its.forEach(i => { const rq = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty);
+    s.req += rq; s.deliv += dl; s.ready += Math.max(0, al - dl); s.wait += Math.max(0, rq - Math.max(al, dl));
+    if (i.Allocation_Status === "Carried_Forward" || /رُحِّلت/.test(i.Unallocated_Reason || "")) s.carried += 1; });
+  return s;
+}
+/** بطاقة «مرحلة جديدة»: تظهر في الرئيسية عند فتح مرحلة والموظف له حجز في مرحلة سابقة */
+function newPhaseCard() {
+  const r = APP.emp, ph = r.activePhase; if (!ph || !ph.Booking_Open) return "";
+  const prev = (r.phases || []).filter(p => p.Phase_ID !== ph.Phase_ID && (r.myReservationItems || []).some(i => i.Phase_ID === p.Phase_ID)).pop();
+  if (!prev) return "";
+  const s = phaseSummary(prev.Phase_ID), carriedHere = Emp.phaseItems().filter(i => i.Carried_From_Item_ID).length;
+  const line = [s.deliv ? `استلمت ${booksWord(s.deliv)}` : "", s.ready ? `${booksWord(s.ready)} جاهزة للاستلام` : "", s.wait ? `${booksWord(s.wait)} لسه موصلتش` : ""].filter(Boolean).join(" · ");
+  return `<section class="card mb-4 overflow-hidden ring-2 ring-emerald-200"><div class="p-4" style="background:linear-gradient(135deg,#ecfdf5,#f5f3ff)">
+    <div class="text-[12px] font-bold text-emerald-700">🎉 مرحلة جديدة مفتوحة للحجز</div>
+    <div class="font-display font-bold text-[18px] text-slate-900 mt-0.5">${esc(ph.Phase_Name)}</div>
+    <div class="text-[12.5px] text-slate-600 mt-1">الحجز لحد ${esc(day(ph.End_DateTime))} — تقدر تحجز كتب جديدة أو تكمّل اللي ناقصك.</div>
+    ${carriedHere ? `<div class="mt-2 rounded-xl bg-white/80 ring-1 ring-emerald-200 px-3 py-2 text-[13px] text-emerald-800 font-semibold">${ic("arrow-left-right")} ${booksWord(carriedHere)} من المرحلة اللي فاتت اترحّلت لحجزك هنا بأسبقيتك.</div>` : ""}
+    <div class="mt-2 rounded-xl bg-white/80 ring-1 ring-slate-200 px-3 py-2 text-[12.5px]"><b>حجزك في «${esc(prev.Phase_Name)}»:</b> ${line || "مكتمل"}</div>
+    <div class="grid grid-cols-2 gap-2 mt-3"><a href="#/e/books" class="btn btn-primary !h-11">${ic("plus")} احجز دلوقتي</a><button class="btn btn-outline !h-11" data-act="setPhase" data-id="${esc(prev.Phase_ID)}">${ic("history")} حجزي السابق</button></div>
+  </div></section>`;
+}
+_wrap("/e/home", view => { const c = newPhaseCard(); if (!c) return; const h = view.firstElementChild; if (h) h.insertAdjacentHTML("afterend", c); else view.insertAdjacentHTML("afterbegin", c); });
+/** وأنت في مرحلة قديمة والحجز مفتوح في مرحلة أحدث: شريط يرجّعك لها */
+function backToOpenBar() {
+  const r = APP.emp, open = (r.phases || []).find(p => p.Booking_Open);
+  if (!open || open.Phase_ID === APP.phaseId) return "";
+  return `<button data-act="setPhase" data-id="${esc(open.Phase_ID)}" class="w-full mb-3 rounded-2xl bg-emerald-600 text-white px-4 py-3 text-right flex items-center gap-2 font-semibold text-[14px]">${ic("sparkles")}<span class="flex-1">الحجز مفتوح الآن في «${esc(open.Phase_Name)}» — اضغط للانتقال</span>${ic("chevron-left")}</button>`;
+}
+["/e/home", "/e/orders", "/e/books", "/e/pay"].forEach(p => _wrap(p, view => { const b = backToOpenBar(); if (b) view.insertAdjacentHTML("afterbegin", b); }));
+// جرس الإشعارات: فتح مرحلة جديدة
+const _notifList2 = Notif.list;
+Notif.list = function () {
+  const out = _notifList2.call(Notif);
+  if (APP.user && APP.user.userType === "EMPLOYEE" && APP.emp) (APP.emp.phases || []).filter(p => p.Booking_Open).forEach(p => out.unshift({ id: "open-" + p.Phase_ID, icon: "calendar-check", tone: "green", title: `فُتح الحجز: ${p.Phase_Name} 🎉`, body: `الحجز متاح لحد ${day(p.End_DateTime)}`, href: "#/e/books" }));
+  return out;
+};
