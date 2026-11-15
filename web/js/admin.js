@@ -2423,12 +2423,20 @@ Router.add("/a/suppliers", view => {
       return `<article class="card card-pad ${isMain ? "ring-2 ring-brand-400" : ""}"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
         <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم فاتورة التوريد ${fmt(s.Volume_Discount_Pct !== undefined && s.Volume_Discount_Pct !== "" ? s.Volume_Discount_Pct : 3)}%</span></div>
         <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div>
-        <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" title="حذف المكتبة" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</div></article>`; }).join("")}</div>`
+        <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}<span class="flex items-center gap-1.5">${lockedBtn("SAVE_SUPPLIER", `<button class="act-ic act-ic-edit" data-act="supplierForm" data-id="${esc(s.Supplier_ID)}" title="تعديل بيانات المكتبة" aria-label="تعديل بيانات المكتبة">${ic("pencil")}</button>`)}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" title="حذف المكتبة" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</span></div></article>`; }).join("")}</div>`
       : `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.")}</div>`);
 });
-on("supplierForm", async () => {
-  const v = await UI.form({ title: "مكتبة جديدة", fields: [{ name: "supplierName", label: "اسم المكتبة", required: true }, { name: "phone", label: "الهاتف", type: "tel", cols: 1 }, { name: "volumeDiscountPct", label: "خصم الكمية على إجمالي الفاتورة % (افتراضي 3%)", type: "number", value: 3, cols: 1 }] });
-  if (v) await act("SAVE_SUPPLIER", v);
+on("supplierForm", async id => {
+  const x = id ? (A().suppliers.find(s => s.Supplier_ID === id) || {}) : {};
+  const v = await UI.form({ title: id ? "تعديل بيانات المكتبة" : "مكتبة جديدة", fields: [
+    { name: "supplierName", label: "اسم المكتبة", required: true, value: x.Supplier_Name || "" },
+    { name: "contactPerson", label: "المسؤول / جهة الاتصال", cols: 1, value: x.Contact_Person && x.Contact_Person !== "-" ? x.Contact_Person : "" },
+    { name: "phone", label: "الهاتف", type: "tel", cols: 1, value: x.Phone || "" },
+    { name: "volumeDiscountPct", label: "خصم الكمية على إجمالي الفاتورة % (افتراضي 3%)", type: "number", cols: 1, value: x.Volume_Discount_Pct !== undefined && x.Volume_Discount_Pct !== "" ? x.Volume_Discount_Pct : 3 },
+    { name: "returnPolicyDays", label: "مدة سياسة المرتجعات (يوم)", type: "number", cols: 1, value: x.Return_Policy_Days || 30 },
+    { name: "paymentTerms", label: "شروط السداد", value: x.Payment_Terms && x.Payment_Terms !== "-" ? x.Payment_Terms : "" },
+    { name: "contractNotes", label: "ملاحظات التعاقد", value: x.Contract_Notes || "" }] });
+  if (v) await act("SAVE_SUPPLIER", Object.assign({ supplierId: id || "" }, v));
 });
 on("supplierDel", id => {
   const d = A(), s = d.suppliers.find(x => x.Supplier_ID === id) || {}, isMain = (d.suppliers[0] || {}).Supplier_ID === id, next = d.suppliers[1];
@@ -2495,7 +2503,18 @@ Router.add("/a/settings", view => {
         <div class="flex-1 min-w-[12rem]"><div class="font-semibold text-slate-800 text-[14px]">${esc(cleanDesc)}</div><code class="text-[11px] text-slate-400" dir="ltr">${esc(s.Setting_Key)}</code></div>
         <div class="font-bold text-brand-800 num text-[15px] min-w-0 max-w-full [overflow-wrap:anywhere]">${esc(String(s.Setting_Value).replace(/،/g, "، "))}</div>
         ${can("SAVE_SETTING") ? `<button class="act-ic act-ic-edit" data-act="editSetting" data-id="${esc(s.Setting_Key)}" title="تعديل الإعداد" aria-label="تعديل الإعداد">${ic("pencil")}</button>` : ""}</div>`;
-    }).join("")}</section>`;
+    }).join("")}</section>`
+    + (APP.user.role === "Admin" ? `<section class="card card-pad mt-6 border border-rose-200 bg-rose-50/40">
+      <h3 class="font-bold text-rose-700 flex items-center gap-2">${ic("triangle-alert")} منطقة الخطر · تصفير بيانات التشغيل</h3>
+      <p class="text-[13px] text-slate-600 mt-1.5 leading-relaxed">يحذف نهائيًا: المراحل، الحجوزات، التوريدات، فواتير المكتبة والموظفين، الأقساط، الإيصالات والمدفوعات، المخزون، المصروفات، سجل التدقيق وإغلاقات الخزينة، ويُصفّر الترقيم. <b>يبقى:</b> الموظفون والكتب والأسعار والمكتبات والإعدادات والحسابات.</p>
+      <button class="btn btn-danger btn-sm mt-3" data-act="resetOps">${ic("trash-2")} تصفير بيانات التشغيل</button></section>` : "");
+});
+on("resetOps", async () => {
+  if (!await UI.confirm({ title: "تصفير بيانات التشغيل", message: "سيتم حذف كل المراحل والحجوزات والتوريدات والفواتير والمدفوعات وسجل التدقيق نهائيًا، وتصفير الترقيم. الموظفون والكتب والأسعار والمكتبات لن تُمس.\n\nمتأكد؟ (الخطوة التالية للتأكيد النهائي)", ok: "متابعة", tone: "danger", icon: "triangle-alert" })) return;
+  const v = await UI.form({ title: "تأكيد نهائي", fields: [{ name: "confirm", label: "اكتب كلمة «تصفير» للتأكيد", required: true }] });
+  if (!v) return;
+  if (String(v.confirm).trim() !== "تصفير") return toast("الكلمة غير مطابقة — لم يُنفَّذ شيء", "warning");
+  await act("RESET_OPERATIONAL_DATA", { confirm: "تصفير" });
 });
 // ---------------- مصفوفة الصلاحيات (المدير يحدد ما يفعله كل دور)
 // [الدور، الاسم، اختصار للموبايل، باقي الاسم للشاشات الأكبر]

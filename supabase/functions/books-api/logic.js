@@ -591,6 +591,7 @@ const ACTION_ACL = {
   SAVE_SETTING: ["Admin"],
   SAVE_SUPPLIER: ["Coordinator"],
   DELETE_SUPPLIER: ["Coordinator"],
+  RESET_OPERATIONAL_DATA: ["Admin"],
   SAVE_BOOK: ["Coordinator"],
   DELETE_BOOK: ["Coordinator"],
   BULK_IMPORT_BOOKS: ["Coordinator"],
@@ -687,6 +688,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_PHASE": return E.savePhase(session, payload);
       case "DELETE_PHASE": return E.deletePhase(session, payload);
       case "DELETE_SUPPLIER": return E.deleteSupplier(session, payload);
+      case "RESET_OPERATIONAL_DATA": return E.resetOperationalData(session, payload);
       case "SET_PHASE_STATUS": return E.setPhaseStatus(session, payload);
       case "GENERATE_PO_SNAPSHOT": return E.generatePurchaseOrderSnapshot(session, payload.phaseId);
       case "CANCEL_PO_BACKORDER": return E.cancelPoBackorder(session, payload);
@@ -1900,6 +1902,25 @@ const OperationsEngine = {
       const moved = this.assignBooksToMainSupplier_(); // أول مكتبة تُسجَّل تصبح الرئيسية وتُربط بها كل الكتب
       DB_Engine.logAudit(session.userId, session.role, "Suppliers", "SAVE_SUPPLIER", supId, existing, obj);
       return { success: true, message: "تم حفظ بيانات المكتبة (" + supId + ")." + (moved ? " رُبط " + moved + " كتاباً بالمكتبة الرئيسية." : "") };
+    });
+  },
+
+  /**
+   * تصفير بيانات التشغيل (للمدير فقط وبكلمة تأكيد): يحذف المراحل والحجوزات والتوريدات والفواتير والأقساط والمدفوعات
+   * والمخزون والمصروفات وسجل التدقيق وإغلاقات الخزينة ويصفّر الترقيم. يُبقي الإعدادات والحسابات والموظفين والمكتبات والكتب والأسعار.
+   * النسخة الاحتياطية اليومية (books.daily_snapshot) تسمح بالاسترجاع خلال 14 يومًا.
+   */
+  resetOperationalData: function(session, payload) {
+    Util.require(session && session.role === "Admin", "هذه العملية للمدير فقط.");
+    Util.require(Util.str(payload && payload.confirm) === "تصفير", "اكتب كلمة «تصفير» للتأكيد.");
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const tables = [S.PHASES, S.RES_HEADER, S.RES_ITEMS, S.RES_AUDIT, S.PO_SNAPSHOT, S.SUP_INV_HEADER, S.SUP_INV_ITEMS, S.INVENTORY,
+        S.DELIVERY_RETURNS, S.EMP_INVOICES, S.INSTALLMENTS, S.EMP_PAYMENTS, S.SUP_LEDGER, S.EXPENSES, S.AUDIT_TRAIL, S.COUNTERS, S.CASH_CLOSINGS];
+      const counts = {};
+      tables.forEach(n => { counts[n] = DB_Engine.getAllRecords(n).length; DB_Engine.overwriteTableData(n, []); });
+      DB_Engine.logAudit(session.userId, session.role, "System", "RESET_OPERATIONAL_DATA", "ALL", counts, null);
+      return { success: true, message: "تم تصفير بيانات التشغيل وبقيت بيانات الموظفين والكتب والأسعار والمكتبات.", counts: counts };
     });
   },
 
