@@ -20,23 +20,43 @@ const REPORTS = [
 ];
 const Rep = { sel: "R14" };
 
+// تصنيف التقارير بألوان: الحجز (بنفسجي) · المال (أخضر) · المكتبة والمخزن (أزرق) · تحليلات (ذهبي)
+const REP_CAT = { R01: "res", R02: "res", R04: "res", R05: "res", R14: "fin", R06: "fin", R07: "fin", R08: "fin", R10: "fin", R03: "sup", R09: "sup", R11: "sup", R12: "sup", R00: "ana", R13: "ana", R15: "ana", R16: "ana", R17: "ana" };
+const REP_TONE = {
+  res: { n: "الحجز", g: "from-brand-600 to-brand-800", soft: "bg-brand-50 text-brand-700 ring-brand-200", dot: "bg-brand-500" },
+  fin: { n: "المال", g: "from-emerald-500 to-emerald-700", soft: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
+  sup: { n: "المكتبة والمخزن", g: "from-sky-500 to-sky-700", soft: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
+  ana: { n: "تحليلات", g: "from-amber-400 to-amber-600", soft: "bg-amber-50 text-amber-700 ring-amber-200", dot: "bg-amber-500" }
+};
+const repTone = id => REP_TONE[REP_CAT[id] || "ana"];
 Router.add("/a/reports", view => {
-  const cur = REPORTS.find(r => r[0] === Rep.sel);
-  view.innerHTML = UI.pageHead("التقارير والتصفية", "اختر التقرير ثم اطبعه أو صدّره إلى Excel")
-  + `<div class="grid gap-4 sm:gap-6 lg:grid-cols-[300px_1fr] items-start">
-    <nav class="no-print lg:sticky lg:top-24">
-      <div class="lg:hidden"><select class="input" data-change="pickRep">${REPORTS.map(r => `<option value="${r[0]}" ${r[0] === Rep.sel ? "selected" : ""}>${r[2]}</option>`).join("")}</select></div>
-      <div class="hidden lg:block card p-2 max-h-[calc(100dvh-8rem)] overflow-y-auto">${REPORTS.map(r => `<button data-act="pickRep" data-id="${r[0]}" class="w-full flex items-center gap-3 rounded-xl p-2.5 text-right transition ${r[0] === Rep.sel ? "bg-brand-50 ring-1 ring-brand-200" : "hover:bg-slate-50"}">
-        <span class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${r[0] === Rep.sel ? "bg-brand-700 text-white" : "bg-slate-100 text-slate-500"}">${ic(r[1])}</span>
-        <span class="min-w-0"><span class="block text-[13.5px] font-semibold ${r[0] === Rep.sel ? "text-brand-900" : "text-slate-700"}">${r[2]}</span><span class="block text-[11px] text-slate-400 truncate">${r[3]}</span></span></button>`).join("")}</div>
+  const cur = REPORTS.find(r => r[0] === Rep.sel) || REPORTS[0], t = repTone(cur[0]);
+  const tile = r => { const tt = repTone(r[0]), on = r[0] === Rep.sel;
+    return `<button data-act="pickRep" data-id="${r[0]}" class="rep-tile shrink-0 snap-start w-[8.6rem] lg:w-full text-right rounded-2xl p-2.5 ring-1 transition active:scale-[.98] ${on ? `bg-gradient-to-br ${tt.g} text-white ring-transparent shadow-lg` : "bg-white ring-slate-200 hover:ring-brand-300"}">
+      <span class="flex lg:items-center gap-2.5 lg:flex-row flex-col"><span class="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${on ? "bg-white/20 text-white" : tt.soft + " ring-1"}">${ic(r[1])}</span>
+      <span class="min-w-0"><span class="block text-[12.5px] font-bold leading-snug ${on ? "text-white" : "text-slate-800"}">${r[2]}</span><span class="hidden lg:block text-[11px] truncate ${on ? "text-white/80" : "text-slate-400"}">${r[3]}</span></span></span></button>`; };
+  const cats = Object.keys(REP_TONE);
+  view.innerHTML = `<section class="relative overflow-hidden rounded-3xl p-4 sm:p-5 mb-4 text-white shadow-lg" style="background:radial-gradient(circle at 85% 0%,#8b55cc 0,#4c1d95 45%,#2a1347 100%)">
+      <div class="absolute -left-10 -bottom-12 w-40 h-40 rounded-full bg-gold-400/20 blur-2xl"></div>
+      <div class="relative flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center text-[22px]">${ic("chart-column")}</span>
+        <div class="flex-1 min-w-0"><h1 class="font-display font-bold text-[21px] leading-tight">التقارير والتصفية</h1><p class="text-[12.5px] text-white/75">${esc(phaseObj().Phase_Name || "")} · ${fmt(REPORTS.length)} تقرير جاهز للطباعة والتصدير</p></div></div>
+      <div class="relative flex flex-wrap gap-1.5 mt-3">${cats.map(c => `<span class="inline-flex items-center gap-1.5 rounded-full bg-white/12 ring-1 ring-white/20 px-2.5 py-1 text-[11.5px]"><span class="w-2 h-2 rounded-full ${REP_TONE[c].dot}"></span>${REP_TONE[c].n} <b class="num">${REPORTS.filter(r => (REP_CAT[r[0]] || "ana") === c).length}</b></span>`).join("")}</div>
+    </section>
+    <div class="grid gap-4 sm:gap-6 lg:grid-cols-[290px_1fr] items-start">
+    <nav class="no-print lg:sticky lg:top-24 min-w-0">
+      <div class="lg:hidden -mx-4 px-4 flex gap-2 overflow-x-auto snap-x pb-2" id="repStrip">${REPORTS.map(tile).join("")}</div>
+      <div class="hidden lg:block card p-2 max-h-[calc(100dvh-8rem)] overflow-y-auto space-y-3">${cats.map(c => { const list = REPORTS.filter(r => (REP_CAT[r[0]] || "ana") === c); return list.length ? `<div><div class="flex items-center gap-1.5 px-2 pt-1 pb-1.5 text-[11px] font-bold text-slate-500"><span class="w-2 h-2 rounded-full ${REP_TONE[c].dot}"></span>${REP_TONE[c].n}</div><div class="space-y-1.5">${list.map(tile).join("")}</div></div>` : ""; }).join("")}</div>
     </nav>
-    <section class="card min-w-0">
-      <div class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 pt-4 sm:pt-5 pb-3 border-b border-slate-100">
-        <div class="flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center text-lg">${ic(cur[1])}</span><div><h2 class="font-bold text-slate-900">${cur[2]}</h2><p class="text-xs text-slate-500">${esc(Rep.sel === "R14" || ["R08", "R09", "R10", "R11", "R12"].includes(Rep.sel) ? "كل المراحل" : phaseObj().Phase_Name || "")}</p></div></div>
-        <div class="flex gap-2 no-print"><button class="btn btn-outline btn-sm" data-act="exportRep">${ic("file-spreadsheet")} Excel</button><button class="btn btn-dark btn-sm" data-act="printRep">${ic("printer")} طباعة / PDF</button></div>
+    <section class="card min-w-0 overflow-hidden">
+      <div class="h-1.5 bg-gradient-to-l ${t.g}"></div>
+      <div class="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-5 pt-4 pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-3 min-w-0"><span class="w-11 h-11 rounded-2xl bg-gradient-to-br ${t.g} text-white flex items-center justify-center text-lg shadow">${ic(cur[1])}</span>
+          <div class="min-w-0"><div class="flex items-center gap-2"><h2 class="font-bold text-slate-900 text-[16px]">${cur[2]}</h2><span class="rounded-full px-2 py-0.5 text-[10.5px] font-semibold ring-1 ${t.soft}">${t.n}</span></div><p class="text-[12px] text-slate-500">${esc(cur[3])} · ${esc(Rep.sel === "R14" || ["R08", "R09", "R10", "R11", "R12", "R17"].includes(Rep.sel) ? "كل المراحل" : phaseObj().Phase_Name || "")}</p></div></div>
+        <div class="flex gap-2 no-print"><button class="btn btn-outline btn-sm" data-act="exportRep">${ic("file-spreadsheet")} Excel</button><button class="btn btn-dark btn-sm" data-act="printRep">${ic("printer")} PDF</button></div>
       </div>
-      <div id="repArea" class="p-4 sm:p-5">${UI.skeleton(4)}</div>
+      <div id="repArea" class="rep-area rep-${REP_CAT[cur[0]] || "ana"} p-3 sm:p-5">${UI.skeleton(4)}</div>
     </section></div>`;
+  const on = view.querySelector("#repStrip [aria-current], #repStrip .shadow-lg"); if (on && on.scrollIntoView) setTimeout(() => on.scrollIntoView({ inline: "center", block: "nearest" }), 30);
   renderReport();
 });
 on("pickRep", v => { Rep.sel = v; Rep.q = ""; Rep.sort = { k: -1, dir: 1 }; Shell.rerender(); });
@@ -160,10 +180,11 @@ function repGroups(g, o) {
   const all = keys.reduce((s, k) => s + g[k].length, 0);
   return `<div class="flex items-center justify-between mb-2 no-print text-[12.5px] text-slate-500"><span><b class="num text-slate-800">${fmt(keys.length)}</b> مجموعة · <b class="num text-slate-800">${fmt(all)}</b> سطر</span><button class="btn btn-ghost btn-xs" data-act="repOpenAll">${ic("chevron-down")} فتح الكل</button></div>
     <div class="space-y-2">${keys.map((k, gi) => { const l = g[k];
-      return `<details class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden" data-rg="${gi}"><summary class="list-none cursor-pointer p-3 flex items-start gap-3 hover:bg-slate-50">
+      return `<details class="rep-grp relative rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden shadow-[0_1px_2px_rgba(15,23,42,.04),0_6px_16px_-10px_rgba(76,29,149,.25)]" data-rg="${gi}"><summary class="list-none cursor-pointer p-3 pr-4 flex items-start gap-3 hover:bg-brand-50/40">
         <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 text-[14px] leading-snug">${esc(o.title(k))}</div>${o.sub ? `<div class="text-[11.5px] text-slate-500 num">${esc(o.sub(k))}</div>` : ""}
-        <div class="flex flex-wrap gap-1.5 mt-1.5">${o.stats(l).map(x => `<span class="inline-flex items-baseline gap-1 rounded-lg bg-slate-50 ring-1 ring-slate-200/70 px-2 py-0.5 text-[11.5px]"><span class="text-slate-400">${x[0]}</span><b class="num text-slate-800">${fmt(Math.round(x[1]))}</b></span>`).join("")}</div></div>
-        <span class="text-brand-600 text-[18px] leading-none mt-1">▾</span></summary><div class="rg-body"></div></details>`; }).join("")}</div>`;
+        <div class="flex flex-wrap gap-1.5 mt-1.5">${o.stats(l).map((x, si) => { const tone = /منتظر/.test(x[0]) ? (x[1] > 0 ? "bg-amber-50 ring-amber-200 text-amber-800" : "bg-slate-50 ring-slate-200/70 text-slate-500") : /مخصص|القيمة/.test(x[0]) ? "bg-emerald-50 ring-emerald-200 text-emerald-800" : si === 0 ? "bg-brand-50 ring-brand-200 text-brand-800" : "bg-sky-50 ring-sky-200 text-sky-800";
+          return `<span class="inline-flex items-baseline gap-1 rounded-lg ring-1 px-2 py-0.5 text-[11.5px] ${tone}"><span class="opacity-70">${x[0]}</span><b class="num">${fmt(Math.round(x[1]))}</b></span>`; }).join("")}</div></div>
+        <span class="w-7 h-7 rounded-full bg-brand-50 text-brand-700 flex items-center justify-center text-[14px] mt-0.5 rep-chev">▾</span></summary><div class="rg-body"></div></details>`; }).join("")}</div>`;
 }
 function repFill(el) {
   const R = Rep._g, gi = +el.dataset.rg, body = el.querySelector(".rg-body"); if (!R || body.dataset.done) return;

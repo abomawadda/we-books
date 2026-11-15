@@ -272,3 +272,19 @@ input[type="number"], input[type="tel"], input[type="url"], input[type="password
 
 /* جداول التقارير المجمّعة على الموبايل: حشو أقل ليتسع عمود الاسم */
 @media (max-width:640px){.tbl-grp th,.tbl-grp td{padding:.45rem .4rem!important}.tbl-grp th{font-size:10.5px!important}}
+
+/* شاشة التقارير: ألوان حسب التصنيف، رأس جداول ملوّن، إخفاء زر Excel المكرر داخل التقرير */
+.rep-area .wb-xls > div:first-child{display:none}
+.rep-area table.tbl thead th{background:linear-gradient(180deg,#f8f5fc,#f1eafa);color:#4c1d95}
+.rep-fin table.tbl thead th{background:linear-gradient(180deg,#f0fdf6,#dcfce9);color:#065f46}
+.rep-sup table.tbl thead th{background:linear-gradient(180deg,#f0f9ff,#e0f2fe);color:#075985}
+.rep-ana table.tbl thead th{background:linear-gradient(180deg,#fffbeb,#fef3c7);color:#92400e}
+.rep-grp::before{content:"";position:absolute;right:0;top:0;bottom:0;width:4px;background:linear-gradient(180deg,#7c3aed,#f9b224)}
+.rep-fin .rep-grp::before{background:linear-gradient(180deg,#10b981,#047857)}
+.rep-sup .rep-grp::before{background:linear-gradient(180deg,#0ea5e9,#0369a1)}
+.rep-ana .rep-grp::before{background:linear-gradient(180deg,#f59e0b,#b45309)}
+.rep-grp[open] .rep-chev{transform:rotate(180deg)}
+.rep-grp[open] > summary{background:#faf7fe}
+.rep-tile{scroll-snap-align:start}
+#repStrip::-webkit-scrollbar{display:none}
+.rep-tools .input{background:#f8fafc}
