@@ -212,3 +212,52 @@ _wrapA("/a/cash", view => {
   const g = view.querySelector(".grid.items-start"); if (!g || g.children.length < 2) return;
   mobileTabs(view, "cash", [{ label: "🧾 الإيصالات", count: A().empPayments.length, els: [g.children[0]] }, { label: "🔒 إقفال اليوم", els: [g.children[1]] }]);
 });
+
+// ================================================================ الحجز نيابة عن موظف — بنفس شاشات الموظف وآليته
+// المسؤول يختار الموظف ← تتحول الواجهة لبوابة الموظف (الرئيسية، المعالج، الدليل، السداد) ببياناته،
+// وكل الطلبات تمر بجلسة المسؤول نفسها مع empId (ADMIN_EMP_PORTAL / SUBMIT_OR_UPDATE_RESERVATION / SAVE_MY_KIDS / WAITLIST_DECISION).
+const EmpProxy = { on: false, empId: "", name: "", saved: null };
+const _callProxy = call;
+call = function (action, payload, opts) {
+  if (EmpProxy.on) {
+    payload = Object.assign({}, payload || {});
+    if (action === "GET_EMPLOYEE_PORTAL_DATA") { action = "ADMIN_EMP_PORTAL"; payload.empId = EmpProxy.empId; }
+    else if (["SUBMIT_OR_UPDATE_RESERVATION", "SAVE_MY_KIDS", "WAITLIST_DECISION"].includes(action)) payload.empId = EmpProxy.empId;
+    else if (/^(EMP_|LOGOUT$|CHANGE_PASSWORD$)/.test(action)) return Promise.resolve({ success: false, message: "العملية دي للموظف نفسه — اخرج من «الحجز نيابة عن موظف» الأول." });
+  }
+  return _callProxy(action, payload, opts);
+};
+async function proxyStart(empId) {
+  const { e } = maps(), emp = e[empId] || {};
+  const r = await call("ADMIN_EMP_PORTAL", { empId, phaseId: APP.phaseId }, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  if (!r.activePhase || !r.activePhase.Booking_Open) { toast("الحجز مقفول في المرحلة دي — هيفتح محرر الإدارة المباشر", "info"); return ACTIONS.resEditQuick(empId); }
+  EmpProxy.saved = { user: APP.user, adm: APP.adm, phaseId: APP.phaseId, hash: location.hash };
+  Object.assign(EmpProxy, { on: true, empId, name: emp.Full_Name || empId });
+  APP.user = Object.assign({}, APP.user, { userType: "EMPLOYEE", empId, fullName: emp.Full_Name || empId, department: emp.Department || "", mobile: emp.Mobile || "", installmentAllowed: true, _proxy: true });
+  APP.emp = r; APP.phasePicked = false; if (r.activePhase) APP.phaseId = r.activePhase.Phase_ID;
+  Emp.dirty = false; Emp.resetCart();
+  try { localStorage.removeItem("wb_wz_" + empId); } catch (_) {}
+  proxyBar();
+  location.hash = "#/e/home"; setTimeout(() => ACTIONS.wizStart && ACTIONS.wizStart(), 300);
+}
+function proxyBar() {
+  let el = document.getElementById("wb-proxy");
+  if (!EmpProxy.on) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement("div"); el.id = "wb-proxy"; document.body.appendChild(el); }
+  el.style.cssText = "position:fixed;left:10px;right:10px;bottom:calc(76px + env(safe-area-inset-bottom));z-index:55;max-width:560px;margin:0 auto";
+  el.innerHTML = `<div class="flex items-center gap-2 rounded-2xl bg-amber-500 text-amber-950 shadow-lg ring-2 ring-amber-300 px-3 py-2"><span class="text-[20px]">🧑‍💼</span>
+    <div class="flex-1 min-w-0 text-[12.5px] leading-tight"><b class="block truncate">بتحجز نيابة عن: ${esc(EmpProxy.name)}</b><span class="num opacity-80">${esc(EmpProxy.empId)} · نفس شاشات الموظف بالظبط</span></div>
+    <button class="btn btn-dark btn-xs shrink-0" data-act="proxyExit">${ic("arrow-right")} رجوع للإدارة</button></div>`;
+}
+on("proxyExit", async () => {
+  if (Emp.dirty && !(await UI.confirm({ title: "فيه تعديلات ما اتأكدتش", message: "الحجز ده لسه ما اتأكدش. تخرج من غير حفظ؟", ok: "اخرج", tone: "danger" }))) return;
+  const s = EmpProxy.saved; if (!s) return proxyBar(); Object.assign(EmpProxy, { on: false, empId: "", name: "", saved: null });
+  while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true);
+  APP.user = s.user; APP.emp = null; APP.adm = s.adm; APP.phaseId = s.phaseId; Emp.dirty = false;
+  proxyBar(); location.hash = "#/a/res";
+  await Admin.load(); Shell.rerender();
+});
+// «حجز لموظف» و«تعديل الحجز» من الإدارة ← وضع النيابة (المحرر السريع القديم متاح باسم resEditQuick)
+ACTIONS.resEditQuick = ACTIONS.resEdit;
+on("resEdit", empId => proxyStart(empId));

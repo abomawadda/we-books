@@ -38,6 +38,11 @@ ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK
 expectFail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 9 }], paymentMethod: 'CASH' }, E['1002']), '1002 يحجز 9 نسخ');
 expectFail(api('GET_ADMIN_DASHBOARD_DATA', {}, E['1002']), 'موظف يفتح لوحة الإدارة');
 
+const pp = ok(api('ADMIN_EMP_PORTAL', { empId: '1002', phaseId: 'PH-01' }, coord), 'المنسق يفتح بوابة 1002 للحجز نيابة عنه');
+if (!pp.myReservationItems.length || pp.myReservationItems.some(i => i.Emp_ID !== '1002')) issues.push('بوابة النيابة أعادت بيانات غير الموظف');
+ok(api('SAVE_MY_KIDS', { empId: '1002', kids: [{ name: 'ليلى', gender: 'g', grade: '4 ابتدائي' }] }, coord), 'المنسق يسجّل بنت 1002');
+expectFail(api('ADMIN_EMP_PORTAL', { empId: '1002' }, E['1001']), 'موظف يفتح بوابة زميله');
+expectFail(api('SAVE_MY_KIDS', { kids: [] }, A), 'حفظ أبناء من الإدارة بلا موظف');
 console.log('\n— الإغلاق والتوريد —');
 at(2027, 1, 2, 9);
 expectFail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 1 }], paymentMethod: 'CASH' }, E['1005']), 'حجز بعد انتهاء الموعد');
