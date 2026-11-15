@@ -380,7 +380,7 @@ function payBreakdownHTML() {
       <div class="rounded-2xl p-3 text-brand-950" style="background:linear-gradient(135deg,#fde08a,#f9b224)"><div class="text-[11px] opacity-80">قيمة الكتب</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp))}</div><div class="text-[10.5px] opacity-80 line-through num">${fmt(Math.round(cover))}</div></div>
     </div>
     ${payMethodsHTML()}
-    ${UI.section(`${ic("users", "text-brand-600")} تكلفة كل فرد`, "قيمة كتب كل ابن أو قريب في كل المراحل", `<div class="grid gap-2 sm:grid-cols-2">${kidCards}</div>`)}
+    ${UI.section(`${ic("users", "text-brand-600")} تكلفة كل فرد`, "قيمة كتب كل ابن أو قريب في كل المراحل", `${grpBtns(who)}<div class="grid gap-2 sm:grid-cols-2">${kidCards}</div>`)}
     <div class="mt-4">${UI.section(`${ic("calendar-range", "text-brand-600")} مدفوعات كل مرحلة`, "", `<div class="grid grid-cols-2 gap-2">${phCards}</div>`)}</div><div class="h-4"></div>`;
 }
 _wrap("/e/pay", view => { const h = payBreakdownHTML(); if (!h) return; const kpis = view.querySelector(".grid.grid-cols-2.lg\\:grid-cols-4"); if (kpis) kpis.insertAdjacentHTML("afterend", h); else view.insertAdjacentHTML("beforeend", h); });
@@ -425,20 +425,28 @@ function relYou(rel) {
   return w.concat(last).join(" ");
 }
 // ---------------------------------------------------------------- فاتورة منفصلة لكل ابن/قريب
+const isFam = k => String(k).startsWith("ben:");
 function personLines(key) {
-  const r = APP.emp, bm = Emp.bookMap();
-  return (r.myReservationItems || []).filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward").filter(i => personOf(i, bm[i.Book_ID] || {}).key === key);
+  const r = APP.emp, bm = Emp.bookMap(), m = k => key === "grp:kids" ? !isFam(k) : key === "grp:fam" ? isFam(k) : k === key;
+  return (r.myReservationItems || []).filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward").filter(i => m(personOf(i, bm[i.Book_ID] || {}).key));
+}
+/** أزرار فاتورة مجمّعة: ولادي مع بعض · باقي العيلة مع بعض (تظهر لما يكون فيه أكتر من فرد في المجموعة أو المجموعتين موجودين) */
+function grpBtns(who) {
+  const ks = Object.keys(who), kids = ks.filter(k => !isFam(k)).length, fam = ks.filter(isFam).length;
+  if (!(kids && fam) && kids < 2 && fam < 2) return "";
+  return `<div class="grid grid-cols-2 gap-2 mb-3">${kids ? `<button class="btn btn-outline btn-sm" data-act="printPerson" data-id="grp:kids">${ic("printer")} فاتورة ولادي (${kids})</button>` : ""}${fam ? `<button class="btn btn-outline btn-sm" data-act="printPerson" data-id="grp:fam">${ic("printer")} فاتورة باقي العيلة (${fam})</button>` : ""}</div>`;
 }
 on("printPerson", key => {
   const r = APP.emp, bm = Emp.bookMap(), its = personLines(key); if (!its.length) return;
-  const pr = personOf(its[0], bm[its[0].Book_ID] || {}), billedQ = i => Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty));
+  const grp = key.startsWith("grp:"), names = [...new Set(its.map(i => personOf(i, bm[i.Book_ID] || {}).name))];
+  const pr = grp ? { label: key === "grp:kids" ? "ولادك" : "عيلتك", name: names.join(" و") } : personOf(its[0], bm[its[0].Book_ID] || {}), billedQ = i => Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty));
   const anyBilled = its.some(i => billedQ(i) > 0);
-  const lines = its.map(i => { const b = bm[i.Book_ID] || {}; return { code: i.Book_ID, name: b.Book_Name || i.Book_ID, grade: b.Grade, qty: anyBilled ? billedQ(i) : n(i.Requested_Qty), cover: n(i.Unit_Cover_Price) || n(b.Cover_Price), price: n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price) }; }).filter(l => l.qty > 0);
+  const lines = its.map(i => { const b = bm[i.Book_ID] || {}; return { ben: grp ? personOf(i, b).name : i.Beneficiary, code: i.Book_ID, name: b.Book_Name || i.Book_ID, grade: b.Grade, qty: anyBilled ? billedQ(i) : n(i.Requested_Qty), cover: n(i.Unit_Cover_Price) || n(b.Cover_Price), price: n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price) }; }).filter(l => l.qty > 0);
   const phases = [...new Set(its.map(i => i.Phase_ID))].map(id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id).join(" + ");
   const who = `${pr.label} ${pr.name}`;
   const e = { name: APP.user.fullName, id: APP.user.empId, dept: APP.user.department || "", mobile: APP.user.mobile || "" };
-  Doc.show("فاتورة " + who, Doc.reservation({ title: "فاتورة كتب — " + who, no: (APP.user.empId || "") + "-" + (pr.name || "").replace(/\s+/g, ""), date: new Date().toISOString(), phase: phases, status: anyBilled ? "مؤكد" : "محجوز", emp: e, lines,
-    note: `• فاتورة تفصيلية لكتب <b>${esc(who)}</b> فقط — جزء من حساب العضو، والسداد والأقساط على الفاتورة المجمّعة في «مدفوعاتي».<br>• ${anyBilled ? "الكمية = المخصص/المُسلَّم بعد خصم المرتجع." : "الكتب لسه في مرحلة الحجز؛ الكمية = المحجوز."}` }), { file: "invoice-" + (pr.name || "member") });
+  Doc.show("فاتورة " + who, Doc.reservation({ title: "فاتورة كتب — " + who, no: (APP.user.empId || "") + "-" + (grp ? (key === "grp:kids" ? "KIDS" : "FAMILY") : (pr.name || "").replace(/\s+/g, "")), date: new Date().toISOString(), phase: phases, status: anyBilled ? "مؤكد" : "محجوز", emp: e, lines,
+    note: `• فاتورة تفصيلية لكتب <b>${esc(who)}</b> فقط — جزء من حساب العضو، والسداد والأقساط على الفاتورة المجمّعة في «مدفوعاتي».<br>• ${anyBilled ? "الكمية = المخصص/المُسلَّم بعد خصم المرتجع." : "الكتب لسه في مرحلة الحجز؛ الكمية = المحجوز."}` }), { file: "invoice-" + (grp ? key.slice(4) : (pr.name || "member")) });
 });
 
 // ================================================================ مدفوعاتي: أدوات السداد والمتابعة
