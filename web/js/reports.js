@@ -41,12 +41,14 @@ Router.add("/a/reports", view => {
 });
 on("pickRep", v => { Rep.sel = v; Shell.rerender(); });
 on("printRep", () => {
+  $$("#repArea details[data-rg]").forEach(d => { repFill(d); d.open = true; });
   const c = $("#repArea").cloneNode(true);
   $$(".lg\\:hidden", c).forEach(x => x.remove());
   $$("[style*=max-height]", c).forEach(x => x.style.maxHeight = "none");
   openPrint((REPORTS.find(r => r[0] === Rep.sel) || [])[2] || "تقرير", c.innerHTML);
 });
 on("exportRep", () => {
+  $$("#repArea details[data-rg]").forEach(d => { repFill(d); d.open = true; });
   const tables = $$("#repArea table");
   if (!tables.length) return toast("لا يوجد جدول للتصدير", "warning");
   const rows = []; let headers = null;
@@ -86,15 +88,23 @@ async function renderReport() {
       <div class="mt-4">${block("المخزون المتبقي (يُرجع للمكتبة قبل الإغلاق)", "boxes", "bg-slate-100 text-slate-800", UI.table([{ t: "الكتاب", v: l => esc(bookName(b, l.bookId)) }, { t: "بالمخزن", cls: "num", v: l => fmt(l.onHand) }, { t: "مخصص", cls: "num", v: l => fmt(l.reserved) }, { t: "حر", cls: "num", v: l => fmt(l.free) }, { t: "متوسط التكلفة", cls: "num", v: l => fmt(l.avgCost) }, { t: "القيمة", cls: "num", v: l => money(l.value) }], r.stock.lines, { empty: "لا مخزون متبقٍ", emptyIcon: "boxes" }))}</div>`;
   }
   else if (sel === "R01" && !Rep.r01full) h = r01Summary(items, e);
-  else if (sel === "R01") h = r01Toggle() + UI.table([{ t: "الرقم", v: "Emp_ID" }, { t: "الموظف", v: i => esc(empName(e, i.Emp_ID)) }, { t: "الكتاب", v: i => esc(bookName(b, i.Book_ID)) }, { t: "الأسبقية", cls: "num", v: i => `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>` }, { t: "محجوز", cls: "num", v: i => fmt(i.Requested_Qty) }, { t: "القيمة", cls: "num", v: i => fmt(n(i.Requested_Qty) * n(i.Unit_Emp_Price)) }, { t: "السداد", v: i => esc(ar((d.resHeaders.find(x => x.Res_ID === i.Res_ID) || {}).Payment_Method_Selected)) }], items);
+  else if (sel === "R01") h = r01Toggle() + repGroups(groupBy(items.filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > 0), "Emp_ID"), {
+      title: k => empName(e, k), sub: k => `${k} · ${(e[k] || {}).Department || ""} · ${ar((d.resHeaders.find(x => x.Emp_ID === k && x.Phase_ID === ph) || {}).Payment_Method_Selected)}`,
+      sort: (x, y) => String(x.Priority_Timestamp).localeCompare(String(y.Priority_Timestamp)),
+      stats: l => [["كتاب", l.length], ["نسخة", sum(l, "Requested_Qty")], ["القيمة", l.reduce((s, i) => s + n(i.Requested_Qty) * n(i.Unit_Emp_Price), 0)]],
+      cols: [["الكتاب", i => `<b>${esc(bookName(b, i.Book_ID))}</b>${i.Beneficiary ? ` <span class="text-[11px] text-sky-700">لـ ${esc(i.Beneficiary)}</span>` : ""}<div class="text-[11px] text-slate-400 num" dir="ltr">${esc(String(i.Priority_Timestamp).slice(0, 16))}</div>`], ["العدد", i => `<span class="num">${fmt(i.Requested_Qty)}</span>`], ["القيمة", i => `<b class="num">${fmt(n(i.Requested_Qty) * n(i.Unit_Emp_Price))}</b>`]] });
   else if (sel === "R02") { const a = {}; items.forEach(i => { const x = a[i.Book_ID] = a[i.Book_ID] || { r: 0, al: 0, dl: 0 }; x.r += n(i.Requested_Qty); x.al += n(i.Allocated_Qty); x.dl += n(i.Delivered_Qty); });
     h = UI.table([{ t: "الكود", v: "k" }, { t: "الكتاب", v: x => esc(bookName(b, x.k)) }, { t: "المكتبة", v: x => esc((s[(b[x.k] || {}).Supplier_ID] || {}).Supplier_Name) }, { t: "محجوز", cls: "num", v: x => fmt(x.r) }, { t: "مخصص", cls: "num", v: x => fmt(x.al) }, { t: "مُسلَّم", cls: "num", v: x => fmt(x.dl) }, { t: "قبل الخصم", cls: "num", v: x => fmt(x.r * n((b[x.k] || {}).Cover_Price)) }, { t: "بالتكلفة", cls: "num", v: x => fmt(x.r * n((b[x.k] || {}).Standard_Net_Cost)) }], Object.keys(a).map(k => Object.assign({ k }, a[k]))); }
   else if (sel === "R03") { const ids = d.supInvHeaders.filter(x => x.Phase_ID === ph).map(x => x.Sup_Inv_ID);
     h = UI.table([{ t: "الفاتورة", v: "Sup_Inv_ID" }, { t: "الكتاب", v: x => esc(bookName(b, x.Book_ID)) }, { t: "مطلوب", cls: "num", v: x => fmt(x.Ordered_Qty) }, { t: "سليم", cls: "num", v: x => fmt(x.Received_Qty) }, { t: "تالف", cls: "num", v: x => fmt(x.Damaged_Qty) }, { t: "الفرق", cls: "num", v: x => fmt(x.Variance_Qty) }, { t: "النوع", v: x => pill(x.Matching_Flag) }, { t: "سعر مختلف", v: x => esc(x.Price_Mismatch) }], d.supInvItems.filter(x => ids.includes(x.Sup_Inv_ID) && (x.Matching_Flag !== "EXACT" || n(x.Damaged_Qty) || x.Price_Mismatch)), { empty: "لا فروق — كل الفواتير مطابقة", emptyIcon: "circle-check" }); }
-  else if (sel === "R04") { const g = {}; h = UI.table([{ t: "الكتاب", v: i => esc(bookName(b, i.Book_ID)) }, { t: "الترتيب", cls: "num", v: i => `<b>${i._rank}</b>` }, { t: "الموظف", v: i => esc(empName(e, i.Emp_ID)) }, { t: "الأسبقية", cls: "num", v: i => `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>` }, { t: "محجوز", cls: "num", v: i => fmt(i.Requested_Qty) }, { t: "مخصص", cls: "num", v: i => fmt(i.Allocated_Qty) }, { t: "الحالة", v: i => pill(i.Allocation_Status) }],
-    items.slice().sort((x, y) => (x.Book_ID + x.Priority_Timestamp).localeCompare(y.Book_ID + y.Priority_Timestamp)).map(i => { g[i.Book_ID] = (g[i.Book_ID] || 0) + 1; return Object.assign({ _rank: g[i.Book_ID] }, i); })); }
-  else if (sel === "R05") h = UI.table([{ t: "الموظف", v: i => esc(empName(e, i.Emp_ID)) }, { t: "الموبايل", cls: "num", v: i => `<span dir="ltr">${esc((e[i.Emp_ID] || {}).Mobile)}</span>` }, { t: "الكتاب", v: i => esc(bookName(b, i.Book_ID)) }, { t: "الأسبقية", cls: "num", v: i => `<span dir="ltr">${esc(i.Priority_Timestamp)}</span>` }, { t: "المنتظر", cls: "num", v: i => `<b>${fmt(n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)))}</b>` }, { t: "السبب", v: "Unallocated_Reason" }],
-    items.filter(i => n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) && !String(i.Allocation_Status).startsWith("Cancelled")), { empty: "لا يوجد منتظرون", emptyIcon: "circle-check" });
+  else if (sel === "R04") h = repGroups(groupBy(items.filter(i => !String(i.Allocation_Status).startsWith("Cancelled")), "Book_ID"), {
+      title: k => bookName(b, k), sort: (x, y) => String(x.Priority_Timestamp).localeCompare(String(y.Priority_Timestamp)),
+      stats: l => { const rq = sum(l, "Requested_Qty"), al = sum(l, "Allocated_Qty"); return [["حاجز", l.length], ["محجوز", rq], ["مخصص", al], ["منتظر", Math.max(0, rq - al)]]; },
+      cols: [["#", (i, k) => `<b>${k + 1}</b>`], ["الموظف", i => `<b>${esc(empName(e, i.Emp_ID))}</b>${i.Beneficiary ? ` <span class="text-[11px] text-sky-700">لـ ${esc(i.Beneficiary)}</span>` : ""}<div class="text-[11px] text-slate-400 num" dir="ltr">${esc(String(i.Priority_Timestamp).slice(0, 19))}</div>`], ["محجوز / مخصص", i => `<span class="num">${fmt(i.Requested_Qty)} / <b>${fmt(i.Allocated_Qty)}</b></span>`], ["الحالة", i => pill(i.Allocation_Status)]] });
+  else if (sel === "R05") h = repGroups(groupBy(items.filter(i => n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) && !String(i.Allocation_Status).startsWith("Cancelled")), "Book_ID"), {
+      title: k => bookName(b, k), sort: (x, y) => String(x.Priority_Timestamp).localeCompare(String(y.Priority_Timestamp)), empty: "لا يوجد منتظرون",
+      stats: l => [["منتظر", l.reduce((s, i) => s + n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)), 0)], ["موظف", l.length]],
+      cols: [["#", (i, k) => `<b>${k + 1}</b>`], ["الموظف", i => `<b>${esc(empName(e, i.Emp_ID))}</b><div class="text-[11px] text-slate-400 num" dir="ltr">${esc((e[i.Emp_ID] || {}).Mobile || "")} · ${esc(String(i.Priority_Timestamp).slice(0, 16))}</div>`], ["المنتظر", i => `<b class="num">${fmt(n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)))}</b>`], ["السبب", i => esc(i.Unallocated_Reason || "")]] });
   else if (sel === "R06") h = UI.table([{ t: "الفاتورة", v: "Emp_Inv_ID" }, { t: "الموظف", v: i => esc(empName(e, i.Emp_ID)) }, { t: "قبل الخصم", cls: "num", v: i => fmt(i.Total_Cover_Amount) }, { t: "التوفير", cls: "num", v: i => fmt(i.Total_Savings) }, { t: "الصافي", cls: "num", v: i => `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` }, { t: "المسدد", cls: "num", v: i => fmt(i.Total_Paid_Amount) }, { t: "المتبقي", cls: "num", v: i => fmt(i.Remaining_Balance) }, { t: "رصيد دائن", cls: "num", v: i => fmt(i.Credit_Balance) }, { t: "الحالة", v: i => pill(i.Invoice_Status) }], d.empInvoices.filter(i => i.Phase_ID === ph));
   else if (sel === "R07") h = UI.table([{ t: "الموظف", v: i => esc(empName(e, i.Emp_ID)) }, { t: "الموبايل", cls: "num", v: i => `<span dir="ltr">${esc((e[i.Emp_ID] || {}).Mobile)}</span>` }, { t: "القسط", v: "Admin_Custom_Notes" }, { t: "الاستحقاق", cls: "num", v: i => esc(day(i.Due_Date)) }, { t: "المبلغ", cls: "num", v: i => fmt(i.Scheduled_Amount) }, { t: "المسدد", cls: "num", v: i => fmt(i.Paid_Amount) }, { t: "المتبقي", cls: "num", v: i => `<b>${fmt(i.Remaining_Inst_Amount)}</b>` }, { t: "الحالة", v: i => pill(i.Status, i.Status === "Scheduled" ? "مجدول" : null) }],
     d.installments.filter(i => String(i.Emp_Inv_ID).indexOf("-" + ph + "-") > 0 && n(i.Remaining_Inst_Amount) > 0).sort((x, y) => String(x.Due_Date).localeCompare(y.Due_Date)), { empty: "لا أقساط مستحقة", emptyIcon: "circle-check" });
@@ -141,3 +151,25 @@ on("r01Detail", id => {
       <div class="text-left shrink-0"><b class="num">${fmt(n(i.Requested_Qty) * n(i.Unit_Emp_Price))}</b><div class="text-[11px] text-slate-500">${fmt(i.Requested_Qty)} نسخة${n(i.Delivered_Qty) ? ` · سُلّم ${fmt(i.Delivered_Qty)}` : n(i.Allocated_Qty) ? ` · مخصص ${fmt(i.Allocated_Qty)}` : ""}</div></div></li>`).join("")}</ul>`,
     { title: "حجز " + empName(e, id), sub: `<span class="num">${esc(id)}</span> · ${esc((e[id] || {}).Department || "")}`, footer: `<div class="flex gap-2 justify-end"><button class="btn btn-outline btn-sm" data-act="printResA" data-id="${esc(id)}">${ic("printer")} طلب الحجز</button></div>` });
 });
+
+// ---------------------------------------------------------------- تقارير مجمّعة: العنوان مرة واحدة ثم سطوره (تُبنى عند الفتح فقط — خفيفة على الموبايل)
+const groupBy = (arr, key) => { const g = {}; arr.forEach(x => (g[x[key]] = g[x[key]] || []).push(x)); return g; };
+function repGroups(g, o) {
+  const keys = Object.keys(g); if (!keys.length) return UI.empty("circle-check", o.empty || "لا توجد بيانات");
+  Rep._g = { g, o, keys };
+  const all = keys.reduce((s, k) => s + g[k].length, 0);
+  return `<div class="flex items-center justify-between mb-2 no-print text-[12.5px] text-slate-500"><span><b class="num text-slate-800">${fmt(keys.length)}</b> مجموعة · <b class="num text-slate-800">${fmt(all)}</b> سطر</span><button class="btn btn-ghost btn-xs" data-act="repOpenAll">${ic("chevron-down")} فتح الكل</button></div>
+    <div class="space-y-2">${keys.map((k, gi) => { const l = g[k];
+      return `<details class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden" data-rg="${gi}"><summary class="list-none cursor-pointer p-3 flex items-start gap-3 hover:bg-slate-50">
+        <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 text-[14px] leading-snug">${esc(o.title(k))}</div>${o.sub ? `<div class="text-[11.5px] text-slate-500 num">${esc(o.sub(k))}</div>` : ""}
+        <div class="flex flex-wrap gap-1.5 mt-1.5">${o.stats(l).map(x => `<span class="inline-flex items-baseline gap-1 rounded-lg bg-slate-50 ring-1 ring-slate-200/70 px-2 py-0.5 text-[11.5px]"><span class="text-slate-400">${x[0]}</span><b class="num text-slate-800">${fmt(Math.round(x[1]))}</b></span>`).join("")}</div></div>
+        <span class="text-brand-600 text-[18px] leading-none mt-1">▾</span></summary><div class="rg-body"></div></details>`; }).join("")}</div>`;
+}
+function repFill(el) {
+  const R = Rep._g, gi = +el.dataset.rg, body = el.querySelector(".rg-body"); if (!R || body.dataset.done) return;
+  const l = R.g[R.keys[gi]].slice().sort(R.o.sort || (() => 0));
+  body.innerHTML = `<table class="tbl w-full border-t border-slate-100"><thead><tr>${R.o.cols.map(c => `<th>${c[0]}</th>`).join("")}</tr></thead><tbody>${l.map((x, k) => `<tr>${R.o.cols.map(c => `<td class="align-top">${c[1](x, k)}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  body.dataset.done = 1;
+}
+document.addEventListener("toggle", ev => { const el = ev.target; if (el && el.matches && el.matches("details[data-rg]") && el.open) repFill(el); }, true);
+on("repOpenAll", () => $$("#repArea details[data-rg]").forEach(d => { repFill(d); d.open = true; }));
