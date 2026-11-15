@@ -206,21 +206,29 @@ const UI = {
     opts = opts || {};
     if (!rows.length) return opts.emptyHtml || UI.empty(opts.emptyIcon || "file-text", opts.empty || "لا توجد بيانات", opts.emptySub);
     const cell = (c, r) => { const v = typeof c.v === "function" ? c.v(r) : esc(r[c.v]); return v === undefined || v === null || v === "" ? `<span class="text-slate-300">—</span>` : v; };
-    const head = `<thead><tr>${cols.map(c => `<th class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${c.t}</th>`).join("")}</tr></thead>`;
+    const tcols = cols.filter(c => !c.cardOnly);
+    const head = `<thead><tr>${tcols.map(c => `<th class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${c.t}</th>`).join("")}</tr></thead>`;
     const body = `<tbody>${rows.map(r => {
       const rCls = typeof opts.rowCls === "function" ? opts.rowCls(r) : (opts.rowCls || "");
       const rAttr = typeof opts.rowAttr === "function" ? opts.rowAttr(r) : "";
-      return `<tr class="${rCls}" ${rAttr}>${cols.map(c => `<td class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${cell(c, r)}</td>`).join("")}</tr>`;
+      return `<tr class="${rCls}" ${rAttr}>${tcols.map(c => `<td class="${c.actions ? "col-act text-center " : ""}${c.cls || ""}">${cell(c, r)}</td>`).join("")}</tr>`;
     }).join("")}</tbody>`;
     const foot = opts.foot ? `<tfoot>${opts.foot}</tfoot>` : "";
     const tableHtml = `<div class="${opts.cardsOnMobile === false ? "" : "hidden lg:block"} overflow-auto rounded-2xl ring-1 ring-slate-200/90 bg-white shadow-soft" ${opts.maxH ? `style="max-height:${opts.maxH}px"` : ""}><table class="tbl ${opts.tblCls || ""}" ${opts.id ? `id="${opts.id}"` : ""}>${head}${body}${foot}</table></div>`;
     if (opts.cardsOnMobile === false) return tableHtml;
+    // بطاقة الموبايل: عنوان (والكود بجواره) + شارات الحالة أعلى اليسار + سطور «البيان … القيمة» متراصة + الإجراءات أسفل
+    const isTag = c => /^(الحالة|النوع|الوسيلة|حالة)/.test(String(c.t));
     const card = opts.card || (r => {
-      const [first, ...rest] = cols.filter(c => !c.noCard);
-      const act = cols.find(c => c.actions);
-      return `<div class="card p-3.5"><div class="font-bold text-slate-900">${cell(first, r)}</div>
-        <dl class="grid grid-cols-2 gap-x-3 gap-y-2 mt-2.5">${rest.filter(c => !c.actions).map(c => `<div><dt class="text-[11px] font-semibold text-slate-400">${c.t}</dt><dd class="text-[13.5px] text-slate-800 num">${cell(c, r)}</dd></div>`).join("")}</dl>
-        ${act ? `<div class="flex flex-wrap gap-2 mt-3 pt-3 border-t border-slate-100">${cell(act, r)}</div>` : ""}</div>`;
+      const vis = cols.filter(c => !c.noCard && !c.actions), act = cols.find(c => c.actions);
+      let [first, ...rest] = vis, code = "";
+      if (rest.length && /^(الكود|الرقم|رقم|#|المستند|الإيصال)$/.test(String(first.t)) && !isTag(rest[0])) { code = cell(first, r); first = rest.shift(); }
+      const tags = rest.filter(isTag), kv = rest.filter(c => !isTag(c));
+      const rCls = typeof opts.rowCls === "function" ? opts.rowCls(r) : "";
+      return `<div class="card p-3 ${/loss|late|danger/.test(rCls) ? "ring-1 ring-rose-200" : ""}">
+        <div class="flex items-start gap-2"><div class="flex-1 min-w-0 font-bold text-slate-900 text-[14px] leading-snug">${code ? `<div class="mb-1">${code}</div>` : ""}${cell(first, r)}</div>${tags.length ? `<div class="shrink-0 flex flex-col items-end gap-1 text-[12px]">${tags.map(c => cell(c, r)).join("")}</div>` : ""}</div>
+        ${kv.length ? `<div class="grid grid-cols-2 gap-1.5 mt-2.5">${kv.map(c => { const v = cell(c, r); if (/^<span class="text-slate-300">—<\/span>$/.test(v)) return ""; const wide = c.cardWide || v.replace(/<[^>]+>/g, "").trim().length > 26;
+          return `<div class="rounded-xl bg-slate-50 px-2.5 py-1.5 min-w-0 ${wide ? "col-span-2" : ""}"><div class="text-[10.5px] text-slate-500 leading-tight">${c.t}</div><div class="text-[13px] font-semibold text-slate-800 num mt-0.5 [overflow-wrap:anywhere]">${v}</div></div>`; }).join("")}</div>` : ""}
+        ${act ? `<div class="flex flex-wrap items-center justify-end gap-1.5 mt-2 pt-2 border-t border-slate-100">${cell(act, r)}</div>` : ""}</div>`;
     });
     return tableHtml + `<div class="lg:hidden grid gap-2.5 sm:grid-cols-2">${rows.slice(0, opts.mobileLimit || 300).map(card).join("")}</div>`;
   },
