@@ -257,7 +257,7 @@ const UI = {
     const root = document.createElement("div");
     root.className = "fixed inset-0 z-50 flex items-end sm:items-center justify-center";
     root.innerHTML = `<div data-bd class="absolute inset-0 bg-ink-950/50 backdrop-blur-[2px] animate-fade-in"></div>
-      <div role="dialog" aria-modal="true" class="relative w-full ${opts.wide ? "sm:max-w-3xl" : "sm:max-w-lg"} max-h-[92vh] flex flex-col bg-white rounded-t-4xl sm:rounded-3xl shadow-lift animate-sheet-up sm:animate-pop-in safe-b">
+      <div role="dialog" aria-modal="true" class="relative w-full ${opts.xl ? "sm:max-w-6xl" : opts.wide ? "sm:max-w-3xl" : "sm:max-w-lg"} max-h-[92vh] flex flex-col bg-white rounded-t-4xl sm:rounded-3xl shadow-lift animate-sheet-up sm:animate-pop-in safe-b">
         <div class="sm:hidden flex justify-center pt-2.5"><div class="w-10 h-1.5 rounded-full bg-slate-200"></div></div>
         ${opts.title ? `<div class="flex items-center justify-between gap-3 px-5 pt-3 sm:pt-5 pb-3 border-b border-slate-100"><div><h3 class="text-[17px] font-bold text-slate-900">${opts.title}</h3>${opts.sub ? `<p class="text-xs text-slate-500 mt-0.5">${opts.sub}</p>` : ""}</div><button data-close class="icon-btn -ml-2" aria-label="إغلاق">${ic("x")}</button></div>` : ""}
         <div data-body class="overflow-y-auto px-5 py-4 flex-1">${html}</div>

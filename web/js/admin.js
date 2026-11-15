@@ -2929,7 +2929,7 @@ on("viewSupInv", id => {
   const notPrinted = dt.lines.filter(l => l.flag === "NOT_PRINTED").length;
   const mismatchCnt = dt.lines.filter(l => l.mismatch).length;
   const body = `${h.Status === "Voided" ? `<div class="mb-3 rounded-2xl bg-rose-50 ring-1 ring-rose-200 text-rose-900 px-3.5 py-2.5 text-[13px] flex items-center gap-2">${ic("ban", "text-rose-600 shrink-0")}<span><b>فاتورة مُلغاة ومعكوسة</b>${dt.voidReason ? ` — السبب: ${esc(dt.voidReason)}` : ""}</span></div>` : ""}
-    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mb-3">
       ${UI.stat("المكتبة", esc(dt.supplier))}
       ${UI.stat("المرحلة", esc(dt.phase || "—"))}
       ${UI.stat("تاريخ الفاتورة", `<span class="num">${esc(day(dt.date) || dt.date || "—")}</span>`)}
@@ -2949,7 +2949,7 @@ on("viewSupInv", id => {
       { t: "التكلفة", cls: "num", v: l => fmt(l.unit) },
       { t: "الإجمالي", cls: "num", v: l => `<b>${fmt(l.total)}</b>` },
       { t: "المطابقة", v: l => pill(l.flag) }
-    ], dt.lines, { maxH: 340, empty: "لا توجد بنود" })}
+    ], dt.lines, { empty: "لا توجد بنود" })}
     <div class="mt-3 rounded-2xl bg-slate-50 ring-1 ring-slate-200/80 p-3.5 flex flex-wrap items-center justify-between gap-3">
       <div class="flex flex-wrap items-center gap-2 text-[12px]">
         <span class="pill pill-gray num">${fmt(dt.lines.length)} صنف</span>
@@ -2970,7 +2970,7 @@ on("viewSupInv", id => {
       <div>${h.Status !== "Voided" && can("VOID_SUPPLIER_INVOICE") ? `<button class="btn btn-danger btn-sm" data-act="voidSupInv" data-id="${esc(id)}">${ic("rotate-ccw")} عكس وإلغاء الفاتورة</button>` : ""}</div>
       <div class="flex items-center gap-2"><button class="btn btn-primary btn-sm" data-act="printSupInv" data-id="${esc(id)}">${ic("printer")} طباعة / PDF</button><button class="btn btn-ghost btn-sm" data-close>إغلاق</button></div>
     </div>`;
-  SI_MODAL = UI.open(body, { title: `فاتورة المكتبة ${dt.no}`, sub: `${esc(dt.phase || "")}${dt.date ? " · " + esc(day(dt.date) || dt.date) : ""}`, wide: true, footer });
+  SI_MODAL = UI.open(body, { title: `فاتورة المكتبة ${dt.no}`, sub: `${esc(dt.phase || "")}${dt.date ? " · " + esc(day(dt.date) || dt.date) : ""}`, xl: true, footer });
 });
 on("voidSupInv", async id => {
   const v = await UI.form({ title: "عكس وإلغاء فاتورة المكتبة", tone: "danger", intro: "سيتم إخراج الكمية السليمة من المخزن وإعادتها للمستحق بأمر التوريد وعكس القيد المالي للمكتبة (يُسمح فقط إذا لم تُوزَّع الكمية).", fields: [{ name: "reason", label: "سبب الإلغاء", required: true, placeholder: "مثال: خطأ في رقم الفاتورة أو نسبة خصم الكمية" }], ok: "تأكيد العكس" });
