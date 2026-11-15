@@ -3277,12 +3277,35 @@ function epBody(id) {
   const overdue = insts.filter(i => i.Status === "Overdue").reduce((s, i) => s + n(i.Remaining_Inst_Amount), 0);
   const rels = [...new Set(items.map(i => i.Beneficiary).filter(Boolean))];
   const t = Q.epTab;
-  const tab = (k, label, c) => `<button class="chip !h-9" data-act="epTab" data-id="${k}" aria-pressed="${t === k}">${label}${c !== undefined ? ` <span class="num text-[11px] opacity-70">${fmt(c)}</span>` : ""}</button>`;
+  const tab = (k, label, c) => `<button class="chip !h-9" data-act="epTab" data-id="${k}" aria-pressed="${t === k}">${label}${c !== undefined ? ` <span class="num text-[11px] opacity-75">${fmt(c)}</span>` : ""}</button>`;
   const byPhase = {}; items.forEach(i => (byPhase[i.Phase_ID] = byPhase[i.Phase_ID] || []).push(i));
+
+  const resCols = [
+    { t: "الكود", cls: "whitespace-nowrap", v: i => `<span class="inline-flex items-center rounded-lg bg-brand-50 text-brand-800 ring-1 ring-brand-200/80 px-2 py-0.5 text-[12px] font-bold num" dir="ltr">${esc(i.Book_ID)}</span>` },
+    { t: "الكتاب", v: i => { const meta = bookMeta(b, i.Book_ID); return `<div class="min-w-[10rem]"><div class="font-semibold text-[13px] text-slate-900 leading-snug">${esc(bookName(b, i.Book_ID))}</div>${(meta || i.Beneficiary) ? `<div class="text-[11.5px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">${meta ? `<span>${esc(meta)}</span>` : ""}${i.Beneficiary ? `<span class="pill pill-blue !text-[10.5px]">لـ ${esc(i.Beneficiary)}</span>` : ""}</div>` : ""}</div>`; } },
+    { t: "تاريخ ووقت الحجز", cls: "whitespace-nowrap num", v: i => { const s = String(dt(i.Priority_Timestamp) || "").trim(); const parts = s.split(/\s+/); return parts.length >= 2 ? `<div dir="ltr" class="inline-flex flex-col items-end"><span class="text-[12.5px] font-semibold text-slate-700">${esc(parts[0])}</span><span class="text-[11px] text-slate-400">${esc(parts.slice(1).join(" "))}</span></div>` : `<span dir="ltr" class="text-[12px] text-slate-600">${esc(s || "—")}</span>`; } },
+    { t: "الكمية", cls: "whitespace-nowrap num", v: i => `<div class="font-bold text-slate-800">${fmt(i.Requested_Qty)} <span class="font-normal text-[11.5px] text-slate-500">نسخة</span></div>${n(i.Delivered_Qty) ? `<div class="text-[11px] text-emerald-600">سُلّم ${fmt(i.Delivered_Qty)}</div>` : n(i.Allocated_Qty) ? `<div class="text-[11px] text-sky-600">مخصص ${fmt(i.Allocated_Qty)}</div>` : ""}` },
+    { t: "الإجمالي", cls: "whitespace-nowrap num", v: i => { const amt = n(i.Total_Emp_Line_Amount) || (n(i.Unit_Emp_Price) * n(i.Requested_Qty)); return amt > 0 ? `<span class="font-bold text-slate-800">${fmt(amt)}</span> <span class="text-[11px] text-slate-400">ج.م</span>` : `<span class="text-[11.5px] text-slate-400">—</span>`; } },
+    { t: "الحالة", cls: "whitespace-nowrap", v: i => pill(i.Allocation_Status) }
+  ];
+
   let body = "";
-  if (t === "res") body = Object.keys(byPhase).length ? Object.keys(byPhase).reverse().map(pid => `<div class="mb-4"><div class="flex items-center justify-between mb-1.5"><div class="font-bold text-[13.5px] text-slate-800">${esc((ph[pid] || {}).Phase_Name || pid)}</div>${pid === APP.phaseId && can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-outline btn-xs" data-act="epEditRes" data-id="${esc(id)}">${ic("pencil")} تعديل الحجز</button>` : ""}</div>
-      <ul class="divide-y divide-slate-100 rounded-xl ring-1 ring-slate-100">${byPhase[pid].sort((a, c) => String(a.Priority_Timestamp).localeCompare(String(c.Priority_Timestamp))).map(i => `<li class="flex items-center gap-3 px-3 py-2"><div class="flex-1 min-w-0"><div class="font-semibold text-[13px] truncate">${esc(bookName(b, i.Book_ID))}</div>${bookSub(b, i.Book_ID)}<div class="text-[11px] text-slate-400">${i.Beneficiary ? `<span class="text-sky-700 font-semibold">لـ ${esc(i.Beneficiary)}</span> · ` : ""}<span class="num">${esc(dt(i.Priority_Timestamp))}</span></div></div>
-        <div class="text-left text-[12px] num shrink-0"><b>${fmt(i.Requested_Qty)}</b> نسخة${n(i.Delivered_Qty) ? `<div class="text-emerald-600">سُلّم ${fmt(i.Delivered_Qty)}</div>` : n(i.Allocated_Qty) ? `<div class="text-sky-600">مخصص ${fmt(i.Allocated_Qty)}</div>` : ""}</div>${pill(i.Allocation_Status)}</li>`).join("")}</ul></div>`).join("")
+  if (t === "res") body = Object.keys(byPhase).length ? Object.keys(byPhase).reverse().map(pid => {
+    const list = byPhase[pid].slice().sort((a, c) => String(a.Priority_Timestamp).localeCompare(String(c.Priority_Timestamp)));
+    const totalQty = sum(list, "Requested_Qty");
+    const totalVal = list.reduce((s, i) => s + (n(i.Total_Emp_Line_Amount) || (n(i.Unit_Emp_Price) * n(i.Requested_Qty))), 0);
+    return `<div class="mb-5 last:mb-0">
+      <div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-brand-50/70 ring-1 ring-brand-200/70 px-3.5 py-2.5 mb-2.5">
+        <div class="flex flex-wrap items-center gap-2 min-w-0">
+          <span class="font-bold text-[14px] text-brand-950">${esc((ph[pid] || {}).Phase_Name || pid)}</span>
+          <span class="pill pill-brand num">${fmt(list.length)} صنف · ${fmt(totalQty)} نسخة</span>
+          ${totalVal > 0 ? `<span class="pill pill-gray num">${fmt(totalVal)} ج.م</span>` : ""}
+        </div>
+        ${pid === APP.phaseId && can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="btn btn-outline btn-xs !bg-white" data-act="epEditRes" data-id="${esc(id)}">${ic("pencil")} تعديل الحجز</button>` : ""}
+      </div>
+      ${UI.table(resCols, list, { maxH: 420 })}
+    </div>`;
+  }).join("")
     : UI.empty("notebook-pen", "لا حجوزات", "", can("SUBMIT_OR_UPDATE_RESERVATION") && APP.phaseId ? `<button class="btn btn-primary btn-sm mt-4" data-act="epEditRes" data-id="${esc(id)}">${ic("plus")} حجز له</button>` : "");
   if (t === "inv") body = invs.length ? `<ul class="space-y-2">${invs.slice().reverse().map(i => `<li class="rounded-2xl ring-1 ring-slate-100 p-3"><div class="flex flex-wrap items-center justify-between gap-2"><div><div class="font-bold text-[13.5px]">${esc((ph[i.Phase_ID] || {}).Phase_Name || i.Phase_ID)} <span class="num text-[11px] text-slate-400">${esc(i.Emp_Inv_ID)}</span></div><div class="text-[11.5px] text-slate-500">${esc(ar(i.Payment_Plan_Type))}${n(i.Installments_Count) ? " · " + i.Installments_Count + " أقساط" : ""} · صدرت ${esc(i.Issue_Date)}</div></div>${pill(i.Invoice_Status)}</div>
       <div class="grid grid-cols-4 gap-2 mt-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المقدم", fmt(i.Down_Payment_Required))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>`)}${UI.stat("المتبقي", `<span class="${n(i.Remaining_Balance) ? "text-rose-600" : ""}">${fmt(i.Remaining_Balance)}</span>`)}</div>
@@ -3295,8 +3318,8 @@ function epBody(id) {
     ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
     ${e.Mobile ? `<div class="mt-3"><div class="label">رسالة واتساب جاهزة</div><div class="flex flex-wrap gap-1.5">${[["ready", "كتبك جاهزة"], ["inst", "تذكير بالقسط"], ["open", "الحجز مفتوح"], ["free", "رسالة حرة"]].map(x => `<button class="btn btn-soft btn-xs" data-act="waEmp" data-id="${esc(e.Emp_ID)}|${x[0]}">${ic("message-circle")} ${x[1]}</button>`).join("")}<a class="btn btn-ghost btn-xs" href="tel:${esc(e.Mobile)}">${ic("phone")} اتصال</a></div></div>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
-  return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">${UI.stat("النسخ المحجوزة", fmt(sum(items, "Requested_Qty")))}${UI.stat("إجمالي الفواتير", fmt(billed))}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`)}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50" : "")}</div>
-    <div class="scroll-x !mx-0 !px-0 mb-3">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
+  return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">${UI.stat("النسخ المحجوزة", `<span class="text-brand-700">${fmt(sum(items, "Requested_Qty"))}</span>`, "!bg-brand-50/50 ring-1 ring-brand-100")}${UI.stat("إجمالي الفواتير", fmt(billed), "ring-1 ring-slate-100")}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`, "ring-1 ring-slate-100")}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50 ring-1 ring-rose-200" : "ring-1 ring-slate-100")}</div>
+    <div class="scroll-x !mx-0 !px-0 pb-2 mb-3 border-b border-slate-100">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
 }
 on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEdit(id), 50); });
 
