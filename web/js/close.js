@@ -362,3 +362,29 @@ Router.add("/a/live", view => {
   LIVE.timer = setInterval(async () => { if (Router.current !== "/a/live") return clearInterval(LIVE.timer); await Promise.all([liveFetch(), Admin.load()]); if (Router.current === "/a/live") Shell.rerender(); }, 60000);
 });
 on("liveNow", async () => { await Promise.all([liveFetch(), Admin.load()]); Shell.rerender(); });
+
+// ================================================================ (4) ملف الكتاب: كل شيء عن الكتاب في شاشة واحدة (من بيانات الإدارة المحمّلة — بلا طلب للخادم)
+on("bookFile", id => {
+  const d = A(), { b, e } = maps(), bk = b[id] || {}, st = (d.stockMap || {})[id] || {};
+  const live = i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > 0;
+  const all = d.resItems.filter(i => i.Book_ID === id && live(i)), cur = all.filter(i => i.Phase_ID === APP.phaseId).sort((x, y) => String(x.Priority_Timestamp).localeCompare(String(y.Priority_Timestamp)));
+  const byPh = {}; all.forEach(i => { const o = byPh[i.Phase_ID] = byPh[i.Phase_ID] || { q: 0, al: 0, dl: 0, p: new Set() }; o.q += n(i.Requested_Qty); o.al += n(i.Allocated_Qty); o.dl += n(i.Delivered_Qty); o.p.add(i.Emp_ID); });
+  const rets = d.deliveryReturns.filter(x => x.Book_ID === id && /RETURN/.test(x.Doc_Type));
+  const po = d.poSnapshots.filter(p => p.Book_ID === id && p.Phase_ID === APP.phaseId);
+  const mg = r2(n(bk.Emp_Selling_Price) - n(bk.Standard_Net_Cost));
+  const rq = sum(cur, "Requested_Qty"), al = sum(cur, "Allocated_Qty");
+  const tile = (l, v, cls) => `<div class="rounded-xl ${cls || "bg-slate-50"} p-2 text-center"><div class="text-[10.5px] text-slate-500">${l}</div><div class="font-bold num text-[15px]">${v}</div></div>`;
+  UI.open(`<div class="flex items-center gap-2 flex-wrap mb-3"><span class="rounded-lg bg-brand-50 text-brand-800 px-2 py-0.5 text-[12px] font-bold num">${esc(id)}</span>${pill(bk.Book_Status)}<span class="text-[12px] text-slate-500">${esc([bk.Publisher, bk.Subject, bk.Book_Part, bk.School_Types].filter(Boolean).join(" · "))}</span></div>
+    <div class="label">السعر</div><div class="grid grid-cols-4 gap-1.5 mb-3">${tile("قبل الخصم", fmt(bk.Cover_Price))}${tile("للموظف", fmt(bk.Emp_Selling_Price), "bg-brand-50")}${tile("التكلفة", fmt(bk.Standard_Net_Cost))}${tile("الهامش", fmt(mg), mg < 0 ? "bg-rose-50 text-rose-700" : "bg-emerald-50")}</div>
+    <div class="label">المرحلة الحالية</div><div class="grid grid-cols-4 gap-1.5 mb-3">${tile("حاجز", fmt(new Set(cur.map(i => i.Emp_ID)).size))}${tile("محجوز", fmt(rq))}${tile("مخصص", fmt(al))}${tile("منتظر", fmt(Math.max(0, rq - al)), rq > al ? "bg-amber-50" : "bg-slate-50")}</div>
+    <div class="label">المخزن والتوريد</div><div class="grid grid-cols-4 gap-1.5 mb-3">${tile("بالمخزن", fmt(st.onHand || 0))}${tile("حر", fmt(st.free || 0), (st.free || 0) ? "bg-emerald-50" : "bg-slate-50")}${tile("طُلب", fmt(sum(po, "Net_Order_To_Supplier_Qty")))}${tile("مرتجعات", fmt(rets.reduce((s, x) => s + n(x.Qty), 0)))}</div>
+    ${Object.keys(byPh).length > 1 ? `<div class="label">كل المراحل</div><ul class="text-[12.5px] mb-3 divide-y divide-slate-100">${Object.keys(byPh).map(p => `<li class="flex justify-between py-1.5"><span>${esc((d.phases.find(x => x.Phase_ID === p) || {}).Phase_Name || p)}</span><span class="num">${byPh[p].p.size} حاجز · ${byPh[p].q} نسخة · سُلّم ${byPh[p].dl}</span></li>`).join("")}</ul>` : ""}
+    <div class="label">الحاجزون بالأسبقية (${fmt(cur.length)})</div>
+    ${cur.length ? `<ol class="divide-y divide-slate-100 text-[13px] max-h-72 overflow-y-auto">${cur.slice(0, 200).map((i, k) => `<li class="flex items-start gap-2 py-1.5"><b class="w-6 text-slate-400 num">${k + 1}</b><div class="flex-1 min-w-0">${empLink(i.Emp_ID, empName(e, i.Emp_ID))}${i.Beneficiary ? ` <span class="text-[11px] text-sky-700">لـ ${esc(i.Beneficiary)}</span>` : ""}<div class="text-[11px] text-slate-400 num" dir="ltr">${esc(String(i.Priority_Timestamp).slice(0, 16))}</div></div><span class="num text-[12px] whitespace-nowrap">${fmt(i.Requested_Qty)} / <b>${fmt(i.Allocated_Qty)}</b></span></li>`).join("")}</ol>` : `<div class="text-[13px] text-slate-500 py-2">لا حجوزات لهذا الكتاب في المرحلة.</div>`}`,
+    { title: bookName(b, id), sub: "ملف الكتاب", footer: `<div class="flex flex-wrap gap-2 justify-end">${can("SAVE_BOOK") ? `<button class="btn btn-outline btn-sm" data-act="bookForm" data-id="${esc(id)}">${ic("pencil")} تعديل الكتاب</button>` : ""}<button class="btn btn-primary btn-sm" data-act="bookResList" data-id="${esc(id)}">${ic("users")} إدارة الحاجزين</button></div>` });
+});
+// الضغط على اسم أي كتاب في الإدارة يفتح ملفه؛ «إدارة الحاجزين» القديمة متاحة من داخله
+ACTIONS.bookResList = ACTIONS.bookRes;
+on("bookRes", id => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); ACTIONS.bookFile(id); });
+const _bookResList0 = ACTIONS.bookResList;
+on("bookResList", id => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); _bookResList0(id); });
