@@ -1,6 +1,6 @@
 /* Service worker: يخزّن ملفات الواجهة فقط ليفتح التطبيق بسرعة. طلبات الخادم (Supabase) لا تُخزَّن أبداً. */
-const CACHE = "we-books-v3.33.16";
-const SHELL = ["./", "index.html", "app.css?v=3.33.16", "config.js", "js/icons.js?v=3.33.16", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.33.16", "js/core.js?v=3.33.16", "js/docs.js?v=3.33.16", "js/app.js?v=3.33.16", "js/employee.js?v=3.33.16", "js/pickup.js?v=3.33.16", "js/help.js?v=3.33.16", "js/entry.js?v=3.33.16", "js/emp-extra.js?v=3.33.16",
+const CACHE = "we-books-v3.33.17";
+const SHELL = ["./", "index.html", "app.css?v=3.33.17", "config.js", "js/icons.js?v=3.33.17", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.33.17", "js/core.js?v=3.33.17", "js/docs.js?v=3.33.17", "js/app.js?v=3.33.17", "js/employee.js?v=3.33.17", "js/pickup.js?v=3.33.17", "js/help.js?v=3.33.17", "js/entry.js?v=3.33.17", "js/emp-extra.js?v=3.33.17",
   "fonts/cairo-arabic-400-normal.woff2", "fonts/cairo-arabic-700-normal.woff2", "icons/icon-192.png"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

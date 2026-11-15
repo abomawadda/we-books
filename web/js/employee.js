@@ -107,10 +107,11 @@ function itemStage(i) {
   const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty);
   if (String(i.Allocation_Status).startsWith("Cancelled")) return { step: -1, label: "ملغي", tone: "red", icon: "ban" };
   if (i.Allocation_Status === "Carried_Forward") return { step: -1, label: "انتقل للمرحلة التالية", tone: "gray", icon: "arrow-left-right" };
-  if (req && dl >= req) return { step: 4, label: "استلمته 🎉", tone: "green", icon: "circle-check" };
-  if (dl) return { step: 3, label: "استلمت جزءاً والباقي جاهز", tone: "green", icon: "package-check" };
+  if (req && dl >= req) return { step: 4, label: "تم التسليم كاملاً 🎉", tone: "green", icon: "circle-check" };
+  if (dl && al > dl) return { step: 3, label: `استلمت ${fmt(dl)} · متبقٍ ${fmt(al - dl)} جاهز`, tone: "green", icon: "package-check" };
+  if (dl) return { step: 3, label: `تسليم جزئي (${fmt(dl)}/${fmt(req)}) · متبقٍ ${fmt(req - dl)}`, tone: "amber", icon: "clock" };
   if (req && al >= req) return { step: 3, label: "جاهز للتسليم", tone: "green", icon: "package-check" };
-  if (al) return { step: 3, label: "جزء جاهز والباقي في الطريق", tone: "amber", icon: "package-check" };
+  if (al) return { step: 3, label: `متاح ${fmt(al)} · متبقٍ ${fmt(req - al)}`, tone: "amber", icon: "package-check" };
   const bk = (Emp.bookMap && Emp.bookMap()[i.Book_ID]) || {};
   if (bk.Book_Status === "Not_Yet_Printed") return { step: 1, label: "لم يُطبع من الناشر بعد", tone: "amber", icon: "clock" };
   if (["Delivering", "Completed"].includes(st)) return { step: 2, label: "بانتظار وصول كمية إضافية", tone: "amber", icon: "hourglass" };
@@ -119,12 +120,61 @@ function itemStage(i) {
   return { step: 0, label: "تم الحجز", tone: "brand", icon: "notebook-pen" };
 }
 const stagePill = g => `<span class="pill pill-${g.tone}">${ic(g.icon)} ${esc(g.label)}</span>`;
-/** متتبع الرحلة مثل تتبع الشحنات */
-function tracker(step) {
-  return `<ol class="flex items-start justify-between relative">${STAGES.map((s, i) => `<li class="flex-1 flex flex-col items-center text-center relative">
-    ${i ? `<span class="absolute top-[18px] left-1/2 w-full h-1 rounded-full ${i <= step ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
-    <span class="relative z-[1] w-9 h-9 rounded-full flex items-center justify-center text-[16px] ${i < step ? "bg-brand-600 text-white" : i === step ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(i < step ? "check" : s[1])}</span>
-    <span class="mt-1.5 text-[10.5px] sm:text-[11.5px] font-semibold leading-tight ${i <= step ? "text-slate-800" : "text-slate-400"}">${s[0]}</span></li>`).join("")}</ol>`;
+/** متتبع مرن لحالة الطلب: يدعم التسليم الكامل والجزئي والمتبقي للترحيل */
+function tracker(input) {
+  const isArr = Array.isArray(input);
+  if (!isArr) {
+    const step = input;
+    return `<ol class="flex items-start justify-between relative">${STAGES.map((s, i) => `<li class="flex-1 flex flex-col items-center text-center relative">
+      ${i ? `<span class="absolute top-[18px] left-1/2 w-full h-1 rounded-full ${i <= step ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
+      <span class="relative z-[1] w-9 h-9 rounded-full flex items-center justify-center text-[16px] ${i < step ? "bg-brand-600 text-white" : i === step ? "bg-gold-400 text-brand-950 ring-4 ring-gold-100" : "bg-slate-100 text-slate-400"}">${ic(i < step ? "check" : s[1])}</span>
+      <span class="mt-1.5 text-[10.5px] sm:text-[11.5px] font-semibold leading-tight ${i <= step ? "text-slate-800" : "text-slate-400"}">${s[0]}</span></li>`).join("")}</ol>`;
+  }
+  const active = input.filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  const all = input;
+  const req = sum(active, "Requested_Qty"), alloc = sum(active, "Allocated_Qty"), deliv = sum(active, "Delivered_Qty");
+  const ready = active.reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+  const remUnalloc = Math.max(0, req - alloc);
+  const remTotal = Math.max(0, req - deliv);
+  const carried = all.filter(i => i.Allocation_Status === "Carried_Forward").reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
+  const steps = active.map(i => itemStage(i).step).filter(x => x >= 0);
+  const maxStep = steps.length ? Math.max(...steps) : 0;
+  const fullDone = req > 0 && deliv >= req;
+  const partialDeliv = deliv > 0 && deliv < req;
+  const step = fullDone ? 4 : partialDeliv ? 4 : ready > 0 ? 3 : maxStep;
+  const pct = req ? Math.round((deliv / req) * 100) : 0;
+
+  let badge = "";
+  if (fullDone) badge = `<span class="pill pill-green">${ic("circle-check")} تم التسليم كاملاً</span>`;
+  else if (partialDeliv) badge = `<span class="pill pill-amber">${ic("package-check")} تسليم جزئي · ${fmt(deliv)} من ${fmt(req)}</span>`;
+  else if (ready > 0 && ready < req) badge = `<span class="pill pill-brand">${ic("package-check")} جاهز تسليم جزئي (${fmt(ready)} من ${fmt(req)})</span>`;
+  else if (ready > 0) badge = `<span class="pill pill-green">${ic("package-check")} جاهز للتسليم بالكامل</span>`;
+  else if (carried > 0 && !req) badge = `<span class="pill pill-gray">${ic("arrow-left-right")} تم ترحيل ${booksWord(carried)} للمرحلة القادمة</span>`;
+
+  const stepsHtml = `<ol class="flex items-start justify-between relative">${STAGES.map((s, i) => {
+    const isLast = i === 4;
+    const label = isLast ? (fullDone ? "استلمته كاملاً" : partialDeliv ? `تسليم جزئي (${fmt(deliv)}/${fmt(req)})` : s[0]) : s[0];
+    const done = i < step || (isLast && fullDone);
+    const cur = i === step && !(isLast && fullDone);
+    const cls = done ? "bg-brand-600 text-white" : cur ? (partialDeliv ? "bg-amber-400 text-amber-950 ring-4 ring-amber-100" : "bg-gold-400 text-brand-950 ring-4 ring-gold-100") : "bg-slate-100 text-slate-400";
+    return `<li class="flex-1 flex flex-col items-center text-center relative">
+      ${i ? `<span class="absolute top-[18px] left-1/2 w-full h-1 rounded-full ${i <= step ? "bg-brand-500" : "bg-slate-200"}" style="z-index:0"></span>` : ""}
+      <span class="relative z-[1] w-9 h-9 rounded-full flex items-center justify-center text-[16px] ${cls}">${ic(done ? "check" : s[1])}</span>
+      <span class="mt-1.5 text-[10.5px] sm:text-[11.5px] font-semibold leading-tight ${i <= step ? "text-slate-800" : "text-slate-400"}">${esc(label)}</span></li>`;
+  }).join("")}</ol>`;
+
+  const summaryBar = req > 0 ? `<div class="mt-4 pt-3 border-t border-slate-100 space-y-2">
+    <div class="flex flex-wrap items-center justify-between gap-2">${badge || `<span class="text-[12px] font-semibold text-slate-600">${esc(STAGES[step][0])}</span>`}<span class="text-[12px] text-slate-500 num">نسبة الاستلام: <b class="text-slate-800">${pct}%</b></span></div>
+    <div class="h-2 w-full rounded-full bg-slate-100 overflow-hidden"><div class="h-full rounded-full transition-all duration-500 ${fullDone ? "bg-emerald-500" : partialDeliv ? "bg-amber-400" : "bg-brand-500"}" style="width:${pct}%"></div></div>
+    <div class="flex flex-wrap items-center gap-2 text-[11.5px]">
+      <span class="pill pill-gray num">المطلوب: ${fmt(req)}</span>
+      <span class="pill ${deliv ? "pill-green" : "pill-gray"} num">المستلم: ${fmt(deliv)}</span>
+      ${ready > 0 ? `<span class="pill pill-brand num">جاهز للاستلام الآن: ${fmt(ready)}</span>` : ""}
+      ${remUnalloc > 0 ? `<span class="pill pill-amber num">متبقٍ للترحيل: ${fmt(remUnalloc)}</span>` : remTotal > 0 && !ready ? `<span class="pill pill-amber num">متبقٍ: ${fmt(remTotal)}</span>` : ""}
+    </div>
+  </div>` : (badge ? `<div class="mt-3 pt-2.5 border-t border-slate-100">${badge}</div>` : "");
+
+  return `${stepsHtml}${summaryBar}`;
 }
 // الاسم الثلاثي مع الأسماء المركبة (عبد الرحمن، أبو بكر، محمد علي...)
 const fullName3 = nm => { const w = String(nm || "").trim().split(/\s+/), out = [];
@@ -214,7 +264,7 @@ Router.add("/e/home", view => {
   ${kidsHomeCard()}
   ${countdownHTML(nextMilestone(ph))}
   ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>
-    <div class="flex items-center gap-3"><div class="hidden sm:block w-28 shrink-0">${Art[["books", "calendar", "truck", "box", "party"][Math.max(0, step)]]("w-full h-auto")}</div><div class="flex-1 min-w-0">${tracker(step)}</div></div></section>` : ""}
+    <div class="flex items-center gap-3"><div class="hidden sm:block w-28 shrink-0">${Art[["books", "calendar", "truck", "box", "party"][deliv >= reqQty && reqQty ? 4 : (ready || deliv) ? 3 : Math.max(0, step)]]("w-full h-auto")}</div><div class="flex-1 min-w-0">${tracker(items)}</div></div></section>` : ""}
   ${next ? `<section class="card card-pad mt-4 lg:mt-6">
       <div class="flex items-center justify-between"><h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2><a href="#/e/pay" class="text-[12.5px] font-semibold text-brand-700">كل الأقساط ←</a></div>
       <div class="mt-3 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4 flex flex-wrap items-end justify-between gap-2">
@@ -932,13 +982,13 @@ Router.add("/e/orders", view => {
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   view.innerHTML = `
   ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), (items.length ? `<button class="btn btn-outline btn-sm" data-act="printRes">${ic("download")} طلب الحجز</button>` : "") + (inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} الفاتورة</button>` : ""))}
-  ${items.length ? `<section class="card card-pad mb-4">${tracker(Math.min(...Emp.activeItems().map(i => itemStage(i).step).filter(x => x >= 0).concat([4])))}</section>` : ""}
+  ${items.length ? `<section class="card card-pad mb-4">${tracker(items)}</section>` : ""}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-[1fr_360px] items-start">
     <div class="space-y-3">
       ${items.length ? resGroups(items.map(i => ({ item: i, ben: i.Beneficiary || "", grade: (bm[i.Book_ID] || {}).Grade, qty: n(i.Requested_Qty), price: i.Unit_Emp_Price, cover: (bm[i.Book_ID] || {}).Cover_Price }))).map(g => `
       <div class="flex items-center gap-2.5 pt-2 first:pt-0"><span class="text-[24px] leading-none">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 text-[15.5px] truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div><div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
       ${g.lines.map(l => { const i = l.item;
-        const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty), b = bm[i.Book_ID] || {}, [c1, c2] = toneOf(b.Subject);
+        const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty), rem = Math.max(0, req - dl), b = bm[i.Book_ID] || {}, [c1, c2] = toneOf(b.Subject);
         return `<article class="card p-4">
           <div class="flex items-start gap-3">
             <div class="w-11 h-14 rounded-lg shrink-0 flex items-center justify-center text-white text-lg" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>
@@ -946,7 +996,7 @@ Router.add("/e/orders", view => {
               <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للكتاب</div>
               <div class="text-[11.5px] text-slate-400 mt-0.5 flex items-center gap-1">${ic("clock")} أسبقية <span dir="ltr" class="num">${esc(i.Priority_Timestamp)}</span></div></div>
           </div>
-          <div class="grid grid-cols-3 gap-2 mt-3.5 text-center">${[["حجزت", req, "text-slate-800"], ["جاهز للتسليم", Math.max(0, al - dl), "text-brand-700"], ["استلمت", dl, "text-emerald-600"]].map(x => `<div class="rounded-xl bg-slate-50 py-2"><div class="text-[11px] text-slate-500">${x[0]}</div><div class="font-bold num ${x[2]}">${x[1]}</div></div>`).join("")}</div>
+          <div class="grid grid-cols-4 gap-2 mt-3.5 text-center">${[["حجزت", req, "text-slate-800"], ["جاهز للتسليم", Math.max(0, al - dl), "text-brand-700"], ["استلمت", dl, "text-emerald-600"], ["متبقٍ", rem, rem ? "text-amber-600" : "text-emerald-600"]].map(x => `<div class="rounded-xl bg-slate-50 py-2"><div class="text-[11px] text-slate-500">${x[0]}</div><div class="font-bold num ${x[2]}">${x[1]}</div></div>`).join("")}</div>
           ${n(i.Returned_Qty) ? `<div class="text-[11.5px] text-slate-500 mt-1.5">رجّعت ${fmt(i.Returned_Qty)}</div>` : ""}
           ${b.Book_Status === "Not_Yet_Printed" && al < req ? `<div class="mt-2.5 text-[12px] text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("clock", "mt-0.5 shrink-0")}<span>لم يُطبع من الناشر بعد — سيُخصَّص ويُسَلَّم فور وصوله من المكتبة</span></div>` : ""}
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
