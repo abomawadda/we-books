@@ -203,3 +203,39 @@ on("discardDraft", async () => {
   Router.go("/e/home"); Shell.rerender();
   toast(had ? "رجعنا حجزك زي ما كان 👌" : "اتلغى الطلب — ولا يهمك 🌷", "success");
 });
+
+// ---------------------------------------------------------------- نفس الكتاب لنفس الابن في نفس المرحلة: تنبيه لطيف قبل زيادة العدد
+const _cartIncBase = ACTIONS.cartInc;
+on("cartInc", async id => {
+  const key = keyFor(id), [bid, ben] = [bk(key), bn(key)];
+  const saved = Emp.activeItems().filter(i => i.Book_ID === bid && (i.Beneficiary || "") === (ben || "")).reduce((s, i) => s + n(i.Requested_Qty), 0);
+  Emp._dupOk = Emp._dupOk || {};
+  if (saved > 0 && (APP.cart[key] || 0) >= saved && !Emp._dupOk[key]) {
+    const b = Emp.bookMap()[bid] || {};
+    const yes = await UI.confirm({ title: "حجزته قبل كده 👀", message: `«${b.Book_Name || bid}» محجوز${ben ? " لـ " + ben : ""} بالفعل (${booksWord(saved)}). عايز تزوّد نسخة كمان؟`, ok: "أيوه، زوّد نسخة", cancel: "لا، كفاية كده" });
+    if (!yes) return;
+    Emp._dupOk[key] = true;
+  }
+  return _cartIncBase(id);
+});
+
+// ---------------------------------------------------------------- طلب مرتجع بعد الاستلام (خلال المدة) — يعتمده المسؤول
+function retReq(i) { try { return JSON.parse(i.Return_Request || "null"); } catch (_) { return null; } }
+function retLine(i) {
+  const can = n(i.Delivered_Qty) - n(i.Returned_Qty), r = retReq(i);
+  if (r && r.status === "Pending") return `<div class="mt-2.5 text-[12px] rounded-lg bg-amber-50 text-amber-800 px-2.5 py-1.5">${ic("hourglass")} طلب مرتجع ${booksWord(r.qty)} عند المسؤول</div>`;
+  const tail = r && r.status === "Approved" ? `<div class="mt-2.5 text-[12px] rounded-lg bg-emerald-50 text-emerald-800 px-2.5 py-1.5">${ic("circle-check")} اتقبل المرتجع واتخصم من فاتورتك</div>` : r && r.status === "Rejected" ? `<div class="mt-2.5 text-[12px] rounded-lg bg-slate-50 text-slate-600 px-2.5 py-1.5">${ic("info")} طلب المرتجع ما اتقبلش${r.note ? ": " + esc(r.note) : ""}</div>` : "";
+  if (can <= 0) return tail;
+  return tail + `<button class="mt-2.5 text-[12.5px] text-brand-700 font-semibold" data-act="retReq" data-id="${esc(i.Res_Item_ID)}">${ic("undo-2")} طلب مرتجع</button>`;
+}
+on("retReq", async id => {
+  const it = Emp.phaseItems().find(x => x.Res_Item_ID === id); if (!it) return;
+  const can = n(it.Delivered_Qty) - n(it.Returned_Qty), b = Emp.bookMap()[it.Book_ID] || {}, win = n((APP.emp.settings || {}).EMP_RETURN_WINDOW_DAYS) || 7;
+  const v = await UI.form({ title: "طلب مرتجع", sub: b.Book_Name, intro: `المرتجع متاح خلال ${win} أيام من الاستلام، والكتاب لازم يكون سليم. بعد موافقة المسؤول بيتخصم تمنه من فاتورتك (ولو كنت دافع، يرجعلك رصيد).`,
+    fields: [{ name: "qty", label: "العدد", type: "number", value: 1, min: 1, max: can }, { name: "condition", label: "حالة الكتاب", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "فيه عيب"]] }, { name: "reason", label: "السبب", placeholder: "مثال: الكتاب مكرر / غلط في الصف" }],
+    ok: "إرسال الطلب", icon: "undo-2" });
+  if (!v) return;
+  const r = await call("EMP_RETURN_REQUEST", { resItemId: id, qty: n(v.qty), condition: v.condition, reason: v.reason }, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  await reloadData(); happyDialog("📦", "طلب المرتجع وصل", "هات الكتاب للمسؤول، وبعد المراجعة هيتخصم من فاتورتك تلقائياً 👌");
+});
