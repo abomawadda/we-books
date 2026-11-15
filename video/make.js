@@ -74,16 +74,17 @@ background:radial-gradient(circle at 30% 20%,#7c3aed,#3b0764 60%,#1e0b3a);transi
   const wait = ms => p.waitForTimeout(SHOTS ? Math.min(ms, 1500) : ms);
   const shot = async n => { if (SHOTS) await p.screenshot({ path: path.join(OUT, String(++shotN).padStart(2, '0') + '-' + n + '.png') }); };
   const inject = () => p.evaluate(css => { if (!document.getElementById('vcss')) { const s = document.createElement('style'); s.id = 'vcss'; s.textContent = css; document.head.appendChild(s); } }, CAP_CSS);
-  const cap = async (n, t, s) => { await inject(); await p.evaluate(([n, t, s]) => { let e = document.getElementById('vcap'); if (!e) { e = document.createElement('div'); e.id = 'vcap'; document.body.appendChild(e); }
+  const T0 = Date.now(); const lg = m => console.log('@' + ((Date.now() - T0) / 1000 - 1.2).toFixed(1), m);
+  const cap = async (n, t, s) => { lg('CAP ' + n + ' ' + t + ' | ' + (s || '')); await inject(); await p.evaluate(([n, t, s]) => { let e = document.getElementById('vcap'); if (!e) { e = document.createElement('div'); e.id = 'vcap'; document.body.appendChild(e); }
     e.style.opacity = 0; e.style.transform = 'translateY(10px)'; setTimeout(() => { e.innerHTML = `<div class="b"><div class="t">${n ? `<span class="n">${n}</span>` : ''}${t}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`; e.style.opacity = 1; e.style.transform = 'none'; }, 180); }, [n, t, s || '']); await wait(400); };
   const capOff = () => p.evaluate(() => { const e = document.getElementById('vcap'); if (e) e.style.opacity = 0; });
-  const title = async (html, ms) => { await inject(); await p.evaluate(h => { let e = document.getElementById('vtitle'); if (!e) { e = document.createElement('div'); e.id = 'vtitle'; document.body.appendChild(e); } e.innerHTML = h; e.style.opacity = 1; }, html); await wait(ms); await p.evaluate(() => { const e = document.getElementById('vtitle'); if (e) { e.style.opacity = 0; setTimeout(() => e.remove(), 600); } }); await wait(500); };
+  const title = async (html, ms) => { lg('TITLE ' + html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')); await inject(); await p.evaluate(h => { let e = document.getElementById('vtitle'); if (!e) { e = document.createElement('div'); e.id = 'vtitle'; document.body.appendChild(e); } e.innerHTML = h; e.style.opacity = 1; }, html); await wait(ms); await p.evaluate(() => { const e = document.getElementById('vtitle'); if (e) { e.style.opacity = 0; setTimeout(() => e.remove(), 600); } }); await wait(500); };
   const tap = async sel => {
     const el = typeof sel === 'string' ? await p.$(sel) : sel; if (!el) { console.log('MISSING', sel); return false; }
     await el.scrollIntoViewIfNeeded(); await wait(250);
     const bb = await el.boundingBox();
     if (bb) await p.evaluate(([x, y]) => { let t = document.getElementById('vtap'); if (!t) { t = document.createElement('div'); t.id = 'vtap'; document.body.appendChild(t); } t.style.left = x + 'px'; t.style.top = y + 'px'; t.style.transition = 'none'; t.style.transform = 'scale(.3)'; t.style.opacity = 1; requestAnimationFrame(() => { t.style.transition = 'transform .35s, opacity .45s'; t.style.transform = 'scale(1.3)'; t.style.opacity = 0; }); }, [bb.x + bb.width / 2, bb.y + bb.height / 2]);
-    await wait(220); await el.click({ force: true }); return true;
+    await wait(220); lg('TAP ' + (await el.innerText().catch(() => '')).replace(/\s+/g, ' ').slice(0, 40)); await el.click({ force: true }); return true;
   };
   const type = async (sel, v) => { await tap(sel); for (const ch of v) { await p.type(sel, ch); await wait(70); } };
   const scroll = async (y, ms = 900) => { await p.evaluate(([y, ms]) => new Promise(res => { const s = scrollY, t0 = performance.now(); const f = t => { const k = Math.min(1, (t - t0) / ms), e = k < .5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2; scrollTo(0, s + (y - s) * e); k < 1 ? requestAnimationFrame(f) : res(); }; requestAnimationFrame(f); }), [y, ms]); await wait(200); };
@@ -140,5 +141,5 @@ background:radial-gradient(circle at 30% 20%,#7c3aed,#3b0764 60%,#1e0b3a);transi
   await wait(2000); await scroll(500, 2400); await wait(1200);
   await capOff();
   await title(`<div><img src="img/logo-we.png"><img src="img/logo-union.png"></div><h1>الحجز مفتوح دلوقتي</h1><p>ادخل من موبايلك على<br><b class="g" dir="ltr" style="font-size:19px">we-books-rose.vercel.app</b></p><p style="margin-top:14px">أي استفسار؟ «مش قادر تدخل؟» في صفحة الدخول<br>أو كلّم مسؤول المبادرة</p><div class="pill">احجز بدري — الأسبقية بالدقيقة ⏱</div>`, 5500);
-  await c.close(); await b.close();
+  lg('END'); await c.close(); await b.close();
 })();
