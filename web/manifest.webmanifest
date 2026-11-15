@@ -1,7 +1,7 @@
 {
   "name": "منصة حجز الكتب المخفضة - النقابة العامة بالدقهلية",
   "short_name": "حجز الكتب",
-  "description": "احجز كتب أبنائك الخارجية بخصم العاملين وتقسيط مريح",
+  "description": "كتب ولادك أقرب… وقسطها أخف — احجز كتب أبنائك الخارجية بخصم العاملين وتقسيط مريح",
   "lang": "ar",
   "dir": "rtl",
   "start_url": "./",
@@ -11,8 +11,23 @@
   "background_color": "#1a0b2e",
   "theme_color": "#2a1347",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/app-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/app-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
