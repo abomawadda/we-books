@@ -132,6 +132,32 @@ const fullName3 = nm => { const w = String(nm || "").trim().split(/\s+/), out = 
   return out.join(" "); };
 const booksWord = c => c === 1 ? "كتاب واحد" : c === 2 ? "كتابان" : c >= 3 && c <= 10 ? c + " كتب" : c + " كتاباً";
 
+/** مسميات واضحة ومرنة لحالة المرحلة الحالية وتنويه ترحيل الكتب المتبقية */
+function phaseStatusInfo(ph) {
+  if (!ph) return { title: "لا توجد مرحلة حجز نشطة حالياً", sub: "تابع إشعارات الإدارة لمعرفة موعد فتح الحجز القادم.", icon: "calendar", tone: "slate" };
+  const st = ph.Effective_Status || ph.Phase_Status;
+  const nm = ph.Phase_Name ? `«${ph.Phase_Name}»` : "الحالية";
+  const map = {
+    Open: { title: `الحجز مفتوح الآن — ${nm}`, sub: "يمكنك حجز الكتب وتعديل طلبك حتى إغلاق باب الحجز.", icon: "sparkles", tone: "emerald" },
+    Scheduled: { title: `الحجز للمرحلة ${nm} لم يبدأ بعد`, sub: "يمكنك تصفح الكتب وتجهيز قائمة أبنائك الآن، وسيُفتح الحجز فور بدء الموعد المحدد.", icon: "clock", tone: "sky" },
+    Closed: { title: `تم إغلاق باب الحجز للمرحلة ${nm}`, sub: "جارٍ مراجعة وتجميع الطلبات تمهيداً لإرسال أمر التوريد للمكتبات.", icon: "lock", tone: "amber" },
+    Ordered: { title: `الحجز متوقف مؤقتاً — جاري توريد المرحلة ${nm}`, sub: "تم إرسال طلبات الحجز للمكتبات، وبانتظار وصول الشحنات لبدء التوزيع.", icon: "truck", tone: "amber" },
+    Receiving: { title: `الحجز متوقف مؤقتاً — جاري استلام وجرد المرحلة ${nm}`, sub: "وصلت الشحنات وجارٍ فرز الكتب وتخصيصها للحاجزين تمهيداً للتسليم.", icon: "boxes", tone: "amber" },
+    Delivering: { title: `الحجز متوقف الآن لحين الانتهاء من تسليم المرحلة ${nm}`, sub: "تتم حالياً عمليات التسليم والتحصيل للطلبات المسجلة، وسيُتاح الحجز للمرحلة القادمة فور الانتهاء.", icon: "package-check", tone: "amber" },
+    Completed: { title: `اكتملت المرحلة ${nm}`, sub: "تم الانتهاء من هذه المرحلة بالكامل. تابع إشعارات الإدارة لمعرفة موعد المرحلة القادمة.", icon: "circle-check", tone: "slate" }
+  };
+  return map[st] || { title: `الحجز متوقف مؤقتاً في المرحلة ${nm}`, sub: "يمكنك تصفح الكتب الآن، وسيتاح الحجز والتعديل فور فتح المرحلة.", icon: "lock", tone: "amber" };
+}
+function carryNotice(ph) {
+  if (!ph || ph.Booking_Open) return null;
+  const st = ph.Effective_Status || ph.Phase_Status;
+  const carried = Emp.phaseItems().filter(i => i.Allocation_Status === "Carried_Forward").reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
+  const pending = ["Receiving", "Delivering", "Completed"].includes(st) ? Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0) : 0;
+  if (pending > 0) return { qty: pending, text: `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد، وسيتم ترحيلها تلقائياً للمرحلة القادمة بأولوية الحجز.` };
+  if (carried > 0) return { qty: carried, text: `تنويه: تم ترحيل ${booksWord(carried)} المتبقية لك إلى المرحلة القادمة تلقائياً.` };
+  return null;
+}
+
 Router.add("/e/home", view => {
   const r = APP.emp, u = APP.user, ph = r.activePhase;
   const name = fullName3(u.fullName);
@@ -146,13 +172,14 @@ Router.add("/e/home", view => {
   const hi = new Date().getHours() < 12 ? "صباح الخير" : "مساء الخير";
 
   // رسالة واحدة واضحة حسب موقفك الآن
+  const psi = phaseStatusInfo(ph), carry = carryNotice(ph);
   let msg;
   if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
   else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ — ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
-  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم`, cta: "رمز الاستلام", href: "", act: "myQr" };
+  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم` + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
   else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
-  else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
-  else msg = { icon: "lock", title: "الحجز مقفول حالياً", sub: "ما حجزتش في المرحلة دي — استنى المرحلة الجاية", cta: "", href: "" };
+  else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: carry ? carry.text : "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
+  else msg = { icon: psi.icon, title: psi.title, sub: carry ? carry.text : psi.sub, cta: "", href: "" };
 
   const anns = (r.announcements || []).slice(0, 4);
   view.innerHTML = `
@@ -626,7 +653,7 @@ Router.add("/e/books", view => {
   view.innerHTML = `
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
     <div>
-      ${!Emp.open() ? `<div class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 p-4 mb-4 flex gap-3 text-sm">${ic("lock", "text-lg mt-0.5")}<div><b>الحجز ${esc(ar(r.activePhase.Effective_Status))}</b> — يمكنك تصفح الكتب، والتعديل متاح فقط أثناء فترة الحجز.</div></div>` : ""}
+      ${!Emp.open() ? (() => { const psi = phaseStatusInfo(r.activePhase), carry = carryNotice(r.activePhase); const cls = psi.tone === "sky" ? "bg-sky-50 ring-sky-200 text-sky-950" : psi.tone === "slate" ? "bg-slate-100 ring-slate-200 text-slate-800" : "bg-amber-50 ring-amber-200 text-amber-950"; const icCls = psi.tone === "sky" ? "text-sky-600" : psi.tone === "slate" ? "text-slate-600" : "text-amber-600"; return `<div class="rounded-2xl ${cls} ring-1 p-4 mb-4 space-y-2.5 text-sm"><div class="flex items-start gap-3">${ic(psi.icon, "text-lg mt-0.5 shrink-0 " + icCls)}<div class="flex-1 min-w-0"><b class="block text-[14.5px] leading-snug">${esc(psi.title)}</b><div class="text-[12.5px] opacity-85 mt-0.5 leading-relaxed">${esc(psi.sub)}</div></div></div>${carry ? `<div class="rounded-xl bg-white/80 ring-1 ring-black/5 px-3 py-2 text-[12.5px] flex flex-wrap items-center justify-between gap-2"><span class="flex items-center gap-2 font-semibold">${ic("arrow-left-right", "shrink-0 " + icCls)}<span>${esc(carry.text)}</span></span><a href="#/e/orders" class="font-bold underline shrink-0">عرض حجوزاتي ←</a></div>` : ""}</div>`; })() : ""}
       ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900">اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
       ${f.grade ? `<div class="rounded-3xl p-4 mb-3 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
         <span class="absolute -left-6 -top-8 w-32 h-32 rounded-full bg-white/5"></span>
