@@ -842,19 +842,28 @@ on("repeatAdd", v => { const x = repeatSuggestions().find(s => s.ix === +v); if 
   toast(`اتضاف ${x.picks.length} ${x.picks.length > 2 ? "كتب" : "كتاب"} لـ ${kidName(x.k, x.ix)} 🎉 — راجع السلة وأكّد`, "success"); refreshCartViews(); Router.render(); });
 ["/e/home", "/e/books"].forEach(p => _wrap(p, view => afterHead(view, repeatCard())));
 
-// ================================================================ ميزانية الأسرة: حد اختياري يحدده الموظف وتنبيه في السلة
-const BUDGET_KEY = () => "wb_budget_" + ((APP.user && APP.user.empId) || "");
-const budgetGet = () => { try { return n(localStorage.getItem(BUDGET_KEY())); } catch (_) { return 0; } };
+// ================================================================ ميزانيتان اختياريتان: للأسرة (ولادك) وللأقارب — تنبيه لكل واحدة في السلة
+const BUDGET_KEY = g => "wb_budget_" + (g === "rel" ? "rel_" : "") + ((APP.user && APP.user.empId) || "");
+const budgetGet = g => { try { return n(localStorage.getItem(BUDGET_KEY(g))); } catch (_) { return 0; } };
+/** صافي السلة لكل مجموعة: fam = كتب ولادك، rel = كتب الأقارب */
+const budgetSpent = () => { const bm = Emp.bookMap(), o = { fam: 0, rel: 0 }; Object.keys(APP.cart || {}).forEach(k => { o[bn(k) ? "rel" : "fam"] += n(APP.cart[k]) * n((bm[bk(k)] || {}).Emp_Selling_Price); }); return o; };
 on("setBudget", async () => {
-  const v = await UI.form({ title: "ميزانية الكتب", intro: "حط أقصى مبلغ عايز تصرفه على الكتب المرحلة دي — هننبهك لو السلة عدّته. (محفوظة على موبايلك بس، وتقدر تمسحها بإنك تسيبها فاضية)", fields: [{ name: "b", label: "الميزانية (ج.م)", type: "number", value: budgetGet() || "", min: 0 }], ok: "حفظ" });
-  if (!v) return; try { n(v.b) > 0 ? localStorage.setItem(BUDGET_KEY(), String(n(v.b))) : localStorage.removeItem(BUDGET_KEY()); } catch (_) {}
-  toast(n(v.b) > 0 ? "اتحفظت الميزانية 👌" : "اتشالت الميزانية", "success"); refreshCartViews();
+  const hasRel = relOn();
+  const v = await UI.form({ title: "ميزانية الكتب", intro: "حط أقصى مبلغ عايز تصرفه المرحلة دي — هننبهك لو السلة عدّته. محفوظة على موبايلك بس، وسيب الخانة فاضية عشان تشيلها.",
+    fields: [{ name: "fam", label: "ميزانية الأسرة — ولادك (ج.م)", type: "number", value: budgetGet("fam") || "", min: 0 }].concat(hasRel ? [{ name: "rel", label: "ميزانية الأقارب (ج.م)", type: "number", value: budgetGet("rel") || "", min: 0 }] : []), ok: "حفظ" });
+  if (!v) return;
+  ["fam", "rel"].forEach(g => { if (g === "rel" && !hasRel) return; try { n(v[g]) > 0 ? localStorage.setItem(BUDGET_KEY(g), String(n(v[g]))) : localStorage.removeItem(BUDGET_KEY(g)); } catch (_) {} });
+  toast(n(v.fam) > 0 || n(v.rel) > 0 ? "اتحفظت الميزانية 👌" : "اتشالت الميزانية", "success"); refreshCartViews();
 });
+function budgetBar(g, label, emoji, spent) {
+  const bud = budgetGet(g); if (!bud) return "";
+  const pct = Math.min(100, Math.round(spent / bud * 100)), over = spent > bud;
+  return `<div class="rounded-2xl ${over ? "bg-rose-50 ring-rose-200" : "bg-emerald-50 ring-emerald-100"} ring-1 p-3 mb-2"><div class="flex items-center justify-between gap-2 text-[12.5px]"><span class="${over ? "text-rose-800" : "text-emerald-800"} font-semibold">${emoji} ${label}: ${over ? `عديتها بـ <b class="num">${fmt(spent - bud)}</b> ج.م` : `فاضل <b class="num">${fmt(bud - spent)}</b> ج.م`}</span><button class="text-brand-700 font-semibold shrink-0" data-act="setBudget">تعديل</button></div>
+    <div class="mt-2 h-2 rounded-full bg-white overflow-hidden"><div class="h-full rounded-full ${over ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-emerald-500"}" style="width:${pct}%"></div></div><div class="text-[11px] text-slate-500 mt-1 num">${fmt(spent)} من ${fmt(bud)} ج.م</div></div>`;
+}
 if (typeof cartHTML === "function") { const _cartHTML2 = cartHTML; cartHTML = function () {
   const html = _cartHTML2(); if (cartPostDelivery() || Emp._noList || !Emp.open()) return html;
-  const bud = budgetGet(), t = Emp.totals();
-  if (!bud) return html + `<button class="w-full text-center text-[12.5px] text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} حدد ميزانية للكتب</button>`;
-  const pct = Math.min(100, Math.round(t.net / bud * 100)), over = t.net > bud;
-  return `<div class="rounded-2xl ${over ? "bg-rose-50 ring-rose-200" : "bg-emerald-50 ring-emerald-100"} ring-1 p-3 mb-3"><div class="flex items-center justify-between text-[12.5px]"><span class="${over ? "text-rose-800" : "text-emerald-800"} font-semibold">${ic("piggy-bank", "inline -mt-0.5")} ${over ? `عديت ميزانيتك بـ <b class="num">${fmt(t.net - bud)}</b> ج.م` : `فاضل من ميزانيتك <b class="num">${fmt(bud - t.net)}</b> ج.م`}</span><button class="text-brand-700 font-semibold" data-act="setBudget">تعديل</button></div>
-    <div class="mt-2 h-2 rounded-full bg-white overflow-hidden"><div class="h-full rounded-full ${over ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-emerald-500"}" style="width:${pct}%"></div></div><div class="text-[11px] text-slate-500 mt-1 num">${fmt(t.net)} من ${fmt(bud)} ج.م</div></div>` + html;
+  const sp = budgetSpent(), bars = budgetBar("fam", "ميزانية الأسرة", "👨‍👩‍👧", sp.fam) + budgetBar("rel", "ميزانية الأقارب", "🧒", sp.rel);
+  const missing = !budgetGet("fam") || (relOn() && !budgetGet("rel"));
+  return (bars ? `<div class="mb-1">${bars}</div>` : "") + html + (missing ? `<button class="w-full text-center text-[12.5px] text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} ${bars ? "حدد الميزانية التانية" : "حدد ميزانية للأسرة" + (relOn() ? " وللأقارب" : "")}</button>` : "");
 }; }
