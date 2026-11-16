@@ -729,10 +729,10 @@ function bagHTML() {
   <div class="space-y-3">${BAG.rows.map((r, i) => { const [c1] = toneOf(r.s); return `<section class="rounded-2xl ring-1 ring-slate-200 bg-slate-50/60 p-3">
     <div class="flex items-center gap-2 mb-2"><span class="w-1.5 h-6 rounded-full" style="background:${c1}"></span><b class="text-[15px] text-slate-900 flex-1">${esc(r.s)}</b><span class="text-[11.5px] ${r.on ? "font-bold text-emerald-700" : "text-slate-400"}">${r.on ? "✓ تم الاختيار" : r.opts.length + (r.opts.length > 2 ? " كتب" : r.opts.length === 2 ? " كتابين" : " كتاب")}</span></div>
     <div class="grid sm:grid-cols-2 gap-1.5">${r.opts.map(o => opt(r, i, o)).join("")}</div>
-    ${r.on ? `<div class="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-white ring-1 ring-brand-100 px-3 py-2"><span class="text-[12.5px] font-semibold text-slate-700">${ic("copy", "inline -mt-0.5 text-brand-600")} عدد النسخ</span>
-      <span class="flex items-center gap-1.5"><button type="button" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|-1" aria-label="أقل" ${(r.qty || 1) <= 1 ? "disabled" : ""}>−</button>
-        <b class="w-8 text-center num text-[16px] text-brand-800">${r.qty || 1}</b>
-        <button type="button" class="w-9 h-9 rounded-xl bg-brand-600 text-white text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|1" aria-label="أكثر" ${(r.qty || 1) >= 10 ? "disabled" : ""}>+</button></span></div>` : ""}</section>`; }).join("")}</div>
+    ${r.on ? `<div class="mt-2.5 flex items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-white shadow-soft" style="background:linear-gradient(135deg,#552c83 0%,#7a45b8 55%,#c99a2e 130%)"><span class="flex items-center gap-2 text-[13px] font-bold"><span class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">${ic("copy", "!w-4 !h-4")}</span>عدد النسخ</span>
+      <span class="flex items-center gap-1.5 rounded-xl bg-white/15 ring-1 ring-white/25 p-1"><button type="button" class="w-9 h-9 rounded-lg bg-white/90 text-brand-800 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|-1" aria-label="أقل" ${(r.qty || 1) <= 1 ? "disabled" : ""}>−</button>
+        <b class="w-8 text-center num text-[17px] text-white">${r.qty || 1}</b>
+        <button type="button" class="w-9 h-9 rounded-lg bg-gold-400 text-brand-950 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|1" aria-label="أكثر" ${(r.qty || 1) >= 10 ? "disabled" : ""}>+</button></span></div>` : ""}</section>`; }).join("")}</div>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
     <div class="flex justify-between text-slate-500"><span>${booksWord(copies)} قبل الخصم</span><span class="line-through num">${moneyTxt(cov)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
@@ -831,7 +831,7 @@ function bookModeTabs() {
   const t = (id, e, ttl, sub, act) => `<button type="button" class="min-w-0 text-right rounded-2xl p-3 ring-1 transition active:scale-[.98] ${m === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200"}" data-act="${act}" data-id="${id}" aria-pressed="${m === id}">
     <span class="block text-[24px] leading-none">${e}</span><b class="block text-[13px] mt-1.5 leading-tight">${ttl}</b><span class="block text-[10.5px] mt-0.5 leading-snug ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></button>`;
   return `<section class="mb-4"><div class="text-[12px] font-bold text-slate-500 mb-2">${gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟")}</div>
-    <div class="grid grid-cols-3 gap-2">${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد", "bookMode")}${t("manual", "🔍", "أختار بنفسي", "كتاب بكتاب", "bookMode")}</div></section>`;
+    <div class="grid grid-cols-3 gap-2">${t("manual", "🔍", "أختار بنفسي", "كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد", "bookMode")}</div></section>`;
 }
 on("bookMode", v => { Emp.bookMode = Emp.bookMode === v && v === "series" ? "manual" : v; renderBookGrid(); });
 /** فاصل السلة بعد قائمة الكتب */
