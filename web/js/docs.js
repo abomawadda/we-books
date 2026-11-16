@@ -230,7 +230,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     const by = {}; d.lines.forEach(l => { const k = l.publisher || "أخرى"; (by[k] = by[k] || { pop: 0, q: 0, l: [] }).l.push(l); by[k].pop += n(l.pop); by[k].q += n(l.qty); });
     const pubs = Object.keys(by).sort((a, b) => by[b].pop - by[a].pop || by[b].q - by[a].q || a.localeCompare(b, "ar"));
     // تقسيم دقيق: كل صفحة عمودان (يمين ثم يسار) بسعة ثابتة؛ المجموعة المقسومة تكمل بعنوان «تابع»
-    const CAP1 = 48, CAP = 48; let i = 0;
+    const CAP1 = 46, CAP = 47; let i = 0;
     const cols = [[]]; let left = CAP1, pageCol = 0;
     const newCol = () => { cols.push([]); pageCol++; left = pageCol < 2 ? CAP1 : CAP; };
     pubs.forEach((pb, gi) => { const g = by[pb];
@@ -246,19 +246,27 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
         html += `<tr><td class="c num">${it.n}</td><td class="c num">${esc(l.code)}</td><td>${esc(l.subject || "")}${l.part ? ` (${esc(l.part)})` : ""}</td><td>${esc(l.grade || "")}${l.tracks ? ` - ${esc(l.tracks)}` : ""}</td><td class="c num q">${l.qty}</td></tr>`; });
       return html + (open ? "</tbody></table>" : ""); };
     const css = `<style>
-      .po-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1.5px solid #000;padding-bottom:2mm;margin-bottom:2mm;font-size:1.02em;line-height:1.55}
-      .po-top .r b{font-size:1.15em}.po-top .l{display:grid;grid-template-columns:auto auto;column-gap:3mm}.po-top .l span{color:#444}
+      .po-top{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #3b1d63;padding-bottom:2mm;margin-bottom:2.5mm;font-size:1.02em;line-height:1.55}
+      .po-top .r b{font-size:1.18em;color:#3b1d63}.po-top .l{display:grid;grid-template-columns:auto auto;column-gap:3mm}.po-top .l span{color:#6b5f86}.po-top .l b{color:#3b1d63}
       .po-grid{display:grid;grid-template-columns:1fr 1fr;gap:4mm;align-items:start}.po-grid>div{min-width:0}
-      .pog{width:calc(100% - 1px);box-sizing:border-box;table-layout:fixed;border-collapse:collapse;margin:0 0 2.5mm;border:1.2px solid #000;font-size:.88em}
-      .pog td{border:.8px solid #555;padding:.45mm 1mm;line-height:1.15;vertical-align:middle;background:#fff!important}
-      .pog .pub td{background:#e6e6e6!important;font-weight:800;border-bottom:1.2px solid #000}
-      .pog .ps{float:left;font-weight:600;font-size:.9em}
-      .pog .ch td{font-weight:700;text-align:center;background:#f4f4f4!important}
-      .pog .q{font-weight:800}
-      .po-pg{text-align:center;font-size:.8em;color:#555;margin-top:auto;padding-top:1.5mm}
+      .pog{width:100%;box-sizing:border-box;table-layout:fixed;border-collapse:separate;border-spacing:0;margin:0 0 2.5mm;border:1.2px solid #8b6fc0;border-radius:2.5mm;overflow:hidden;font-size:.88em}
+      .pog td{border-left:.8px solid #d9cdea;border-bottom:.8px solid #d9cdea;padding:.45mm 1mm;line-height:1.15;vertical-align:middle;background:#fff}
+      .pog td:last-child{border-left:0}.pog tr:last-child td{border-bottom:0}
+      .pog tr:nth-child(even) td{background:#faf7fe}
+      .pog .pub td{background:linear-gradient(90deg,#3b1d63,#6a3aa0);color:#fff;font-weight:800;border-left:0}
+      .pog .ps{float:left;font-weight:600;font-size:.9em;opacity:.9}
+      .pog .ch td{font-weight:700;text-align:center;background:#f3edfa;color:#4c1d95}
+      .pog .q{font-weight:800;color:#3b1d63}
+      .po-pg{text-align:center;font-size:.8em;color:#6b5f86;margin-top:auto;padding-top:1.5mm}
+      @media print{
+        .po-top,.po-top .r b,.po-top .l b,.po-top .l span{color:#000!important;border-color:#000!important}
+        .pog{border-color:#000!important}.pog td{border-color:#555!important;background:#fff!important;color:#000!important}
+        .pog .pub td{background:#e6e6e6!important;color:#000!important;border-bottom-color:#000!important}
+        .pog .ch td{background:#f2f2f2!important}
+      }
     </style>`;
     const pairs = []; for (let k = 0; k < cols.length; k += 2) pairs.push([cols[k], cols[k + 1] || []]);
-    const sp = d.supplier || {};
+    const sp = { name: "مكتبة الإيمان بالمنصورة", contact: "محمود العراقي", phone: "01550100025" }; // ثابت بطلب المستخدم (طلب التوريد فقط)
     const top = `<div class="po-top"><div class="r"><b>${esc(sp.name || "")}</b>${sp.contact ? `<div>${esc(sp.contact)}</div>` : ""}${sp.phone ? `<div class="num">${esc(sp.phone)}</div>` : ""}</div>
       <div class="l"><span>رقم الطلبية:</span><b class="num">${esc(d.no)}</b><span>المرحلة:</span><b>${esc(d.phase || "")}</b><span>تاريخ الطلبية:</span><b class="num">${esc(Doc.date(d.date))}</b></div></div>`;
     return pairs.map((pr, pi) => Doc.page(`${css}${top}
