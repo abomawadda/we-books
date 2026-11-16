@@ -303,11 +303,11 @@ const lineAmt = l => n(l.price) ? fmt(l.qty * n(l.price)) : "🚚 مع الشح�
 const pubLogo = (p, sub) => logoFor(APP.emp && APP.emp.pubLogos, p, sub);
 on("coverZoom", id => {
   const b = APP.emp.books.find(x => x.Book_ID === id); if (!b || !b.Cover_URL) return;
-  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open();
+  const q = APP.cart[ck(b.Book_ID, Emp.ben)] || 0, can = Emp.open() && Router.current !== "/e/orders"; // من «حجوزاتي» للعرض فقط
   const m = UI.open(`<img src="${esc(b.Cover_URL)}" alt="" class="w-full max-h-[60vh] object-contain rounded-2xl bg-slate-50">
     <div class="mt-3 flex items-center justify-between gap-3"><div class="min-w-0"><div class="font-bold text-slate-900">${esc(b.Book_Name)}</div><div class="text-[12px] text-slate-500">${esc(gradeTitle(b.Grade))}${b.Book_Part ? " · " + esc(b.Book_Part) : ""}</div></div>
     ${b.Book_Status !== "Pricing" ? `<div class="text-left shrink-0"><div class="text-xl font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)} <span class="text-[11px] text-slate-500">ج.م</span></div><div class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</div></div>` : ""}</div>`,
-    { title: esc(b.Subject) + " — " + esc(b.Publisher), footer: can && !q ? `<button class="btn btn-primary btn-lg w-full" data-zadd>${ic("plus")} أضف للسلة</button>` : q ? `<div class="text-center text-emerald-700 font-semibold">${ic("check")} في السلة (${q})</div>` : "" });
+    { title: esc(b.Subject) + " — " + esc(b.Publisher), footer: can && !q ? `<button class="btn btn-primary btn-lg w-full" data-zadd>${ic("plus")} أضف للسلة</button>` : q && Router.current !== "/e/orders" ? `<div class="text-center text-emerald-700 font-semibold">${ic("check")} في السلة (${q})</div>` : "" });
   const a = m.root.querySelector("[data-zadd]"); if (a) a.onclick = () => { m.close(); setTimeout(() => ACTIONS.cartInc(b.Book_ID), 300); };
 });
 function cartHTML() {
@@ -536,7 +536,7 @@ function kdHTML() {
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; } } };
 function kidsEditor(addRel, opt) { opt = opt || {};
-  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true, _saved: true }));
+  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true, _saved: true, _origGrade: k.grade || "", _origBen: kidBen(k) }));
   KD.list = ks.length ? ks : [kdBlank(addRel)];
   if (addRel && ks.length) KD.list.push(kdBlank(true));
   if (opt.addNew && ks.length) KD.list.push(kdBlank());
@@ -619,6 +619,19 @@ on("kdSave", async () => {
   const noName = kids.findIndex(k => k.rel && !k.name); if (noName >= 0) { KD.i = KD.list.indexOf(KD.list.filter(k => k.grade)[noName]); kdRender(); return toast("اكتب اسم القريب", "warning"); }
   const seen = {}, dup = kids.find(k => { const key = (k.name + "|" + k.rel).trim(); if (k.name && seen[key]) return true; seen[key] = 1; return false; });
   if (dup) return toast(`الاسم «${dup.name}» متكرر — غيّر واحد منهم`, "warning");
+  // تغيير صف فرد مسجّل: كتب صفه القديم في السلة (المرحلة المفتوحة) تتشال — بعد ما نعرّفه
+  const bm0 = Emp.bookMap(), gradeChg = KD.list.filter(k => k._saved && k._origGrade && k.grade && k.grade !== k._origGrade);
+  const dropKeys = [];
+  gradeChg.forEach(k => { const shared = !k.rel && KD.list.some(x => x !== k && !x.rel && x.grade === k._origGrade);
+    if (shared) return;
+    Object.keys(APP.cart || {}).forEach(key => { const b = bm0[bk(key)] || {}; if (b.Grade !== k._origGrade) return;
+      if (k.rel ? bn(key) === k._origBen : !bn(key)) dropKeys.push(key); }); });
+  if (dropKeys.length) {
+    const nm = gradeChg.map(k => (k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك")) + ": " + gradeShort(k._origGrade) + " ← " + gradeShort(k.grade)).join("\n");
+    const cnt = dropKeys.reduce((a, key) => a + n(APP.cart[key]), 0);
+    if (!(await UI.confirm({ title: "تغيير الصف", icon: "graduation-cap", ok: "تمام، غيّر الصف",
+      message: `${nm}\n\nكتب الصف القديم اللي في السلة (${booksWord(cnt)}) هتتشال من حجز المرحلة دي، وتختار${gTxt("", "ي")} كتب الصف الجديد بعدها.\nالمراحل اللي اتقفلت أو اتسلّمت مش هتتأثر.` }))) return;
+  }
   const before = (APP.emp.employee.kids || []).map(k => Object.assign({}, k));
   const r = await call("SAVE_MY_KIDS", { kids }, { block: true });
   if (!r.success) return toast(r.message, "danger");
@@ -627,12 +640,13 @@ on("kdSave", async () => {
   before.filter(o => o.rel).forEach(o => { const oldBen = kidBen(o), nk = kids.find(k => k.rel && k.grade === o.grade && kidBen(k) !== oldBen && !before.some(b => kidBen(b) === kidBen(k)));
     if (!nk) return; Object.keys(APP.cart || {}).filter(key => bn(key) === oldBen).forEach(key => { const nkey = ck(bk(key), kidBen(nk)); APP.cart[nkey] = (APP.cart[nkey] || 0) + APP.cart[key]; delete APP.cart[key]; moved++; }); });
   if (moved) { Emp.dirty = true; Emp.bens = [...new Set(Object.keys(APP.cart).map(bn).filter(Boolean))]; }
+  if (dropKeys.length) { dropKeys.forEach(key => delete APP.cart[key]); Emp.dirty = true; if (Emp.activeItems().length && typeof ACTIONS.submitRes === "function") setTimeout(() => ACTIONS.submitRes(), 500); }
   APP.emp.employee.kids = kids.map(k => Object.assign({ promoted: 0 }, k));
   if (KD.m) KD.m.close(); KD.m = null;
   const lbl = k => (k.name || (k.rel ? "قريب" : k.gender === "g" ? "بنتك" : "ابنك")), key = k => (k.name || "") + "|" + (k.rel || "") + "|" + k.grade;
   const added = kids.filter(k => !before.some(b => key(b) === key(k) || (b.name && b.name === k.name && b.rel === k.rel))), removed = before.filter(b => !kids.some(k => key(b) === key(k) || (b.name && b.name === k.name && b.rel === k.rel)));
   const msg = [added.length ? "اتضاف " + added.map(lbl).join(" و") : "", removed.length ? "اتشال " + removed.map(lbl).join(" و") : ""].filter(Boolean).join(" · ");
-  toast((msg || (kids.length > 1 ? `اتحفظت عيلتك (${kids.length} أفراد)` : "اتحفظ")) + " 🎉" + (moved ? " — ونقلنا كتب القريب لاسمه الجديد، أكّد الحجز عشان يتحدث" : ""), "success");
+  toast((msg || (kids.length > 1 ? `اتحفظت عيلتك (${kids.length} أفراد)` : "اتحفظ")) + " 🎉" + (moved ? " — ونقلنا كتب القريب لاسمه الجديد، أكّد الحجز عشان يتحدث" : "") + (dropKeys.length ? " — واتشالت كتب الصف القديم" : ""), "success");
   const last = KD._addRel ? kids.length - 1 : 0;
   if (Router.current === "/e/wiz") { WZ.sel = null; wzSave(); setTimeout(() => Shell.rerender(), 350); return; }
   setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
