@@ -51,6 +51,7 @@ const Shell = {
   type: null,
 
   renderLogin() {
+    if (/^#\/v\//.test(location.hash)) return;
     Shell.type = null;
     document.title = APP.title;
     const tab = Shell.loginTab || "emp"; // تبدأ دائماً بدخول الموظفين
@@ -319,6 +320,8 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
 
 // ---------------------------------------------------------------- الإقلاع
 window.addEventListener("DOMContentLoaded", async () => {
+  // رابط التحقق من مستند (رمز QR): صفحة عامة مستقلة بلا دخول ولا شاشة بداية
+  if (/^#\/v\//.test(location.hash) && typeof DocVerify !== "undefined") { DocVerify.render(decodeURIComponent(location.hash.slice(4))); return; }
   const s = store.get("session");
   if (s && s.token) {
     APP.token = s.token; APP.user = s.user;

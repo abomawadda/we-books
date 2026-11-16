@@ -558,7 +558,7 @@ function openInstaPay(num) {
 on("openInsta", () => openInstaPay(payS().PAY_INSTAPAY));
 // بطاقة الدفع بإنستاباي: رمز QR نظيف (يُعاد توليده من رابط الدفع) + عنوان الدفع IPA بنسخ سريع + فتح التطبيق + حفظ الرمز كصورة
 const INSTA_DEFAULT = { link: "https://ipn.eg/C/Q/mahmoud.aliraky/instapay?ISIGN=23052601MEQCIBZG2PIdL9Sw+02NldtaUIAkuwpiY81zB8j7m+WLKGHeAiB6eWQDCbq4OTL0M7KUpdeMAhyHVZI0ImBgwbwg61/qjw==", ipa: "mahmoud.aliraky@instapay" };
-const instaInfo = () => { const s = payS(); return { link: s.PAY_INSTAPAY_LINK || INSTA_DEFAULT.link, ipa: s.PAY_INSTAPAY_IPA || INSTA_DEFAULT.ipa, num: s.PAY_INSTAPAY || "", holder: s.CASH_ACCOUNT_HOLDER || "" }; };
+const instaInfo = () => { const s = Object.assign({}, (APP.adm && APP.adm.settingsMap) || {}, payS()); return { link: s.PAY_INSTAPAY_LINK || INSTA_DEFAULT.link, ipa: s.PAY_INSTAPAY_IPA || INSTA_DEFAULT.ipa, num: s.PAY_INSTAPAY || "", holder: s.CASH_ACCOUNT_HOLDER || "" }; };
 async function instaQrSvg(link) {
   try { if (!window.qrcode) await qrLib(); const q = window.qrcode(0, "H"); q.addData(link); q.make();
     const n = q.getModuleCount(), c = 10, pad = 2, sz = (n + pad * 2) * c; let path = "";
