@@ -201,7 +201,9 @@ function phaseStatusInfo(ph) {
 function carryNotice(ph) {
   if (!ph || ph.Booking_Open) return null;
   const st = ph.Effective_Status || ph.Phase_Status;
-  const carried = Emp.phaseItems().filter(i => i.Allocation_Status === "Carried_Forward").reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
+  // المُرحَّل فعلاً = اللي نسخته في المرحلة الجديدة لسه قائمة (لو اتلغت هناك ميتحسبش)
+  const all = APP.emp.myReservationItems || [], live = id => all.some(x => x.Carried_From_Item_ID === id && !String(x.Allocation_Status).startsWith("Cancelled"));
+  const carried = Emp.phaseItems().filter(i => i.Allocation_Status === "Carried_Forward" && (!all.some(x => x.Carried_From_Item_ID === i.Res_Item_ID) || live(i.Res_Item_ID))).reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
   const pending = ["Receiving", "Delivering", "Completed"].includes(st) ? Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0) : 0;
   const chose = Emp.activeItems().filter(i => n(i.Requested_Qty) > n(i.Allocated_Qty)).every(i => i.Waitlist_Choice === "carry");
   if (pending > 0) return { qty: pending, text: chose ? `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — وافقت على ترحيلها للمرحلة القادمة بأولوية الحجز.` : `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — اختار من «حجوزاتي»: ترحيلها للمرحلة القادمة أو إنهاء حجزك على المتاح.` };

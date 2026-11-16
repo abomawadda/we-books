@@ -118,8 +118,10 @@ function phaseSummary(pid) {
   const its = (APP.emp.myReservationItems || []).filter(i => i.Phase_ID === pid && !String(i.Allocation_Status).startsWith("Cancelled"));
   const s = { req: 0, deliv: 0, wait: 0, carried: 0, ready: 0 };
   its.forEach(i => { const rq = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty);
-    s.req += rq; s.deliv += dl; s.ready += Math.max(0, al - dl); s.wait += Math.max(0, rq - Math.max(al, dl));
-    if (i.Allocation_Status === "Carried_Forward" || /رُحِّلت/.test(i.Unallocated_Reason || "")) s.carried += 1; });
+    const carried = i.Allocation_Status === "Carried_Forward" || /رُحِّلت/.test(i.Unallocated_Reason || "");
+    const kids = (APP.emp.myReservationItems || []).filter(x => x.Carried_From_Item_ID === i.Res_Item_ID), dead = kids.length && kids.every(x => String(x.Allocation_Status).startsWith("Cancelled"));
+    s.req += rq; s.deliv += dl; s.ready += Math.max(0, al - dl); if (!carried) s.wait += Math.max(0, rq - Math.max(al, dl)); // المُرحَّل خرج من المرحلة دي
+    if (carried && !dead) s.carried += 1; });
   return s;
 }
 /** بطاقة «مرحلة جديدة»: تظهر في الرئيسية عند فتح مرحلة والموظف له حجز في مرحلة سابقة */
@@ -127,7 +129,7 @@ function newPhaseCard() {
   const r = APP.emp, ph = r.activePhase; if (!ph || !ph.Booking_Open) return "";
   const prev = (r.phases || []).filter(p => p.Phase_ID !== ph.Phase_ID && (r.myReservationItems || []).some(i => i.Phase_ID === p.Phase_ID)).pop();
   if (!prev) return "";
-  const s = phaseSummary(prev.Phase_ID), carriedHere = Emp.phaseItems().filter(i => i.Carried_From_Item_ID).length;
+  const s = phaseSummary(prev.Phase_ID), carriedHere = Emp.activeItems().filter(i => i.Carried_From_Item_ID).reduce((t, i) => t + n(i.Requested_Qty), 0); // الملغي بعد الترحيل لا يُحسب
   const line = [s.deliv ? `استلمت ${booksWord(s.deliv)}` : "", s.ready ? `${booksWord(s.ready)} جاهزة للاستلام` : "", s.wait ? `${booksWord(s.wait)} لسه موصلتش` : ""].filter(Boolean).join(" · ");
   return `<section class="card mb-4 overflow-hidden ring-2 ring-emerald-200"><div class="p-4" style="background:linear-gradient(135deg,#ecfdf5,#f5f3ff)">
     <div class="text-[12px] font-bold text-emerald-700">🎉 مرحلة جديدة مفتوحة للحجز</div>
