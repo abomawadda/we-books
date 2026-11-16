@@ -326,7 +326,12 @@ on("installApp", async () => {
     : `<p class="flex gap-3"><span class="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center shrink-0 font-bold">1</span>افتح قائمة المتصفح (⋮) في Chrome.</p><p class="flex gap-3"><span class="w-7 h-7 rounded-full bg-brand-700 text-white flex items-center justify-center shrink-0 font-bold">2</span>اختر «تثبيت التطبيق» أو «إضافة إلى الشاشة الرئيسية».</p>`}</div>`, { title: "تثبيت كتطبيق" });
 });
 if ("serviceWorker" in navigator && location.protocol === "https:") {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => { /* اختياري */ }));
+  window.addEventListener("load", () => {
+    const hadCtrl = !!navigator.serviceWorker.controller;
+    let reloaded = false;
+    if (hadCtrl) navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => { /* اختياري */ });
+  });
 }
 
 // ---------------------------------------------------------------- الإقلاع

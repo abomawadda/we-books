@@ -733,7 +733,7 @@ Router.add("/e/books", view => {
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
     <div>
       ${!Emp.open() ? (() => { const psi = phaseStatusInfo(r.activePhase), carry = carryNotice(r.activePhase); const cls = psi.tone === "sky" ? "bg-sky-50 ring-sky-200 text-sky-950" : psi.tone === "slate" ? "bg-slate-100 ring-slate-200 text-slate-800" : "bg-amber-50 ring-amber-200 text-amber-950"; const icCls = psi.tone === "sky" ? "text-sky-600" : psi.tone === "slate" ? "text-slate-600" : "text-amber-600"; return `<div class="rounded-2xl ${cls} ring-1 p-4 mb-4 space-y-2.5 text-sm"><div class="flex items-start gap-3">${ic(psi.icon, "text-lg mt-0.5 shrink-0 " + icCls)}<div class="flex-1 min-w-0"><b class="block text-[14.5px] leading-snug">${esc(psi.title)}</b><div class="text-[12.5px] opacity-85 mt-0.5 leading-relaxed">${esc(psi.sub)}</div></div></div>${carry ? `<div class="rounded-xl bg-white/80 ring-1 ring-black/5 px-3 py-2 text-[12.5px] flex flex-wrap items-center justify-between gap-2"><span class="flex items-center gap-2 font-semibold">${ic("arrow-left-right", "shrink-0 " + icCls)}<span>${esc(carry.text)}</span></span><a href="#/e/orders" class="font-bold underline shrink-0">عرض حجوزاتي ←</a></div>` : ""}</div>`; })() : ""}
-      ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900">اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
+      ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-300 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900"><b class="block text-brand-950">أنت تحجز الآن لـ: ${esc(Emp.ben || gradeTitle(Emp.filter.grade))}</b>اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
       ${f.grade ? `<div class="rounded-3xl p-4 mb-3 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
         <span class="absolute -left-6 -top-8 w-32 h-32 rounded-full bg-white/5"></span>
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
@@ -874,10 +874,10 @@ on("submitRes", async () => {
 // ============================================================ معالج الحجز خطوة بخطوة
 // العائلة ← حجز كل فرد (الأشهر / سلسلة / بنفسي) ← المراجعة ← السداد ← الحفظ والمشاركة
 const WZ_KEY = () => "wb_wz_" + (APP.user && APP.user.empId);
-const WZ = { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, guideStep: 0 };
-const wzSave = () => { try { localStorage.setItem(WZ_KEY(), JSON.stringify({ step: WZ.step, i: WZ.i, sel: WZ.sel, temp: WZ.temp, mode: WZ.mode, pub: WZ.pub })); } catch (_) {} };
+const WZ = { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, later: {}, noBooks: {}, done: {}, guideStep: 0, forceGuide: false };
+const wzSave = () => { try { localStorage.setItem(WZ_KEY(), JSON.stringify({ step: WZ.step, i: WZ.i, sel: WZ.sel, temp: WZ.temp, mode: WZ.mode, pub: WZ.pub, later: WZ.later, noBooks: WZ.noBooks, done: WZ.done })); } catch (_) {} };
 const wzLoad = () => { try { const o = JSON.parse(localStorage.getItem(WZ_KEY())); if (o) Object.assign(WZ, o); return !!o; } catch (_) { return false; } };
-const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, guideStep: 0 }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
+const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, later: {}, noBooks: {}, done: {}, guideStep: 0, forceGuide: false }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
 /** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
 function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
 const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
@@ -914,7 +914,7 @@ function wzFamily() {
   const greet = greetings[(firstName.length + ks.length) % greetings.length];
   let guideHidden = false;
   try { guideHidden = !!localStorage.getItem(wzGuideKey()); } catch (_) {}
-  const showGuide = !ks.length && !WZ.temp.length && !guideHidden;
+  const showGuide = (!ks.length && !WZ.temp.length && !guideHidden) || !!WZ.forceGuide;
   const gs = Math.max(0, Math.min(2, WZ.guideStep || 0));
 
   if (showGuide) {
@@ -1029,26 +1029,53 @@ function wzFamily() {
       </div>`;
   }
 
+  const wzMemberLines = m => { const b = kidBen(m); return cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade)); };
+  const ms = wzMembers();
+  const pickCard = (k, i) => {
+    const mIdx = ms.findIndex(x => !x._temp && x._ix === i);
+    const lines = wzMemberLines(k);
+    const status = lines.length ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">في السلة (${lines.length}) ✓</span>`
+      : WZ.later[mIdx] ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200">متأجل لبعدين ⏳</span>`
+      : WZ.noBooks[mIdx] ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">مش محتاج كتب</span>`
+      : `<span class="text-[11px] font-semibold text-brand-600">جاهز للحجز</span>`;
+    return `<div class="rounded-2xl p-3 ring-2 ${sel.includes(i) ? "ring-brand-300 bg-white" : "ring-slate-200 bg-slate-50/70 opacity-75"} shadow-xs flex flex-col gap-2.5">
+      <div class="flex items-center gap-2.5">
+        <span class="w-10 h-10 rounded-xl ${k.rel ? "bg-sky-50" : "bg-gold-50"} flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span>
+        <div class="flex-1 min-w-0">
+          <b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b>
+          <span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span>
+        </div>
+        <button type="button" data-act="wzSel" data-id="${i}" aria-label="تضمين في الحجز" class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel.includes(i) ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${sel.includes(i) ? ic("check") : ""}</button>
+      </div>
+      <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
+        ${status}
+        ${sel.includes(i) && mIdx >= 0 ? `<button type="button" data-act="wzStartOne" data-id="${mIdx}" class="btn btn-primary btn-sm !py-1.5 !px-3 text-[12px]">${lines.length ? "تعديل الكتب" : "ابدأ بـ " + esc(kidName(k, i).split(/\s+/)[0])} ←</button>` : ""}
+      </div>
+    </div>`;
+  };
+
   return `
     <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
       <div class="flex items-start gap-3">
         <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
         <div class="flex-1 min-w-0">
           <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
-          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${fem ? "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلك الكتب في ثواني." : "اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني."}</p>
+          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${ks.length ? (fem ? "اختاري تحبي تبدأي بحجز مين الأول، أو أضيفي فرد جديد." : "اختر تحب تبدأ بحجز مين الأول، أو أضف فرد جديد.") : (fem ? "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلك الكتب في ثواني." : "اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني.")}</p>
+          <button type="button" data-act="wzShowGuide" class="mt-2 inline-flex items-center gap-1 text-[11.5px] font-bold text-brand-700 hover:underline">📖 إزاي أحجز؟ (دليل سريع)</button>
         </div>
       </div>
     </div>
 
-    ${kids.length ? `<div class="text-[12.5px] font-bold text-brand-700 mb-2">أبنائي</div><div class="grid grid-cols-2 gap-2 mb-4">${kids.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
-    ${rels.length ? `<div class="text-[12.5px] font-bold text-sky-700 mb-2">أقاربي</div><div class="grid grid-cols-2 gap-2 mb-4">${rels.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
-    ${WZ.temp.length ? `<div class="text-[12.5px] font-bold text-slate-600 mb-2">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => `<span class="chip">${esc(gradeTitle(t.grade))}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`).join("")}</div>` : ""}
+    ${ks.length || WZ.temp.length ? `<div class="flex items-center justify-between mb-2"><span class="text-[13.5px] font-bold text-slate-800">${fem ? "تحبي نبدأ بحجز مين الأول؟" : "تحب نبدأ بحجز مين الأول؟"}</span><span class="text-[11.5px] text-slate-500">اضغط على أي فرد للبدء</span></div>` : ""}
+    ${kids.length ? `<div class="text-[12px] font-bold text-brand-700 mb-1.5">أبنائي</div><div class="grid sm:grid-cols-2 gap-2.5 mb-4">${kids.map(([k, i]) => pickCard(k, i)).join("")}</div>` : ""}
+    ${rels.length ? `<div class="text-[12px] font-bold text-sky-700 mb-1.5">أقاربي</div><div class="grid sm:grid-cols-2 gap-2.5 mb-4">${rels.map(([k, i]) => pickCard(k, i)).join("")}</div>` : ""}
+    ${WZ.temp.length ? `<div class="text-[12px] font-bold text-slate-600 mb-1.5">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => { const mIdx = ms.findIndex(x => x._temp && x.grade === t.grade); return `<span class="chip">${esc(gradeTitle(t.grade))}${mIdx >= 0 ? `<button type="button" data-act="wzStartOne" data-id="${mIdx}" class="text-brand-700 font-bold mr-1 underline">احجز</button>` : ""}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`; }).join("")}</div>` : ""}
     <div class="grid grid-cols-2 gap-2.5">
       <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="kidsEdit">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : "أضف أبنائي (الأسهل)"}</button>
       ${relOn() ? `<button class="rounded-2xl p-3.5 border-2 border-dashed border-sky-300 bg-sky-50/40 hover:bg-sky-50 text-sky-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="addRel">${ic("users")} إضافة قريب</button>` : `<span></span>`}
     </div>
     <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : "أو كمّل بدون تسجيل — اختر الصف مباشرة"}</button>
-    <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${wzMembers().length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز (${wzMembers().length})</button>`;
+    <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${ms.length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز بالترتيب (${ms.length})</button>`;
 }
 function wzGradePick() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
@@ -1059,21 +1086,31 @@ function wzGradePick() {
 function wzMember() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
   wzFocus(m);
-  const mode = WZ.mode[WZ.i], last = WZ.i === ms.length - 1;
-  const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#6a3aa0,#381c62)">
-    <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px]">${m._temp ? "📚" : kidEmoji(m)}</span>
-    <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${ms.length > 1 ? `الفرد ${WZ.i + 1} من ${ms.length}` : "الحجز"}</div><div class="font-display font-bold text-[19px] leading-tight truncate">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div><div class="text-[12.5px] text-gold-300">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}${m.track ? " · " + esc(m.track) : ""}</div></div></div>`;
-  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">تحب نجهّز الكتب إزاي؟</h2>
+  const mode = WZ.mode[WZ.i], fem = empGender() === "F";
+  const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3 shadow-sm" style="background:linear-gradient(135deg,#6a3aa0,#381c62)">
+    <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px] shrink-0">${m._temp ? "📚" : kidEmoji(m)}</span>
+    <div class="flex-1 min-w-0">
+      <div class="text-[11.5px] font-bold text-gold-200 flex items-center gap-1.5"><span>📌 أنت تحجز الآن لـ</span>${ms.length > 1 ? `<span class="px-1.5 py-0.5 rounded-full bg-white/15 text-white text-[10.5px]">${WZ.i + 1} من ${ms.length}</span>` : ""}</div>
+      <div class="font-display font-bold text-[19px] leading-tight truncate mt-0.5">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div>
+      <div class="text-[12.5px] text-brand-100">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}${m.track ? " · " + esc(m.track) : ""}</div>
+    </div>
+    <button type="button" data-act="wzToFamily" class="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white shrink-0">تغيير</button>
+  </div>`;
+  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-1">${fem ? `تحبي نحجز كتب ${esc(wzName(m))} إزاي؟` : `تحب نحجز كتب ${esc(wzName(m))} إزاي؟`}</h2>
+    <p class="text-[12.5px] text-slate-500 mb-3">اختر الطريقة الأريح لك، أو أجّله لبعدين لو لسه معرفتش الكتب.</p>
     <div class="grid gap-2.5">${[["popular", "🎒", "شنطة الكتب الجاهزة", "اسم المادة شامل كل الكتب — نجهّز لك الأشهر وتبدّل منها براحتك", "bg-gold-50 ring-gold-300"],
       ["series", "📚", "شركة واحدة (سلسلة كاملة)", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ نجهّزها لك بدون ما تدور", "bg-brand-50 ring-brand-200"],
       ["manual", "🔍", "أختار كتاب بكتاب بنفسي", "تتصفح كتب الصف وتختار كل كتاب واحد بواحد على مزاجك", "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
         <span class="text-[30px]">${o[1]}</span><span class="flex-1"><b class="block text-[15.5px] text-slate-900">${o[2]}</b><span class="block text-[12.5px] text-slate-600 mt-0.5">${o[3]}</span></span>${ic("chevron-left", "text-slate-400")}</button>`).join("")}</div>
-    <button class="w-full mt-3 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzNoBooks">${esc(wzName(m))} مش محتاج كتب ← ${last ? "المراجعة" : "التالي"}</button>
-    ${WZ.i ? `<button class="btn btn-ghost w-full" data-act="wzPrev">${ic("arrow-right")} رجوع</button>` : `<button class="btn btn-ghost w-full" data-act="wzToFamily">${ic("arrow-right")} العائلة</button>`}`;
+    <div class="grid sm:grid-cols-2 gap-2 mt-3">
+      <button type="button" class="rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/70 hover:bg-amber-50 text-amber-950 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition" data-act="wzDefer">⏳ خليه بعدين (لسه معرفتش الكتب)</button>
+      <button type="button" class="rounded-2xl p-3 ring-1 ring-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition" data-act="wzNoBooks">🚫 مش محتاج كتب الترم ده</button>
+    </div>
+    <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("arrow-right")} رجوع لاختيار العائلة</button>`;
   if (mode === "series" && !WZ.pub[WZ.i]) {
     const list = gradeList().list, by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || new Set()).add(b.Subject));
     const pubs = Object.keys(by).sort((a, b) => by[b].size - by[a].size);
-    return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">اختار السلسلة</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
+    return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">اختار السلسلة لـ ${esc(wzName(m))}</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
       ${logoFor(APP.emp.pubLogos, p, "") ? `<span class="w-12 h-9 rounded-lg bg-white ring-1 ring-slate-100 flex items-center justify-center p-0.5 shrink-0"><img src="${esc(logoFor(APP.emp.pubLogos, p, ""))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}
       <span class="min-w-0"><b class="block text-[14px] text-slate-900 truncate">${esc(p)}</b><span class="text-[11.5px] text-slate-500">${by[p].size} مادة</span></span></button>`).join("")}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "")}
       <button class="btn btn-ghost w-full mt-3" data-act="wzModeReset">${ic("arrow-right")} تغيير الطريقة</button>`;
@@ -1087,11 +1124,37 @@ function wzMember() {
   return head + (BAG.rows.length ? `<div id="wzBag">${bagHTML()}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "تقدر تكمل لباقي الأفراد"))
     + `<div class="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] md:bottom-4 mt-4 grid grid-cols-[auto_1fr] gap-2 bg-slate-50/90 backdrop-blur py-2">
       <button class="btn btn-outline" data-act="wzModeReset">${ic("arrow-right")} طريقة أخرى</button>
-      <button class="btn btn-primary btn-lg" data-act="wzNext">${ic("check")} تمام${last ? "، المراجعة" : "، التالي: " + esc(wzName(ms[WZ.i + 1]))} ←</button></div>`;
+      <button class="btn btn-primary btn-lg" data-act="wzNext">${ic("check")} إضافة للسلة والمتابعة ←</button></div>`;
+}
+function wzAfterMemberHTML() {
+  const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
+  const b = kidBen(m), lines = cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade));
+  const rem = ms.map((x, idx) => ({ m: x, idx })).filter(x => x.idx !== WZ.i && !WZ.done[x.idx] && !WZ.later[x.idx] && !WZ.noBooks[x.idx]);
+  const fem = empGender() === "F";
+  return `
+    <div class="rounded-3xl p-5 bg-white ring-1 ring-emerald-200 shadow-sm space-y-4 text-center">
+      <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-[30px]">✅</div>
+      <div>
+        <h1 class="font-display font-bold text-[20px] text-slate-900">تمت إضافة كتب ${esc(wzName(m))} في السلة!</h1>
+        <p class="text-[13px] text-slate-500 mt-1">${lines.length ? `اخترت ${booksWord(lines.reduce((s, l) => s + l.qty, 0))} جاهزة في سلتك.` : "تم حفظ اختياراتك في السلة."}</p>
+      </div>
+      ${rem.length ? `
+        <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-100 p-3.5 text-right space-y-2.5">
+          <div class="font-bold text-[14px] text-brand-950">${fem ? "تحبي تعملي إيه دلوقتي؟" : "تحب تعمل إيه دلوقتي؟"}</div>
+          <button type="button" data-act="wzNextMember" data-id="${rem[0].idx}" class="btn btn-primary btn-lg w-full justify-center">📚 نكمل مع ${esc(wzName(rem[0].m))} ←</button>
+          ${rem.length > 1 ? `<div class="flex flex-wrap gap-1.5 pt-1"><span class="text-[11.5px] text-slate-500 self-center">أو اختر:</span>${rem.slice(1).map(x => `<button type="button" data-act="wzNextMember" data-id="${x.idx}" class="chip hover:bg-brand-100 font-bold text-brand-800">${kidEmoji(x.m)} ${esc(wzName(x.m))}</button>`).join("")}</div>` : ""}
+          <button type="button" data-act="wzReview" class="btn btn-outline w-full justify-center">🛒 نشوف السلة ونكمّل الباقي وقت تاني</button>
+        </div>` : `
+        <div class="space-y-2.5">
+          <p class="text-[13px] font-semibold text-emerald-700">كل الأولاد تمام! جاهز نراجع الحجز ونختار طريقة السداد؟ 🎉</p>
+          <button type="button" data-act="wzReview" class="btn btn-primary btn-lg w-full justify-center">👀 مراجعة الحجز وتأكيد السداد ←</button>
+        </div>`}
+      <button type="button" data-act="wzToFamily" class="text-[12.5px] font-semibold text-brand-700 hover:underline">👨‍👩‍👧‍👦 العودة لقائمة العائلة</button>
+    </div>`;
 }
 function wzReviewHTML() {
   const lines = cartLines(), gs = resGroups(lines), t = Emp.totals();
-  return `<h1 class="font-display font-bold text-[22px] text-slate-900">راجع حجزك 👀</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">كتب كل فرد لوحده — اضغط «تعديل» لأي حد.</p>
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">راجع حجزك 👀</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">كتب كل فرد لوحده — اضغط «تعديل» لأي حد، أو تقدر تحفظ السلة وتكمّل باقي الأولاد وقت تاني.</p>
     ${gs.length ? gs.map(g => `<section class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden mb-3">
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[24px]">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div>
         <div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
@@ -1101,8 +1164,8 @@ function wzReviewHTML() {
     <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} قبل الخصم</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
       <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
       <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b>الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(t.net)}</span></div></div>
-    <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة فرد آخر</button>
-    <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("wallet")} التالي: طريقة السداد ←</button>`;
+    <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة أو استكمال فرد آخر</button>
+    <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("wallet")} التالي: تأكيد الحجز وطريقة السداد ←</button>`;
 }
 function wzPayHTML() {
   return `<h1 class="font-display font-bold text-[22px] text-slate-900">هتدفع إزاي؟ 💳</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">اختار طريقة السداد، وبعدها أكّد الحجز.</p>
@@ -1110,34 +1173,50 @@ function wzPayHTML() {
 }
 Router.add("/e/wiz", view => {
   if (!APP.emp.activePhase || !Emp.open()) { view.innerHTML = Art.empty("calendar", "الحجز مغلق حالياً", "تابع الإشعارات لمعرفة موعد الحجز القادم"); return; }
-  const body = WZ.step === "member" ? wzMember() : WZ.step === "review" ? wzReviewHTML() : WZ.step === "pay" ? wzPayHTML() : wzFamily();
+  const body = WZ.step === "member" ? wzMember() : WZ.step === "afterMember" ? wzAfterMemberHTML() : WZ.step === "review" ? wzReviewHTML() : WZ.step === "pay" ? wzPayHTML() : wzFamily();
   view.innerHTML = `<div class="max-w-xl mx-auto">${wzSteps()}${body}<div class="h-6"></div></div>`;
   if (WZ.step === "pay") refreshCartViews();
 });
 const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
 on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
-on("wzHideGuide", () => { wzMarkGuideOff(); Shell.rerender(); });
+on("wzHideGuide", () => { wzMarkGuideOff(); WZ.forceGuide = false; Shell.rerender(); });
+on("wzShowGuide", () => { WZ.guideStep = 0; WZ.forceGuide = true; Shell.rerender(); });
 on("wzGuideStep", v => { WZ.guideStep = +v || 0; Shell.rerender(); });
-on("wzGuidePick", v => { wzMarkGuideOff(); if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { WZ.skip = true; Shell.rerender(); } else { Shell.rerender(); } });
+on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { WZ.skip = true; Shell.rerender(); } else { Shell.rerender(); } });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
 on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
 on("wzTempAdd", g => { WZ.temp.push({ name: "", grade: g, type: "" }); WZ.skip = false; wzSave(); Shell.rerender(); });
 on("wzTempDel", j => { WZ.temp.splice(+j, 1); wzSave(); Shell.rerender(); });
-on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; wzGo("member", 0); });
+on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; const ms = wzMembers(); const nxt = ms.findIndex((_, idx) => !WZ.done[idx] && !WZ.later[idx] && !WZ.noBooks[idx]); wzGo("member", nxt >= 0 ? nxt : 0); });
+on("wzStartOne", idx => { const i = +idx || 0; delete WZ.later[i]; delete WZ.noBooks[i]; delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
 on("wzToFamily", () => wzGo("family"));
 on("wzMode", v => { WZ.mode[WZ.i] = v; wzSave(); if (v === "manual") { wzFocus(wzMembers()[WZ.i]); Emp.wzManual = true; Router.go("/e/books"); scrollTo({ top: 0 }); return; } Shell.rerender(); });
 on("wzModeReset", () => { delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = ""; wzSave(); Shell.rerender(); });
 on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); });
 const wzAdvance = () => { const ms = wzMembers(); BAG._for = ""; BAG.inline = false; if (WZ.i + 1 < ms.length) wzGo("member", WZ.i + 1); else wzGo("review"); };
+const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !WZ.done[idx] && !WZ.later[idx] && !WZ.noBooks[idx]); };
 on("wzNext", () => {
   BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) APP.cart[k] = 1; });
   BAG.rows.filter(r => !r.on).forEach(r => r.opts.forEach(o => { delete APP.cart[ck(o.Book_ID, Emp.ben)]; }));
-  Emp.dirty = true; refreshCartViews(); wzAdvance();
+  WZ.done[WZ.i] = true; delete WZ.later[WZ.i]; delete WZ.noBooks[WZ.i];
+  Emp.dirty = true; refreshCartViews(); BAG._for = ""; BAG.inline = false; wzGo("afterMember", WZ.i);
 });
-on("wzNoBooks", () => wzAdvance());
+on("wzNextMember", idx => { const i = +idx; delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
+on("wzDefer", () => {
+  const m = wzMembers()[WZ.i];
+  WZ.later[WZ.i] = true; delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
+  if (m) toast(`تم تأجيل ${wzName(m)} لبعدين — تقدر ترجع له في أي وقت`, "info");
+  const nxt = wzNextUnbooked();
+  if (nxt >= 0) wzGo("member", nxt); else wzGo("review");
+});
+on("wzNoBooks", () => {
+  WZ.noBooks[WZ.i] = true; delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
+  const nxt = wzNextUnbooked();
+  if (nxt >= 0) wzGo("member", nxt); else wzGo("review");
+});
 on("wzPrev", () => { BAG._for = ""; wzGo("member", Math.max(0, WZ.i - 1)); });
-on("wzBack", () => { Emp.wzManual = false; wzAdvance(); });
+on("wzBack", () => { Emp.wzManual = false; WZ.done[WZ.i] = true; delete WZ.later[WZ.i]; delete WZ.noBooks[WZ.i]; BAG._for = ""; wzGo("afterMember", WZ.i); });
 on("wzReview", () => wzGo("review"));
 on("wzBackReview", () => { Emp.wzManual = false; wzGo("review"); });
 on("wzPay", () => wzGo("pay"));
