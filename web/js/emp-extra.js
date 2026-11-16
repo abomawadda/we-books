@@ -241,7 +241,7 @@ function retLine(i) {
   return tail + `<button class="mt-2.5 text-[12.5px] text-brand-700 font-semibold" data-act="retReq" data-id="${esc(i.Res_Item_ID)}">${ic("undo-2")} طلب مرتجع</button>`;
 }
 on("retReq", async id => {
-  const it = Emp.phaseItems().find(x => x.Res_Item_ID === id); if (!it) return;
+  const it = (APP.emp.myReservationItems || []).find(x => x.Res_Item_ID === id); if (!it) return;
   const can = n(it.Delivered_Qty) - n(it.Returned_Qty), b = Emp.bookMap()[it.Book_ID] || {}, win = n((APP.emp.settings || {}).EMP_RETURN_WINDOW_DAYS) || 7;
   const v = await UI.form({ title: "طلب مرتجع", sub: b.Book_Name, intro: `المرتجع متاح خلال ${win} أيام من الاستلام، والكتاب لازم يكون سليم. بعد موافقة المسؤول بيتخصم تمنه من فاتورتك (ولو كنت دافع، يرجعلك رصيد).`,
     fields: [{ name: "qty", label: "العدد", type: "number", value: 1, min: 1, max: can }, { name: "condition", label: "حالة الكتاب", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "فيه عيب"]] }, { name: "reason", label: "السبب", placeholder: "مثال: الكتاب مكرر / غلط في الصف" }],
@@ -655,3 +655,50 @@ on("printLeftoverE", () => {
     note: `• كتب حُجزت في «${esc(from)}» ولم تُسلَّم لعدم وصولها، وتُرحَّل إلى «${esc(next)}» بأسبقية الحجز الأصلية.<br>• الأسعار تقديرية وتُثبَّت عند التوزيع، ولا تدخل أي فاتورة سابقة.`,
     plan: { method: "", down: 0, count: 0, per: 0 } }), { file: "طلب-المتبقي-" + (APP.user.empId || "") });
 });
+
+// ================================================================ مرتجعاتي: كل الطلبات وحالتها + الكتب المتاح إرجاعها + إشعار القرار في الرئيسية
+const RET_SEEN = "wb_ret_seen";
+const retSeen = () => { try { return JSON.parse(localStorage.getItem(RET_SEEN) || "{}"); } catch (_) { return {}; } };
+const myRetData = () => {
+  const r = APP.emp || {}, bm = Emp.bookMap(), ph = id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id;
+  const win = n((r.settings || {}).EMP_RETURN_WINDOW_DAYS) || 7, its = r.myReservationItems || [];
+  const list = its.map(i => ({ i, r: retReq(i), b: bm[i.Book_ID] || {}, ph: ph(i.Phase_ID) })).filter(x => x.r || n(x.i.Returned_Qty) > 0);
+  const elig = its.filter(i => n(i.Delivered_Qty) - n(i.Returned_Qty) > 0 && (retReq(i) || {}).status !== "Pending").map(i => ({ i, b: bm[i.Book_ID] || {}, ph: ph(i.Phase_ID) }));
+  return { list, elig, win };
+};
+Router.add("/e/returns", view => {
+  const { list, elig, win } = myRetData();
+  const val = list.reduce((s, x) => s + n(x.i.Returned_Qty) * n(x.i.Unit_Emp_Price), 0), pend = list.filter(x => x.r && x.r.status === "Pending").length;
+  const st = x => !x.r ? ["مرتجع مسجّل", "emerald", "circle-check"] : x.r.status === "Pending" ? ["عند المسؤول", "amber", "hourglass"] : x.r.status === "Approved" ? ["اتقبل واتخصم", "emerald", "circle-check"] : ["مرفوض", "rose", "circle-x"];
+  const card = x => { const s = st(x), who = x.i.Beneficiary || "";
+    return `<li class="card p-3.5 mb-2.5"><div class="flex items-start gap-3"><span class="w-10 h-10 rounded-xl bg-${s[1]}-50 text-${s[1]}-600 flex items-center justify-center shrink-0">${ic(s[2])}</span>
+      <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 leading-snug">${esc(x.b.Book_Name || x.i.Book_ID)}</div>
+        <div class="text-[12px] text-slate-500 mt-0.5">${esc(Doc.shortGrade(x.b.Grade || ""))} · ${esc(x.ph)}${who ? " · لـ " + esc(who) : ""}</div>
+        <div class="flex flex-wrap gap-1.5 mt-2 text-[12px]"><span class="rounded-full bg-${s[1]}-50 text-${s[1]}-700 px-2.5 py-0.5 font-semibold">${s[0]}</span>
+          ${x.r ? `<span class="rounded-full bg-slate-100 px-2.5 py-0.5">${booksWord(x.r.qty)}</span><span class="rounded-full bg-slate-100 px-2.5 py-0.5">${x.r.condition === "DAMAGED" ? "فيه عيب" : "سليم"}</span>` : ""}
+          ${n(x.i.Returned_Qty) ? `<span class="rounded-full bg-emerald-50 text-emerald-700 px-2.5 py-0.5">اتخصم <b class="num">${fmt(n(x.i.Returned_Qty) * n(x.i.Unit_Emp_Price))}</b> ج.م</span>` : ""}</div>
+        ${x.r ? `<div class="text-[12px] text-slate-600 mt-2">السبب: ${esc(x.r.reason)} <span class="text-slate-400 num">· ${esc(String(x.r.at || "").slice(0, 16))}</span></div>` : ""}
+        ${x.r && x.r.status !== "Pending" ? `<div class="text-[12px] mt-1 ${x.r.status === "Approved" ? "text-emerald-700" : "text-rose-700"}">القرار ${esc(String(x.r.resolvedAt || "").slice(0, 16))}${x.r.note ? " — " + esc(x.r.note) : ""}</div>` : ""}</div></div></li>`; };
+  view.innerHTML = `<div class="flex items-center gap-2 mb-3"><button class="icon-btn" onclick="history.back()" aria-label="رجوع">${ic("arrow-right")}</button><h1 class="text-[20px] font-extrabold text-slate-900">مرتجعاتي</h1></div>
+    <div class="grid grid-cols-3 gap-2 mb-3 text-center"><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">طلبات</div><b class="num text-[18px]">${fmt(list.length)}</b></div><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">عند المسؤول</div><b class="num text-[18px] text-amber-600">${fmt(pend)}</b></div><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">اتخصم من فواتيرك</div><b class="num text-[18px] text-emerald-700">${fmt(val)}</b></div></div>
+    <div class="rounded-2xl bg-sky-50 ring-1 ring-sky-100 p-3 mb-4 text-[12.5px] text-sky-900 leading-relaxed">${ic("info", "inline -mt-0.5")} تقدر ترجّع الكتاب خلال <b>${win} أيام</b> من استلامه وهو سليم. بعد ما المسؤول يستلمه ويعتمده، قيمته بتتخصم من فاتورتك، ولو كنت دافع أكتر بيبقى ليك رصيد يتخصم من الجاي أو يترد لك.</div>
+    ${list.length ? `<h2 class="text-[14px] font-bold text-slate-700 mb-2">طلباتي</h2><ul>${list.map(card).join("")}</ul>` : `<div class="card p-6 text-center text-slate-500 mb-4">${ic("package-check", "mx-auto mb-1")}<div>مفيش مرتجعات — كل كتبك معاك 👌</div></div>`}
+    ${elig.length ? `<h2 class="text-[14px] font-bold text-slate-700 mt-4 mb-2">كتب استلمتها وممكن ترجّعها</h2><ul class="card divide-y divide-slate-100">${elig.map(x => `<li class="flex items-center gap-2 p-3"><div class="flex-1 min-w-0"><div class="text-[13.5px] font-semibold truncate">${esc(x.b.Book_Name || x.i.Book_ID)}</div><div class="text-[11.5px] text-slate-500">${esc(x.ph)}${x.i.Beneficiary ? " · لـ " + esc(x.i.Beneficiary) : ""}</div></div><button class="btn btn-outline btn-xs" data-act="retReq" data-id="${esc(x.i.Res_Item_ID)}">${ic("undo-2")} مرتجع</button></li>`).join("")}</ul><p class="text-[11.5px] text-slate-400 mt-1.5">لو مدة المرتجع خلصت هيظهرلك ده لما تبعت الطلب.</p>` : ""}`;
+});
+// مدخل «مرتجعاتي» من «حسابي» و«حجوزاتي»
+_wrap("/e/me", view => { const btn = view.querySelector('[data-act="faq"]'); if (!btn) return;
+  btn.insertAdjacentHTML("beforebegin", `<a href="#/e/returns" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">${ic("undo-2")}</span><span class="flex-1"><b class="block text-[14.5px] text-slate-900">مرتجعاتي</b><span class="text-[12px] text-slate-500">طلبات المرتجع وحالتها</span></span>${ic("chevron-left", "text-slate-300")}</a>`); });
+_wrap("/e/orders", view => { if (!myRetData().list.length) return; view.insertAdjacentHTML("beforeend", `<a href="#/e/returns" class="btn btn-outline w-full mt-3">${ic("undo-2")} مرتجعاتي</a>`); });
+// إشعار القرار في الرئيسية لحد ما الموظف يقفله (بديل مؤقت للإشعارات خارج التطبيق)
+_wrap("/e/home", view => {
+  const seen = retSeen(), res = myRetData().list.filter(x => x.r && x.r.status !== "Pending" && x.r.resolvedAt && !seen[x.i.Res_Item_ID + "@" + x.r.resolvedAt]);
+  if (!res.length) return;
+  const html = res.map(x => { const okd = x.r.status === "Approved";
+    return `<section class="card p-4 mb-3 ring-2 ${okd ? "ring-emerald-200 bg-emerald-50/40" : "ring-rose-200 bg-rose-50/40"}"><div class="flex items-start gap-3"><span class="text-[28px]">${okd ? "✅" : "❌"}</span><div class="flex-1 min-w-0">
+      <b class="text-[14.5px] ${okd ? "text-emerald-800" : "text-rose-800"}">${okd ? "اتقبل طلب المرتجع" : "اترفض طلب المرتجع"}</b>
+      <div class="text-[13px] text-slate-700 mt-0.5">${esc(x.b.Book_Name || x.i.Book_ID)} — ${booksWord(x.r.qty)}</div>
+      <div class="text-[12.5px] text-slate-600 mt-1">${okd ? `اتخصم <b class="num">${fmt(n(x.r.qty) * n(x.i.Unit_Emp_Price))}</b> ج.م من فاتورتك.` : "الكتاب فاضل معاك وفاتورتك زي ما هي."}${x.r.note ? `<br>ملاحظة المسؤول: ${esc(x.r.note)}` : ""}</div>
+      <div class="flex gap-2 mt-2.5"><a href="#/e/returns" class="btn btn-outline btn-xs">التفاصيل</a><button class="btn btn-primary btn-xs" data-act="retSeen" data-id="${esc(x.i.Res_Item_ID + "@" + x.r.resolvedAt)}">تمام</button></div></div></div></section>`; }).join("");
+  afterHead(view, html);
+});
+on("retSeen", k => { const s = retSeen(); s[k] = 1; try { localStorage.setItem(RET_SEEN, JSON.stringify(s)); } catch (_) {} Router.render(); });
