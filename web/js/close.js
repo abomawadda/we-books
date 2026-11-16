@@ -97,17 +97,22 @@ on("cancelRes", async v => {
 // ---------------------------------------------------------------- طلبات المرتجع + جرس الإدارة (إلغاء ومرتجع)
 const retReqs = () => A().resItems.filter(i => { try { const r = JSON.parse(i.Return_Request || "null"); return r && r.status === "Pending"; } catch (_) { return false; } });
 function retReqBox() {
-  const list = retReqs(); if (!list.length) return "";
+  const list = retReqs(); if (!list.length) return ""; const lateN = list.filter(i => { try { return (Date.now() - new Date(String(JSON.parse(i.Return_Request).at).replace(" ", "T"))) / 864e5 > 2; } catch (_) { return false; } }).length;
   const { e, b } = maps();
-  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("undo-2", "text-amber-500")} طلبات مرتجع (${fmt(list.length)})`, "الاعتماد يُدخل الكتاب المخزن ويخصم قيمته من فاتورة الموظف (الزيادة المدفوعة رصيد مستحق الرد)", `<ul class="divide-y divide-slate-100">${list.map(i => { const r = JSON.parse(i.Return_Request); return `<li class="flex flex-wrap items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(i.Emp_ID, empName(e, i.Emp_ID))} · ${esc(bookName(b, i.Book_ID))}</div><div class="text-[12px] text-slate-500"><b class="num">${fmt(r.qty)}</b> نسخة · ${r.condition === "DAMAGED" ? "فيه عيب" : "سليم"} · ${esc(r.reason)} · <span class="num">${esc(String(r.at).slice(0, 16))}</span></div></div>
+  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("undo-2", "text-amber-500")} طلبات مرتجع/استبدال (${fmt(list.length)})${lateN ? ` <span class="text-rose-600 text-[12px]">⚠️ ${lateN} متأخر أكتر من يومين</span>` : ""} <a href="#/a/returns" class="text-[12px] text-brand-700 font-semibold">الكل</a>`, "الاعتماد يُدخل الكتاب المخزن ويخصم قيمته من فاتورة الموظف (الزيادة المدفوعة رصيد مستحق الرد)", `<ul class="divide-y divide-slate-100">${list.map(i => { const r = JSON.parse(i.Return_Request); return `<li class="flex flex-wrap items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(i.Emp_ID, empName(e, i.Emp_ID))} · ${esc(bookName(b, i.Book_ID))}</div><div class="text-[12px] text-slate-500"><b class="num">${fmt(r.qty)}</b> نسخة · ${r.condition === "DAMAGED" ? "فيه عيب" : "سليم"} · ${esc(r.reason)} · <span class="num">${esc(String(r.at).slice(0, 16))}</span></div></div>
       <button class="btn btn-primary btn-xs" data-act="retRes" data-id="${esc(i.Res_Item_ID)}|1">${ic("check")} استلمت واعتمدت</button><button class="btn btn-outline btn-xs" data-act="retRes" data-id="${esc(i.Res_Item_ID)}|0">رفض</button></li>`; }).join("")}</ul>`)}</div>`;
 }
 on("retRes", async v => {
-  const [id, ap] = v.split("|");
-  const f = await UI.form({ title: ap === "1" ? "اعتماد المرتجع" : "رفض المرتجع", intro: ap === "1" ? "تأكد إنك استلمت الكتاب فعلاً. يُسجَّل إذن مرتجع ويدخل المخزن وتُخفَّض فاتورة الموظف." : "يبقى الكتاب مع الموظف وفاتورته كما هي.",
-    fields: [...(ap === "1" ? [{ name: "condition", label: "حالة الكتاب عند الاستلام", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "تالف (يُستبعد من المخزن)"]] }] : []), { name: "note", label: "ملاحظة للموظف (اختياري)" }], ok: ap === "1" ? "اعتماد" : "رفض" });
+  const [id, ap] = v.split("|"), it = A().resItems.find(i => i.Res_Item_ID === id) || {}, r = (() => { try { return JSON.parse(it.Return_Request || "null"); } catch (_) { return null; } })() || {}, ex = r.kind === "EXCHANGE";
+  const f = await UI.form({ title: (ap === "1" ? "اعتماد " : "رفض ") + (ex ? "الاستبدال" : "المرتجع"),
+    intro: ap === "1" ? (ex ? "استلم النسخة المعيبة وسلّم نسخة سليمة من المخزن. الفاتورة لا تتغير، والمعيبة تُستبعد وتُسجَّل مطالبة على المكتبة (لو عيب صناعة)." : "تأكد إنك استلمت الكتاب فعلاً. يُسجَّل إذن مرتجع ويدخل المخزن وتُخفَّض فاتورة الموظف.") : "يبقى الكتاب مع الموظف وفاتورته كما هي. سبب الرفض بيظهر له.",
+    fields: [...(ap === "1" && !ex ? [{ name: "condition", label: "حالة الكتاب عند الاستلام", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "تالف (يُستبعد من المخزن)"]] }] : []),
+      ...(ap === "1" && ex ? [{ name: "claim", label: "تحميل النسخة المعيبة على", type: "select", value: "1", options: [["1", "المكتبة (عيب صناعة — مطالبة)"], ["0", "المبادرة (خسارة)"]] }] : []),
+      { name: "note", label: ap === "1" ? "ملاحظة للموظف (اختياري)" : "سبب الرفض (إجباري)", required: ap !== "1" }], ok: ap === "1" ? "اعتماد" : "رفض" });
   if (!f) return;
-  await act("RESOLVE_RETURN_REQUEST", { resItemId: id, approve: ap === "1", condition: f.condition, note: f.note });
+  if (ap !== "1" && !String(f.note || "").trim()) return toast("اكتب سبب الرفض", "warning");
+  const res = await act("RESOLVE_RETURN_REQUEST", { resItemId: id, approve: ap === "1", condition: f.condition, note: f.note, claimSupplier: f.claim !== "0" });
+  if (res && res.success && res.receiptNo && ex && typeof printDoc === "function") printDoc(res.receiptNo);
 });
 const _notifAdm = Notif.list;
 Notif.list = function () {
@@ -500,8 +505,11 @@ Router.add("/a/returns", view => {
   const reqs = d.resItems.map(i => ({ i, r: rjson(i) })).filter(x => x.r);
   const pend = reqs.filter(x => x.r.status === "Pending").sort((a, c) => String(a.r.at).localeCompare(String(c.r.at)));
   const done = reqs.filter(x => x.r.status !== "Pending").sort((a, c) => String(c.r.resolvedAt || "").localeCompare(String(a.r.resolvedAt || "")));
-  const docs = d.deliveryReturns.filter(x => x.Doc_Type === "EMP_RETURN").sort((a, c) => String(c.Trans_Date).localeCompare(String(a.Trans_Date)));
-  const val = docs.reduce((s, x) => s + Math.abs(n(x.Total_Amount_Impact)), 0), qty = docs.reduce((s, x) => s + n(x.Qty), 0);
+  const docs = d.deliveryReturns.filter(x => x.Doc_Type === "EMP_RETURN" || x.Doc_Type === "EMP_EXCHANGE").sort((a, c) => String(c.Trans_Date).localeCompare(String(a.Trans_Date)));
+  const val = docs.reduce((s, x) => s + Math.abs(n(x.Total_Amount_Impact)), 0), qty = docs.filter(x => x.Doc_Type === "EMP_RETURN").reduce((s, x) => s + n(x.Qty), 0), exq = docs.filter(x => x.Doc_Type === "EMP_EXCHANGE").reduce((s, x) => s + n(x.Qty), 0);
+  const kindPill = r => r.kind === "EXCHANGE" ? pill("", "استبدال", "blue") : pill("", "مرتجع", "amber");
+  const late = r => (Date.now() - new Date(String(r.at).replace(" ", "T"))) / 864e5 > 2;
+  done.forEach(x => (x.r.history || []).forEach(h => { if (h.status !== "Pending") done.push({ i: x.i, r: h, old: 1 }); }));
   const appr = done.filter(x => x.r.status === "Approved").length, rej = done.length - appr;
   const reasons = {}; reqs.forEach(x => { const k = String(x.r.reason || "بدون سبب").trim(); reasons[k] = (reasons[k] || 0) + 1; });
   const topR = Object.entries(reasons).sort((a, c) => c[1] - a[1]).slice(0, 4);
@@ -516,26 +524,26 @@ Router.add("/a/returns", view => {
       { t: "الموظف", v: x => who(x.i.Emp_ID) },
       { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.i.Book_ID))}</b><div class="text-[11.5px] text-slate-500">${esc(x.ph)}${x.i.Beneficiary ? " · لـ " + esc(x.i.Beneficiary) : ""}</div>` },
       { t: "العدد", cls: "num", v: x => fmt(x.r.qty) }, { t: "القيمة", cls: "num", v: x => `<b>${fmt(x.amt)}</b>` },
-      { t: "السبب والحالة", v: x => `${esc(x.r.reason)}<div>${x.r.condition === "DAMAGED" ? pill("", "فيه عيب", "red") : pill("", "سليم", "green")}</div>` },
-      { t: "منذ", cls: "num whitespace-nowrap", v: x => `${esc(age(x.r.at))}<div class="text-[11px] text-slate-400">${esc(dt(x.r.at))}</div>` },
+      { t: "النوع والسبب", v: x => `${kindPill(x.r)} ${esc(x.r.reason)}<div>${x.r.kind === "EXCHANGE" ? "" : x.r.condition === "DAMAGED" ? pill("", "فيه عيب", "red") : pill("", "سليم", "green")}</div>` },
+      { t: "منذ", cls: "num whitespace-nowrap", v: x => `<span class="${late(x.r) ? "text-rose-600 font-bold" : ""}">${late(x.r) ? "⚠️ " : ""}${esc(age(x.r.at))}</span><div class="text-[11px] text-slate-400">${esc(dt(x.r.at))}</div>` },
       { t: "", actions: true, v: x => can("RESOLVE_RETURN_REQUEST") ? `<div class="inline-flex gap-1"><button class="btn btn-primary btn-xs" data-act="retRes" data-id="${esc(x.i.Res_Item_ID)}|1">${ic("check")} اعتماد</button><button class="btn btn-outline btn-xs" data-act="retRes" data-id="${esc(x.i.Res_Item_ID)}|0">رفض</button></div>` : "" }
     ], pend.map(reqRow)) : UI.empty("undo-2", "مفيش طلبات مرتجع معلّقة 👌", "أي طلب من الموظفين هيظهر هنا للاعتماد أو الرفض");
   else if (RET.tab === "log") body = done.length ? UI.table([
       { t: "الموظف", v: x => who(x.i.Emp_ID) },
       { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.i.Book_ID))}</b><div class="text-[11.5px] text-slate-500">${esc(x.ph)}</div>` },
-      { t: "العدد", cls: "num", v: x => fmt(x.r.qty) }, { t: "السبب", v: x => esc(x.r.reason) },
+      { t: "العدد", cls: "num", v: x => fmt(x.r.qty) }, { t: "النوع والسبب", v: x => `${kindPill(x.r)} ${esc(x.r.reason)}${x.old ? ' <span class="text-[11px] text-slate-400">(طلب سابق)</span>' : ""}` },
       { t: "القرار", v: x => (x.r.status === "Approved" ? pill("", "معتمد", "green") : pill("", "مرفوض", "red")) + (x.r.note ? `<div class="text-[11.5px] text-slate-500 mt-0.5">${esc(x.r.note)}</div>` : "") },
       { t: "بواسطة", v: x => `${esc(x.r.by || "")}<div class="text-[11px] text-slate-400 num">${esc(dt(x.r.resolvedAt))}</div>` }
     ], done.map(reqRow)) : `<p class="text-center text-slate-500 py-8">لسه مفيش قرارات.</p>`;
   else body = docs.length ? UI.table([
-      { t: "المستند", cls: "num", v: x => `<b>${esc(x.Printed_Receipt_No)}</b><div class="text-[11px] text-slate-400">${esc(dt(x.Trans_Date))}</div>` },
+      { t: "المستند", cls: "num", v: x => `${x.Doc_Type === "EMP_EXCHANGE" ? pill("", "استبدال", "blue") : pill("", "مرتجع", "amber")} <b>${esc(x.Printed_Receipt_No)}</b><div class="text-[11px] text-slate-400">${esc(dt(x.Trans_Date))}</div>` },
       { t: "الموظف", v: x => who(x.Party_ID) }, { t: "الكتاب", v: x => esc(bookName(b, x.Book_ID)) },
-      { t: "العدد", cls: "num", v: x => fmt(x.Qty) }, { t: "القيمة", cls: "num", v: x => `<b>${fmt(Math.abs(n(x.Total_Amount_Impact)))}</b>` },
+      { t: "العدد", cls: "num", v: x => fmt(x.Qty) }, { t: "القيمة", cls: "num", v: x => x.Doc_Type === "EMP_EXCHANGE" ? `<span class="text-slate-400 text-[12px]">بدون أثر مالي</span>` : `<b>${fmt(Math.abs(n(x.Total_Amount_Impact)))}</b>` },
       { t: "السبب", v: x => esc(x.Return_Reason || "") },
       { t: "", actions: true, v: x => `<button class="act-ic act-ic-edit" data-act="printDoc" data-id="${esc(x.Printed_Receipt_No)}" title="طباعة إذن المرتجع" aria-label="طباعة إذن المرتجع">${ic("printer")}</button>` }
     ], docs) : `<p class="text-center text-slate-500 py-8">لا توجد أذون مرتجع.</p>`;
   view.innerHTML = `${UI.pageHead ? UI.pageHead("المرتجعات", `طلبات الموظفين وقراراتها وأذون المرتجع — مدة المرتجع ${win} أيام من الاستلام`) : `<h1 class="text-[20px] font-extrabold mb-1">المرتجعات</h1><p class="text-[12.5px] text-slate-500 mb-3">مدة المرتجع ${win} أيام من الاستلام</p>`}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">${kpi("طلبات معلّقة", fmt(pend.length), pend.length ? "text-amber-600" : "")}${kpi("معتمد / مرفوض", `${fmt(appr)} / ${fmt(rej)}`)}${kpi("نسخ مرتجعة", fmt(qty))}${kpi("قيمة المرتجع", fmt(val) + ' <span class="text-[12px] font-normal">ج.م</span>', "text-emerald-700")}</div>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">${kpi("طلبات معلّقة" + (pend.filter(x => late(x.r)).length ? ` <span class="text-rose-600">(${pend.filter(x => late(x.r)).length} متأخر)</span>` : ""), fmt(pend.length), pend.length ? "text-amber-600" : "")}${kpi("معتمد / مرفوض", `${fmt(appr)} / ${fmt(rej)}`)}${kpi("مرتجع / استبدال", `${fmt(qty)} / ${fmt(exq)}`)}${kpi("قيمة المرتجع", fmt(val) + ' <span class="text-[12px] font-normal">ج.م</span>', "text-emerald-700")}</div>
     ${topR.length ? `<div class="card p-3 mb-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5">أكثر أسباب المرتجع</div><div class="flex flex-wrap gap-1.5">${topR.map(([k, c]) => `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-[12px]">${esc(k)} <b class="num">${c}</b></span>`).join("")}</div></div>` : ""}
     <div class="flex gap-1.5 overflow-x-auto pb-1 mb-3">${tab("pending", "معلّقة", pend.length)}${tab("log", "سجل القرارات", done.length)}${tab("docs", "أذون المرتجع", docs.length)}</div>${body}`;
 });

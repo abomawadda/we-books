@@ -158,7 +158,7 @@ function getDatabaseSchemaDefinition_() {
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL", "Tracks"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request", "Feedback"] },
-    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request"] },
+    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request", "Delivered_At"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
     { name: S.SUP_INV_HEADER, color: "#c2410c", headers: ["Sup_Inv_ID", "Internal_Ref_No", "Supplier_Invoice_No", "Supplier_ID", "Phase_ID", "Invoice_Date", "Gross_Total_Cover", "Total_After_Item_Discount", "Volume_Discount_Pct", "Volume_Discount_Amount", "Net_Payable_Amount", "Status", "Approved_By", "Approved_At", "Supplier_Stated_Net", "Variance_Amount", "Damaged_Claim_Amount"] },
@@ -2477,9 +2477,13 @@ const OperationsEngine = {
       const win = Util.num(st.EMP_RETURN_WINDOW_DAYS) || 7;
       if (last) Util.require((new Date() - Util.parseDate(last)) / 86400000 <= win, "مدة المرتجع (" + win + " أيام من الاستلام) خلصت — كلّم المسؤول.");
       const reason = Util.str(payload.reason).slice(0, 200) || "بدون سبب";
-      DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", it.Res_Item_ID, { Return_Request: JSON.stringify({ qty: q, reason: reason, condition: payload.condition === "DAMAGED" ? "DAMAGED" : "GOOD", at: Util.now(), status: "Pending" }) });
-      DB_Engine.logAudit(empId, "Employee", "Returns", "EMP_RETURN_REQUEST", it.Res_Item_ID, null, { qty: q, reason: reason });
-      return { success: true, message: "طلب المرتجع وصل للمسؤول ✅ — هات الكتاب سليم وقت المراجعة." };
+      const kind = payload.kind === "EXCHANGE" ? "EXCHANGE" : "RETURN";
+      if (kind === "EXCHANGE") Util.require(Util.str(payload.reason), "اكتب العيب اللي في الكتاب.");
+      // سجل الطلبات السابقة على نفس البند لا يضيع
+      const hist = cur ? [Object.assign({}, cur, { history: undefined })].concat(cur.history || []).slice(0, 10) : [];
+      DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", it.Res_Item_ID, { Return_Request: JSON.stringify({ kind: kind, qty: q, reason: reason, condition: kind === "EXCHANGE" ? "DAMAGED" : (payload.condition === "DAMAGED" ? "DAMAGED" : "GOOD"), at: Util.now(), status: "Pending", history: hist }) });
+      DB_Engine.logAudit(empId, "Employee", "Returns", kind === "EXCHANGE" ? "EMP_EXCHANGE_REQUEST" : "EMP_RETURN_REQUEST", it.Res_Item_ID, null, { qty: q, reason: reason });
+      return { success: true, message: kind === "EXCHANGE" ? "طلب الاستبدال وصل للمسؤول ✅ — هات الكتاب اللي فيه العيب وتاخد نسخة سليمة." : "طلب المرتجع وصل للمسؤول ✅ — هات الكتاب سليم وقت المراجعة." };
     });
   },
   resolveReturnRequest: function(session, payload) {
@@ -2488,14 +2492,18 @@ const OperationsEngine = {
       Util.require(it, "البند غير موجود.");
       const cur = (() => { try { return JSON.parse(it.Return_Request || "null"); } catch (e) { return null; } })();
       Util.require(cur && cur.status === "Pending", "لا يوجد طلب مرتجع معلّق.");
-      let res = { success: true, message: "تم رفض طلب المرتجع." };
-      if (payload.approve) {
+      Util.require(payload.approve || Util.str(payload.note), "اكتب سبب الرفض عشان الموظف يفهم.");
+      let res = { success: true, message: cur.kind === "EXCHANGE" ? "تم رفض طلب الاستبدال." : "تم رفض طلب المرتجع." };
+      if (payload.approve && cur.kind === "EXCHANGE") {
+        res = this.exchangeBook_(session, it, cur.qty, cur.reason, payload.claimSupplier !== false);
+        if (!res.success) return res;
+      } else if (payload.approve) {
         // نفس مسار المرتجع الرسمي: مخزون + مستند + تخفيض الفاتورة (الزيادة المدفوعة رصيد مستحق الرد)
         res = this.recordBookReturn(session, { returnType: "EMP_RETURN", resItemId: it.Res_Item_ID, qty: cur.qty, reason: "طلب الموظف: " + cur.reason, condition: payload.condition || cur.condition, forceReason: session.role === "Admin" ? Util.str(payload.forceReason) : "" });
         if (!res.success) return res;
       }
       DB_Engine.updateRecordByPK(S.RES_ITEMS, "Res_Item_ID", it.Res_Item_ID, { Return_Request: JSON.stringify(Object.assign(cur, { status: payload.approve ? "Approved" : "Rejected", by: Util.actor(session), resolvedAt: Util.now(), note: Util.str(payload.note).slice(0, 200) })) });
-      DB_Engine.logAudit(session.userId, session.role, "Returns", payload.approve ? "APPROVE_RETURN" : "REJECT_RETURN", it.Res_Item_ID, null, { qty: cur.qty, note: payload.note });
+      DB_Engine.logAudit(session.userId, session.role, "Returns", (payload.approve ? "APPROVE_" : "REJECT_") + (cur.kind === "EXCHANGE" ? "EXCHANGE" : "RETURN"), it.Res_Item_ID, null, { qty: cur.qty, note: payload.note });
       return res;
     });
   },
@@ -2793,6 +2801,7 @@ const OperationsEngine = {
       targets.forEach(t => {
         const it = t.item;
         it.Delivered_Qty = Util.num(it.Delivered_Qty) + t.qty;
+        it.Delivered_At = now;
         it.Net_Billable_Qty = Math.max(Util.num(it.Allocated_Qty), it.Delivered_Qty) - Util.num(it.Returned_Qty);
         it.Total_Emp_Line_Amount = it.Net_Billable_Qty * Util.num(it.Unit_Emp_Price);
         const cost = this.bookCost_(snap, Util.str(it.Book_ID));
@@ -2838,6 +2847,34 @@ const OperationsEngine = {
       DB_Engine.logAudit(session.userId, session.role, "Delivery", "CANCEL_UNDELIVERED", it.Res_Item_ID, before, it);
       return { success: true, message: "تم إلغاء " + q + " نسخة وتعديل فاتورة الموظف. شغّل التوزيع لتذهب النسخة للمنتظر التالي." };
     });
+  },
+
+  /** استبدال نسخة معيبة بنسخة سليمة من نفس الكتاب: الفاتورة لا تتغير؛ المعيبة تُستبعد من المخزن وتُحمَّل على المكتبة (مطالبة) أو خسارة */
+  exchangeBook_: function(session, it, qty, reason, claimSupplier) {
+    const S = this.S(), q = parseInt(qty, 10) || 0, bId = Util.str(it.Book_ID);
+    Util.require(q > 0 && q <= Util.num(it.Delivered_Qty) - Util.num(it.Returned_Qty), "الكمية أكبر من المستلم.");
+    const snap = this.getStockSnapshot_();
+    const free = snap[bId] ? snap[bId].free : 0;
+    Util.require(free >= q, "مفيش نسخة سليمة حرة في المخزن للكتاب " + bId + " (المتاح " + free + "). سجّل طلب توريد أو انتظر الوارد.");
+    const cost = this.bookCost_(snap, bId), docNo = Counter.next("EMP_EXCHANGE", "EXC"), now = Util.now();
+    const book = DB_Engine.getAllRecords(S.BOOKS).find(b => Util.str(b.Book_ID) === bId) || {};
+    DB_Engine.insertRecordsBatch(S.INVENTORY, [
+      this.inventoryRow_(session, it.Phase_ID, bId, "IN_EMP_RETURN", q, cost, docNo, "استلام نسخة معيبة (استبدال) من " + it.Emp_ID),
+      this.inventoryRow_(session, it.Phase_ID, bId, "ADJUST_LOSS", -q, cost, docNo, "استبعاد نسخة معيبة: " + reason),
+      this.inventoryRow_(session, it.Phase_ID, bId, "OUT_EMP_DELIVERY", -q, cost, docNo, "تسليم نسخة بديلة للموظف " + it.Emp_ID)
+    ]);
+    if (claimSupplier && book.Supplier_ID) DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
+      Sup_Trans_ID: "SCLM-" + docNo, Supplier_ID: book.Supplier_ID, Phase_ID: it.Phase_ID, Trans_Date: Util.today(), Trans_Type: "DAMAGE_CLAIM",
+      Reference_ID: docNo, Debit_Amount: FinancialEngine.roundCurrency(q * cost), Credit_Amount: 0, Payment_Channel: "مطالبة عيب صناعة", Document_Ref: docNo,
+      Recorded_By: Util.actor(session), Notes: "استبدال " + q + " نسخة معيبة من " + (book.Book_Name || bId) + ": " + reason
+    }]);
+    DB_Engine.insertRecordsBatch(S.DELIVERY_RETURNS, [{
+      Doc_ID: "DOC-" + docNo, Doc_Type: "EMP_EXCHANGE", Phase_ID: it.Phase_ID, Party_ID: it.Emp_ID, Trans_Date: now, Book_ID: bId,
+      Qty: q, Unit_Price_Applied: it.Unit_Emp_Price, Total_Amount_Impact: 0, Return_Reason: "استبدال: " + reason, Handled_By: Util.actor(session),
+      Printed_Receipt_No: docNo, Received_By: "", Res_Item_ID: it.Res_Item_ID
+    }]);
+    DB_Engine.logAudit(session.userId, session.role, "Returns", "EMP_EXCHANGE", docNo, null, { item: it.Res_Item_ID, qty: q, claim: !!claimSupplier });
+    return { success: true, receiptNo: docNo, message: "تم الاستبدال (" + q + " نسخة) بإذن " + docNo + " — الفاتورة كما هي" + (claimSupplier ? "، وسُجّلت مطالبة على المكتبة." : ".") };
   },
 
   recordBookReturn: function(session, payload) {
