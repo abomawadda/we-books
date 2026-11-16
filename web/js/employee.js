@@ -429,6 +429,7 @@ const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && t
 function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.track = k.track || ""; Emp.filter.q = ""; Emp.kidIx = i;
   Emp.ben = kidBen(k); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
 on("pickKid", v => openKid(+v));
+on("famTop", () => scrollTo({ top: 0, behavior: "smooth" }));
 
 /** شريط الأبناء (الرئيسية وصفحة الحجز) */
 function kidsStrip(compact) {
@@ -683,7 +684,7 @@ function gradePicker() {
   const go = gradeOrder(), grades = Object.keys(cnt).sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99) || a.localeCompare(b, "ar"));
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
-  return `${ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
+  return `${Emp.open() ? "" : ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
       <div class="grid grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-2.5 min-w-0 text-right flex items-center gap-2 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[11.5px] text-slate-500 leading-snug">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span><span class="block text-[11px] font-bold mt-0.5 ${c ? "text-emerald-600" : "text-brand-600"}">${c ? c + " في السلة" : kidAvail(k) + " كتاب"}</span></span></button>`; }).join("")}</div>
       <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
     : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
@@ -775,6 +776,33 @@ function schoolTypeBadge(t) {
   const m = { "حكومي": ["🏫", "عربي حكومي", "bg-sky-400 text-sky-950"], "لغات": ["🌐", "لغات / تجريبي", "bg-gold-400 text-brand-950"], "أزهر": ["🕌", "أزهري", "bg-emerald-400 text-emerald-950"] }[t || ""] || ["📚", "كل أنواع المدارس", "bg-white/20 text-white"];
   return `<span class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-bold ${m[2]}">${m[0]} ${m[1]}</span>`;
 }
+/** لوحة «أبنائي» الموحّدة في صفحة احجز: إدارة الأفراد (إضافة/تعديل/قريب) + اختيار لمين تحجز */
+function familyPanel() {
+  const ks = myKids(), f = Emp.filter, ro = relOn();
+  const sel = k => k.grade === f.grade && kidBen(k) === Emp.ben;
+  const act = (a, icn, t, cls) => `<button type="button" class="inline-flex items-center gap-1 h-8 px-2.5 rounded-xl text-[12px] font-bold ring-1 transition active:scale-95 ${cls}" data-act="${a}">${ic(icn, "!w-3.5 !h-3.5")} ${t}</button>`;
+  const card = (k, i) => { const on = sel(k), c = kidCartCount(k);
+    return `<button type="button" class="relative shrink-0 w-[132px] snap-start text-right rounded-2xl p-2.5 ring-1 transition active:scale-[.97] ${on ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : k.rel ? "bg-sky-50/60 ring-sky-200 text-slate-800" : "bg-white ring-slate-200 text-slate-800"}" data-act="pickKid" data-id="${i}" aria-pressed="${on}">
+      ${c ? `<span class="absolute top-1.5 left-1.5 min-w-[20px] h-5 px-1 rounded-full text-[10.5px] font-bold num flex items-center justify-center ${on ? "bg-gold-400 text-brand-950" : "bg-brand-600 text-white"}">${c}</span>` : ""}
+      <span class="w-10 h-10 rounded-xl flex items-center justify-center text-[22px] ${on ? "bg-white/15" : k.rel ? "bg-sky-100" : "bg-gold-50"}">${kidEmoji(k)}</span>
+      <b class="block text-[13.5px] mt-1.5 truncate">${esc(kidName(k, i))}</b>
+      <span class="block text-[11px] truncate ${on ? "text-brand-100" : "text-slate-500"}">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}</span>
+      ${on ? `<span class="mt-1.5 inline-flex items-center gap-1 text-[10.5px] font-bold text-gold-300">${ic("check", "!w-3 !h-3")} بتحجز له دلوقتي</span>` : `<span class="mt-1.5 inline-block text-[10.5px] font-semibold ${k.rel ? "text-sky-700" : "text-brand-700"}">اضغط للحجز ←</span>`}</button>`; };
+  if (!ks.length) return `<section class="rounded-3xl ring-1 ring-gold-200 p-4 mb-3 flex items-center gap-3" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)">
+      <span class="w-12 h-12 rounded-2xl bg-white/70 flex items-center justify-center text-[26px] shrink-0">👦👧</span>
+      <div class="flex-1 min-w-0"><b class="block text-brand-950 text-[15px]">أبنائي</b><span class="block text-[12px] text-brand-900/75 leading-relaxed">${gTxt("سجّل أولادك مرة واحدة ونجهّز كتب كل واحد بضغطة — أو اختار الصف مباشرة تحت", "سجّلي أولادك مرة واحدة ونجهّز كتب كل واحد بضغطة — أو اختاري الصف مباشرة تحت")}</span></div>
+      <div class="flex flex-col gap-1.5 shrink-0">${act("kidsEdit", "plus", "إضافة", "bg-brand-700 text-white ring-brand-700")}${ro ? act("addRel", "users", "قريب", "bg-white text-sky-700 ring-sky-200") : ""}</div></section>`;
+  const nk = ks.filter(k => !k.rel).length, nr = ks.length - nk;
+  return `<section class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs p-3.5 mb-3">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0"><span class="w-9 h-9 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">${ic("users")}</span>
+        <div class="min-w-0 leading-tight"><b class="block text-[15px] text-slate-900">أبنائي</b><span class="block text-[11px] text-slate-500">${nk ? nk + (nk === 1 ? " فرد" : " أفراد") : ""}${nk && nr ? " · " : ""}${nr ? nr + " قريب" : ""}</span></div></div>
+      <div class="flex items-center gap-1.5 shrink-0">${act("kidsAddNew", "plus", "إضافة", "bg-brand-700 text-white ring-brand-700")}${act("kidsEdit", "pencil", "تعديل", "bg-white text-slate-700 ring-slate-200")}${ro ? act("addRel", "users", "قريب", "bg-sky-50 text-sky-700 ring-sky-200") : ""}</div>
+    </div>
+    <div class="flex items-center gap-2 mt-3 mb-2"><span class="h-px flex-1 bg-slate-100"></span><span class="text-[11.5px] font-bold text-slate-500">${gTxt("اختار لمين تحجز", "اختاري لمين تحجزي")}</span><span class="h-px flex-1 bg-slate-100"></span></div>
+    <div class="flex gap-2 overflow-x-auto snap-x pb-1 -mx-1 px-1" style="scrollbar-width:none">${ks.map(card).join("")}</div>
+  </section>`;
+}
 function ctxBar() {
   const ks = myKids(), f = Emp.filter;
   if (!ks.length || !Emp.open()) return "";
@@ -788,7 +816,8 @@ function ctxBar() {
     : `<div class="min-w-0 flex-1 text-[13px]">لم تحدد ابنًا للحجز — اختر من الأسماء</div>`;
   const pills = ks.length > 1 ? `<div class="scroll-x !mx-0 !px-0 mt-2 !pb-0">${ks.map((k, j) => { const on = j === i, c = kidCartCount(k);
     return `<button class="shrink-0 inline-flex items-center gap-1.5 h-8 rounded-full px-2.5 text-[12px] font-semibold ring-1 transition ${on ? "bg-gold-400 text-brand-950 ring-gold-400" : "bg-white/10 text-white ring-white/25 hover:bg-white/20"}" data-act="pickKid" data-id="${j}" aria-pressed="${on}">${kidEmoji(k)} ${esc(kidName(k, j))}${c ? `<span class="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-bold flex items-center justify-center ${on ? "bg-brand-900 text-white" : "bg-gold-400 text-brand-950"}">${c}</span>` : ""}</button>`; }).join("")}</div>` : "";
-  return `<div class="hero text-white rounded-2xl px-3 py-2.5 mb-2 shadow-soft"><div class="flex items-center gap-2.5">${who}</div>${pills}</div>`;
+  if (!cur) return ""; // الاختيار من لوحة «أبنائي» أعلى الصفحة — هنا تذكير لاصق بمن تحجز له فقط
+  return `<div class="hero text-white rounded-2xl px-3 py-2.5 mb-2 shadow-soft"><div class="flex items-center gap-2.5">${who}<button type="button" class="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 shrink-0" data-act="famTop">تغيير</button></div></div>`;
 }
 function gradeList() {
   const f = Emp.filter, list = APP.emp.books.filter(b => b.Grade === f.grade && typeOk(b, f.type));
@@ -824,7 +853,7 @@ Router.add("/e/books", view => {
   <div class="lg:grid lg:grid-cols-[1fr_380px] lg:gap-6 items-start">
     <div>
       ${!Emp.open() ? (() => { const psi = phaseStatusInfo(r.activePhase), carry = carryNotice(r.activePhase); const cls = psi.tone === "sky" ? "bg-sky-50 ring-sky-200 text-sky-950" : psi.tone === "slate" ? "bg-slate-100 ring-slate-200 text-slate-800" : "bg-amber-50 ring-amber-200 text-amber-950"; const icCls = psi.tone === "sky" ? "text-sky-600" : psi.tone === "slate" ? "text-slate-600" : "text-amber-600"; return `<div class="rounded-2xl ${cls} ring-1 p-4 mb-4 space-y-2.5 text-sm"><div class="flex items-start gap-3">${ic(psi.icon, "text-lg mt-0.5 shrink-0 " + icCls)}<div class="flex-1 min-w-0"><b class="block text-[14.5px] leading-snug">${esc(psi.title)}</b><div class="text-[12.5px] opacity-85 mt-0.5 leading-relaxed">${esc(psi.sub)}</div></div></div>${carry ? `<div class="rounded-xl bg-white/80 ring-1 ring-black/5 px-3 py-2 text-[12.5px] flex flex-wrap items-center justify-between gap-2"><span class="flex items-center gap-2 font-semibold">${ic("arrow-left-right", "shrink-0 " + icCls)}<span>${esc(carry.text)}</span></span><a href="#/e/orders" class="font-bold underline shrink-0">عرض حجوزاتي ←</a></div>` : ""}</div>`; })() : ""}
-      ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-300 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900"><b class="block text-brand-950">أنت تحجز الآن لـ: ${esc(Emp.ben || gradeTitle(Emp.filter.grade))}</b>اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : myKids().length ? `<div class="mb-3">${kidsStrip(true)}</div>` : ""}
+      ${Emp.wzManual ? `<div class="mb-3 rounded-2xl bg-gold-50 ring-1 ring-gold-300 p-3 flex items-center gap-3"><span class="text-[24px]">🧭</span><div class="flex-1 text-[13px] text-brand-900"><b class="block text-brand-950">أنت تحجز الآن لـ: ${esc(Emp.ben || gradeTitle(Emp.filter.grade))}</b>اختار الكتب، ولما تخلص اضغط «${Emp.wzManual === "review" ? "المراجعة" : "التالي"}».</div><button class="btn btn-primary btn-sm shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button></div>` : Emp.open() ? familyPanel() : ""}
       ${f.grade ? `<div class="rounded-3xl p-4 mb-3 text-white relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
         <span class="absolute -left-6 -top-8 w-32 h-32 rounded-full bg-white/5"></span>
         <div class="flex items-center gap-3 relative"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-2xl shrink-0">${ic("graduation-cap")}</span>
