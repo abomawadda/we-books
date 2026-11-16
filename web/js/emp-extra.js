@@ -556,12 +556,35 @@ function openInstaPay(num) {
   else if (isIOS()) window.location.href = "itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=InstaPay%20Egypt";
 }
 on("openInsta", () => openInstaPay(payS().PAY_INSTAPAY));
+// بطاقة الدفع بإنستاباي: رمز QR نظيف (يُعاد توليده من رابط الدفع) + عنوان الدفع IPA بنسخ سريع + فتح التطبيق + حفظ الرمز كصورة
+const INSTA_DEFAULT = { link: "https://ipn.eg/C/Q/mahmoud.aliraky/instapay?ISIGN=23052601MEQCIBZG2PIdL9Sw+02NldtaUIAkuwpiY81zB8j7m+WLKGHeAiB6eWQDCbq4OTL0M7KUpdeMAhyHVZI0ImBgwbwg61/qjw==", ipa: "mahmoud.aliraky@instapay" };
+const instaInfo = () => { const s = payS(); return { link: s.PAY_INSTAPAY_LINK || INSTA_DEFAULT.link, ipa: s.PAY_INSTAPAY_IPA || INSTA_DEFAULT.ipa, num: s.PAY_INSTAPAY || "", holder: s.CASH_ACCOUNT_HOLDER || "" }; };
+async function instaQrSvg(link) {
+  try { if (!window.qrcode) await qrLib(); const q = window.qrcode(0, "H"); q.addData(link); q.make();
+    const n = q.getModuleCount(), c = 10, pad = 2, sz = (n + pad * 2) * c; let path = "";
+    const hole = k => { const m = Math.floor(n * 0.22), a = Math.floor((n - m) / 2); return k >= a && k < a + m; };
+    for (let r = 0; r < n; r++) for (let k = 0; k < n; k++) if (q.isDark(r, k) && !(hole(r) && hole(k))) path += `M${(k + pad) * c} ${(r + pad) * c}h${c}v${c}h-${c}z`;
+    const lg = sz * 0.2, lo = (sz - lg) / 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${sz} ${sz}" width="100%" height="100%"><defs><linearGradient id="ig" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b1d63"/><stop offset="1" stop-color="#6a3aa0"/></linearGradient></defs><rect width="${sz}" height="${sz}" fill="#fff"/><path d="${path}" fill="url(#ig)"/>
+      <rect x="${lo}" y="${lo}" width="${lg}" height="${lg}" rx="${lg * 0.22}" fill="#fff" stroke="#f97316" stroke-width="${c * 0.6}"/><text x="${sz / 2}" y="${sz / 2 + lg * 0.16}" text-anchor="middle" font-family="Arial,sans-serif" font-weight="900" font-size="${lg * 0.42}" fill="#5b2a91">IPN</text></svg>`; } catch (_) { return ""; }
+}
 const _payNow0 = ACTIONS.payNow;
-on("payNow", () => {
+on("payNow", async () => {
   _payNow0();
-  const s = payS(); if (!s.PAY_INSTAPAY) return;
   const m = UI._stack[UI._stack.length - 1]; if (!m || !m.root) return;
-  const g = m.root.querySelector(".grid.gap-2"); if (g) g.insertAdjacentHTML("afterbegin", `<button class="btn btn-primary w-full !h-12" data-act="openInsta">⚡ افتح إنستاباي وادفع</button>`);
+  const I = instaInfo(), g = m.root.querySelector(".grid.gap-2"); if (!g) return;
+  g.insertAdjacentHTML("afterbegin", `<section class="rounded-3xl overflow-hidden ring-1 ring-brand-200 bg-white shadow-sm">
+      <div class="px-4 py-2.5 text-white flex items-center justify-between" style="background:linear-gradient(90deg,#3b1d63,#6a3aa0)"><b class="text-[15px]">⚡ ادفع بإنستاباي</b><span class="text-[11.5px] opacity-80">امسح أو اضغط</span></div>
+      <div class="p-4 text-center"><div id="ipQr" class="mx-auto w-[210px] h-[210px] rounded-2xl ring-1 ring-slate-100 p-1.5 bg-white"></div>
+        ${I.holder ? `<div class="text-[13px] text-slate-500 mt-2">باسم <b class="text-slate-800">${esc(I.holder)}</b></div>` : ""}
+        <button class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-brand-50 ring-1 ring-brand-200 px-3 h-9 text-[13.5px] font-bold text-brand-800" data-ipcopy="${esc(I.ipa)}" dir="ltr">${esc(I.ipa)} ${ic("copy")}</button>
+        <div class="grid grid-cols-2 gap-2 mt-3"><a class="btn btn-primary !h-11" href="${esc(I.link)}" target="_blank" rel="noopener">${ic("send")} افتح إنستاباي</a><button class="btn btn-outline !h-11" data-ipsave>${ic("download")} احفظ الرمز</button></div>
+        <p class="text-[11.5px] text-slate-500 mt-2">من موبايل تاني: امسح الرمز من تطبيق إنستاباي. من نفس الموبايل: «افتح إنستاباي» أو احفظ الرمز وارفعه من التطبيق.</p></div></section>`);
+  const svg = await instaQrSvg(I.link), box = m.root.querySelector("#ipQr"); if (box) box.innerHTML = svg || "";
+  m.root.querySelector("[data-ipcopy]").onclick = e => { try { navigator.clipboard.writeText(I.ipa); } catch (_) {} toast("اتنسخ عنوان الدفع 👌", "success"); };
+  m.root.querySelector("[data-ipsave]").onclick = () => { if (!svg) return; const img = new Image(), cv = document.createElement("canvas"); cv.width = cv.height = 900;
+    img.onload = () => { const x = cv.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, 900, 900); x.drawImage(img, 30, 30, 840, 840); const a = document.createElement("a"); a.href = cv.toDataURL("image/png"); a.download = "instapay-qr.png"; a.click(); };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); };
 });
 
 // ================================================================ نزّل التطبيق على الشاشة الرئيسية

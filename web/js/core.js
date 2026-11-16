@@ -450,6 +450,7 @@ const Router = {
   render() {
     if (UI._stack.length) return;
     const p = this.path();
+    if (p.startsWith("/v/") && typeof DocVerify !== "undefined") { DocVerify.render(decodeURIComponent(p.slice(3))); return; }
     if (!APP.user) { Shell.renderLogin(); return; }
     const scope = APP.user.userType === "ADMIN" ? "/a/" : "/e/";
     const key = p.startsWith(scope) ? p.split("?")[0] : scope + (scope === "/a/" ? "dash" : "home");

@@ -3156,7 +3156,7 @@ on("empReturn", async id => {
 function printDoc(no) {
   const d = A(), { e, b } = maps(), lines = d.deliveryReturns.filter(x => x.Printed_Receipt_No === no); if (!lines.length) return;
   const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : "إذن ارتجاع كتب";
-  Doc.show(title + " " + no, Doc.delivery({ title, no, date: f.Trans_Date, emp: { name: empName(e, f.Party_ID), id: f.Party_ID }, lines: lines.map(l => ({ code: l.Book_ID, name: bookName(b, l.Book_ID), qty: n(l.Qty) })), note: f.Received_By ? "المستلم: " + f.Received_By + " · المسلِّم: " + (f.Handled_By || "") : "" }), { file: no });
+  Doc.show(title + " " + no, Doc.delivery({ title, no, date: f.Trans_Date, emp: { name: empName(e, f.Party_ID), id: f.Party_ID }, lines: lines.map(l => ({ code: l.Book_ID, name: bookName(b, l.Book_ID), qty: n(l.Qty) })), note: f.Received_By ? "المستلم: " + f.Received_By + " · المسلِّم: " + (f.Handled_By || "") : "" }), { file: no, ref: no });
 }
 on("printDoc", id => printDoc(id));
 
@@ -3295,7 +3295,7 @@ on("changePlan", async resId => {
 function printReceipt(no) {
   const p = A().empPayments.find(x => x.Receipt_No === no); if (!p) return;
   const { e } = maps(), inv = A().empInvoices.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {};
-  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: { name: empName(e, p.Emp_ID), id: p.Emp_ID }, amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By, voided: isTrue(p.Is_Voided), voidReason: p.Void_Reason }), { file: no });
+  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: { name: empName(e, p.Emp_ID), id: p.Emp_ID }, amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By, voided: isTrue(p.Is_Voided), voidReason: p.Void_Reason }), { file: no, ref: no });
 }
 /** فاتورة موظف (A5) من بيانات الإدارة */
 function invoiceData(invId) {
@@ -3307,7 +3307,7 @@ function invoiceData(invId) {
     adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: i.Total_Paid_Amount, remaining: i.Remaining_Balance, credit: i.Credit_Balance, down: i.Down_Payment_Required,
     schedule: d.installments.filter(x => x.Emp_Inv_ID === i.Emp_Inv_ID).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date))).map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) };
 }
-on("printInvA", id => { const d = invoiceData(id); if (d) Doc.show("فاتورة " + id, Doc.invoice(d), { file: id }); });
+on("printInvA", id => { const d = invoiceData(id); if (d) Doc.show("فاتورة " + id, Doc.invoice(d), { file: id, ref: id }); });
 /** طلب حجز موظف (A5) من بيانات الإدارة */
 on("printResA", empId => {
   const d = A(), h = d.resHeaders.find(x => x.Phase_ID === APP.phaseId && x.Emp_ID === empId); if (!h) return toast("لا حجز لهذا الموظف في المرحلة", "info");
@@ -3315,7 +3315,7 @@ on("printResA", empId => {
   Doc.show("طلب حجز " + h.Res_ID, Doc.reservation({ no: h.Res_ID, date: h.Created_At, phase: phaseObj().Phase_Name, status: h.Res_Status === "Cancelled" ? "ملغي" : "مؤكد",
     emp: { name: emp.Full_Name || empId, id: empId, dept: emp.Department, mobile: emp.Mobile },
     lines: Object.entries(lines).map(([k, q]) => { const bk = b[k.split(SEP)[0]] || {}; return { code: bk.Book_ID || k.split(SEP)[0], name: bk.Book_Name, grade: bk.Grade, ben: k.split(SEP)[1], qty: q, cover: bk.Cover_Price, price: bk.Emp_Selling_Price }; }),
-    plan: { method: h.Payment_Method_Selected, down: h.Calculated_Down_Payment, count: n(h.Installment_Count), per: h.Installment_Value } }), { file: h.Res_ID });
+    plan: { method: h.Payment_Method_Selected, down: h.Calculated_Down_Payment, count: n(h.Installment_Count), per: h.Installment_Value } }), { file: h.Res_ID, ref: h.Res_ID });
 });
 /** أوامر التوريد للمكتبات (A4، صفحة لكل مكتبة) */
 on("printPO", async () => {
@@ -3330,7 +3330,7 @@ on("printPO", async () => {
     return Doc.purchaseOrder({ no: "PO-" + APP.phaseId + "-" + sid, date: (lines[0].Frozen_At || "").slice(0, 10), phase: phaseObj().Phase_Name, requester,
       supplier: { name: sp.Supplier_Name || sid, contact: sp.Contact_Person, phone: sp.Phone },
       lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, publisher: bk.Publisher, subject: bk.Subject, part: bk.Book_Part, grade: Doc.shortGrade(bk.Grade), gradeRank: gl.indexOf(bk.Grade), tracks: String(bk.Tracks || "").replace(/،/g, " / "), qty: n(p.Net_Order_To_Supplier_Qty), pop: pop[p.Book_ID] || 0 }; }) }); }).join("");
-  Doc.show("طلب التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "طلب-توريد-" + APP.phaseId });
+  Doc.show("طلب التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "طلب-توريد-" + APP.phaseId, ref: "PO-" + APP.phaseId + "-" + Object.keys(bySup)[0] });
 });
 
 

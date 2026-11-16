@@ -312,6 +312,24 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     ).join("\n");
   },
   /** يفتح معاينة داخل التطبيق مع: حفظ PDF/طباعة، حفظ صورة، مشاركة */
+  /** ختم المستند: ترقيم الصفحات عند تعددها + رمز QR للتحقق من المنظومة (لو للمستند رقم مرجعي) */
+  async stamp(doc, ref) {
+    if (!doc || !doc.body) return;
+    const pages = [...doc.querySelectorAll("section.page")], N = pages.length;
+    let svg = "";
+    if (ref) { try { if (typeof qrLib === "function" && !window.qrcode) await Promise.race([qrLib(), new Promise(r => setTimeout(r, 1500))]);
+      const Q = window.qrcode; if (Q) { const q = Q(0, "M"); q.addData(Doc.verifyUrl(ref)); q.make(); svg = q.createSvgTag({ cellSize: 2, margin: 0, scalable: true }); } } catch (_) {} }
+    const st = doc.createElement("style");
+    st.textContent = `section.page{position:relative}.vstamp{position:absolute;left:5mm;bottom:4mm;display:flex;align-items:center;gap:1.6mm;font-size:6.5pt;color:#6b5f86;line-height:1.25;background:#fff;padding:.8mm;border-radius:1.5mm}.vstamp .q{width:13mm;height:13mm}.vstamp.in{position:static;padding:0;margin-right:auto;order:9}.vstamp.in .q{width:11mm;height:11mm}.ft.ftq{display:flex;align-items:center;gap:3mm;flex-wrap:nowrap}.vstamp .q svg{width:100%;height:100%}.vstamp b{color:#3b1d63;font-size:7pt}
+      .pgno{position:absolute;right:0;left:0;bottom:2mm;text-align:center;font-size:7.5pt;color:#6b5f86}@media print{.vstamp,.pgno{color:#000!important}.vstamp b{color:#000!important}}`;
+    doc.head.appendChild(st);
+    pages.forEach((pg, i) => {
+      if (svg) { const ft = pg.querySelector(".ft"), h = `<div class="vstamp${ft ? " in" : ""}"><div class="q">${svg}</div><div><b>تحقق من المستند</b><br>امسح الرمز<br><span dir="ltr">${esc(ref)}</span></div></div>`;
+        if (ft) { ft.classList.add("ftq"); ft.insertAdjacentHTML("beforeend", h); } else pg.insertAdjacentHTML("beforeend", h); }
+    });
+    if (N > 1) { doc.querySelectorAll(".po-pg").forEach(x => x.remove()); pages.forEach((pg, i) => pg.insertAdjacentHTML("beforeend", `<div class="pgno">صفحة ${i + 1} من ${N}</div>`)); }
+  },
+  verifyUrl(ref) { return location.href.replace(/[#?].*$/, "") + "#/v/" + encodeURIComponent(ref); },
   show(title, pagesHtml, opts) {
     opts = opts || {};
     const size = opts.size || "A5", file = (opts.file || title).replace(/[\\/:*?"<>|]+/g, "-");
@@ -328,7 +346,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     document.body.appendChild(root);
     const fr = root.querySelector("iframe");
     const fit = () => { const doc = fr.contentDocument; if (!doc || !doc.body) return; const pw = size === "A4" ? 794 : 560; const z = Math.min(1, (fr.clientWidth - 12) / pw); doc.body.style.zoom = z; fr.style.height = Math.max(root.clientHeight - 60, doc.documentElement.scrollHeight * 1) + "px"; };
-    fr.onload = () => setTimeout(fit, 150);
+    fr.onload = () => { Doc.stamp(fr.contentDocument, opts.ref).finally(() => setTimeout(fit, 150)); };
     fr.srcdoc = html;
     const close = () => { root.remove(); window.removeEventListener("resize", fit); };
     window.addEventListener("resize", fit);
@@ -380,5 +398,22 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       s.onerror = () => { win._h2c = null; rej(new Error("lib")); };
       win.document.head.appendChild(s);
     }));
+  }
+};
+
+// ---------------------------------------------------------------- صفحة التحقق العامة #/v/<رقم المستند> (بدون دخول)
+const DocVerify = {
+  async render(ref) {
+    const app = document.getElementById("app") || document.body;
+    const sp = document.getElementById("splash"); if (sp) sp.remove();
+    const box = (icon, tone, title, body) => `<div class="min-h-screen grid place-items-center p-4 bg-slate-50"><div class="card w-full max-w-sm p-6 text-center">
+      <div class="text-[46px]">${icon}</div><h1 class="text-[19px] font-extrabold ${tone} mt-1">${title}</h1><div class="text-[12.5px] text-slate-500 num mt-1" dir="ltr">${esc(ref)}</div>
+      <div class="mt-4 text-right">${body}</div><a href="#/" class="btn btn-outline w-full mt-5">فتح المنصة</a></div></div>`;
+    app.innerHTML = box("⏳", "text-slate-700", "جاري التحقق…", "");
+    let r; try { r = await call("VERIFY_DOC", { ref }); } catch (_) { r = { success: false, message: "تعذّر الاتصال — حاول تاني." }; }
+    if (!r || !r.success) { app.innerHTML = box("⚠️", "text-amber-700", "تعذّر التحقق", `<p class="text-[13.5px] text-slate-600 text-center">${esc((r && r.message) || "")}</p>`); return; }
+    if (!r.found) { app.innerHTML = box("❌", "text-rose-700", "مستند غير مسجّل", `<p class="text-[13.5px] text-slate-600 text-center">الرقم ده مش موجود في المنظومة. المستند ممكن يكون غير صحيح أو معدّل.</p>`); return; }
+    const kv = (k, v) => v === undefined || v === null || v === "" ? "" : `<div class="flex justify-between gap-3 py-1.5 border-b border-slate-100 text-[13.5px]"><span class="text-slate-500">${esc(k)}</span><b class="text-slate-900">${esc(String(v))}</b></div>`;
+    app.innerHTML = box("✅", "text-emerald-700", "مستند صحيح صادر من المنظومة", (r.fields || []).map(f => kv(f[0], f[1])).join("") + `<p class="text-[11.5px] text-slate-400 mt-3 text-center">البيانات المعروضة هي الحالية في المنظومة وقت المسح.</p>`);
   }
 };

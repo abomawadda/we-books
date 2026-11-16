@@ -23,8 +23,8 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
       lines: Array.from({ length: 58 }, (_, i) => ({ code: ['P4', 'P5', 'P6', 'M1', 'M2'][i % 5] + '-0' + (10 + i), publisher: ['سلاح التلميذ', 'الأضواء', 'المعاصر', 'الامتحان', 'بيت باي بيت'][i % 5], subject: ['عربي', 'إنجليزي', 'رياضيات', 'علوم', 'دراسات', 'دين', 'ماث', 'ساينس'][i % 8], part: i % 9 === 0 ? 'بلاس' : '', grade: ['4 ابتدائي', '5 ابتدائي', '6 ابتدائي', '1 إعدادي', '2 إعدادي'][i % 5], gradeRank: i % 5, qty: 1 + (i % 3 === 0 ? 1 : 0), pop: 10 - (i % 5) * 2 })) })})`,
   };
   for (const [k, expr] of Object.entries(docs)) {
-    await p.evaluate(([e, k]) => { document.querySelectorAll('.fixed').forEach(x => x.remove()); Doc.show(k, eval(e), { size: k === 'po' ? 'A4' : 'A5' }); }, [expr.replace(", {size:'A4'})", ")"), k]);
-    await p.waitForTimeout(900);
+    await p.evaluate(([e, k]) => { document.querySelectorAll('.fixed').forEach(x => x.remove()); Doc.show(k, eval(e), { size: k === 'po' ? 'A4' : 'A5', ref: k === 'po' ? 'PO-PH-02-SUP-02' : 'EINV-PH-01-1001' }); }, [expr.replace(", {size:'A4'})", ")"), k]);
+    await p.waitForTimeout(1800);
     const fr = await (await p.$('iframe')).contentFrame(); await fr.evaluate(() => document.body.style.zoom = 1);
     const pgs = await fr.$$('.page'); for (let pi = 0; pi < pgs.length; pi++) await pgs[pi].screenshot({ path: path.join(OUT, 'doc-' + k + (pi ? '-' + (pi + 1) : '') + '.png') });
   }
