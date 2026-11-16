@@ -197,7 +197,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
         <div class="sum">${Doc.kv("قبل الخصم", `<span class="num sub">${Doc.money(cover)}</span>`)}${Doc.kv("قيمة الكتب", `<span class="num">${Doc.money(gross)}</span>`)}${d.adj ? Doc.kv(n(d.adj) < 0 ? "خصم" : "إضافة", `<span class="num">${Doc.money(d.adj)}</span>`) : ""}<div class="kv big"><span>الصافي (ج.م)</span><b class="num">${Doc.money(net)}</b></div>
           ${Doc.kv("المقدم المطلوب", `<span class="num">${Doc.money(d.down)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(d.paid)}</span>`)}<div class="kv" style="color:${n(d.remaining) ? "#be123c" : "#047857"}"><span>المتبقي</span><b class="num">${Doc.money(d.remaining)}</b></div>${n(d.credit) ? `<div class="kv save"><span>رصيد مستحق الرد</span><b class="num">${Doc.money(d.credit)}</b></div>` : ""}<div class="kv save"><span>وفّرت</span><b class="num">${Doc.money(cover - net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>`}
-      <div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.invDensity(rowsCount));
+      <div class="pay-row">${n(d.remaining) > 0 ? `<div class="insta-slot" data-amt="${Doc.money(d.remaining)}"></div>` : ""}<div class="sig"><div>المستلم</div><div>أمين الصندوق</div><div>مسؤول المبادرة</div></div></div>${Doc.foot(d.no)}`, d.status === "Paid_In_Full" ? "مسددة" : "", "", Doc.invDensity(rowsCount));
   },
   /** إيصال: d = {no,date,emp,amount,method,ref,inv,net,remaining,collector,voided,voidReason} */
   receipt(d) {
@@ -321,12 +321,18 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       const Q = window.qrcode; if (Q) { const q = Q(0, "M"); q.addData(Doc.verifyUrl(ref)); q.make(); svg = q.createSvgTag({ cellSize: 2, margin: 0, scalable: true }); } } catch (_) {} }
     const st = doc.createElement("style");
     st.textContent = `section.page{position:relative}.vstamp{position:absolute;left:5mm;bottom:4mm;display:flex;align-items:center;gap:1.6mm;font-size:6.5pt;color:#6b5f86;line-height:1.25;background:#fff;padding:.8mm;border-radius:1.5mm}.vstamp .q{width:13mm;height:13mm}.vstamp.in{position:static;padding:0;margin-right:auto;order:9}.vstamp.in .q{width:11mm;height:11mm}.ft.ftq{display:flex;align-items:center;gap:3mm;flex-wrap:nowrap}.vstamp .q svg{width:100%;height:100%}.vstamp b{color:#3b1d63;font-size:7pt}
+      .insta-slot{display:flex;align-items:center;gap:3mm;border:1.2px dashed #8b6fc0;border-radius:2.5mm;padding:1mm 2mm;margin:1mm 0 0;font-size:6.8pt;line-height:1.3;color:#4c4466;break-inside:avoid}.insta-slot .iq{width:21mm;height:21mm;flex:none}.insta-slot .iq svg{width:100%;height:100%}.insta-slot b{color:#3b1d63;font-size:8pt}.pay-row{margin-top:auto;display:flex;gap:3mm;align-items:flex-end}.pay-row .sig{flex:1;margin-top:0}.pay-row .insta-slot{flex:0 0 48%;margin:2mm 0 0}.vstamp.in .q{width:10mm!important;height:10mm!important}.insta-slot small{color:#8d84a3;display:block}
       .pgno{position:absolute;right:0;left:0;bottom:2mm;text-align:center;font-size:7.5pt;color:#6b5f86}@media print{.vstamp,.pgno{color:#000!important}.vstamp b{color:#000!important}}`;
     doc.head.appendChild(st);
     pages.forEach((pg, i) => {
-      if (svg) { const ft = pg.querySelector(".ft"), h = `<div class="vstamp${ft ? " in" : ""}"><div class="q">${svg}</div><div><b>تحقق من المستند</b><br>امسح الرمز<br><span dir="ltr">${esc(ref)}</span></div></div>`;
+      if (svg) { const ft = pg.querySelector(".ft"), h = `<div class="vstamp${ft ? " in" : ""}"><div class="q">${svg}</div><div><b>تحقق من المستند</b><br><span dir="ltr">${esc(ref)}</span></div></div>`;
         if (ft) { ft.classList.add("ftq"); ft.insertAdjacentHTML("beforeend", h); } else pg.insertAdjacentHTML("beforeend", h); }
     });
+    // رمز الدفع بإنستاباي على الفاتورة (لو عليها متبقي)
+    const slots = doc.querySelectorAll(".insta-slot");
+    if (slots.length && typeof instaQrSvg === "function") { const I = instaInfo(), q = await instaQrSvg(I.link);
+      if (q) slots.forEach(sl => { sl.innerHTML = `<div class="iq">${q}</div><div><b>ادفع المتبقي <span class="num">${esc(sl.dataset.amt)}</span> ج.م بإنستاباي</b><div>امسح الرمز من التطبيق أو حوّل على:</div><div class="num" dir="ltr">${esc(I.ipa)}</div></div>`; });
+      else slots.forEach(sl => sl.remove()); } else slots.forEach(sl => sl.remove());
     if (N > 1) { doc.querySelectorAll(".po-pg").forEach(x => x.remove()); pages.forEach((pg, i) => pg.insertAdjacentHTML("beforeend", `<div class="pgno">صفحة ${i + 1} من ${N}</div>`)); }
   },
   verifyUrl(ref) { return location.href.replace(/[#?].*$/, "") + "#/v/" + encodeURIComponent(ref); },
