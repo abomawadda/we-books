@@ -455,8 +455,8 @@ function kdHTML() {
   const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
   const tracks = k.grade ? gradeTracks(k.grade) : [];
   const nameDone = !!k._nameOk; // خطوة «مين؟» أولاً لكل فرد (الاسم اختياري للأبناء وإجباري للقريب)
-  const trackDone = !tracks.length || !!(k._trackOk || k.track || k.type);
-  const typeDone = !!(k.grade && trackDone && (k._typeOk || k.type));
+  const trackDone = !tracks.length || !!k._trackOk; // «تغيير» يعيد الخطوة فعلاً حتى لو فيه قيمة قديمة
+  const typeDone = !!(k.grade && trackDone && k._typeOk);
   const done = KD.list.filter(x => x.grade).length;
   const types = [["حكومي", "building-2", "عربي"], ["لغات", "graduation-cap", "تجريبي / لغات"], ["أزهر", "book-marked", "معاهد أزهرية"], ["", "layout-grid", "اعرض الكل"]];
   const who = k.rel ? esc(relYou(k.rel)) + (k.name ? " " + esc(k.name) : "") : (k.gender === "g" ? "👧 بنتك" : "👦 ابنك") + (k.name ? " " + esc(k.name) : "");
@@ -472,7 +472,7 @@ function kdHTML() {
     { id: "stage", t: "المرحلة", q: "في أي مرحلة دراسية؟", done: nameDone && !!st, v: esc(st), body: `<div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-3 text-[13.5px] font-bold ring-1 transition bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div>` },
     { id: "grade", t: "الصف", q: "في سنة كام؟", done: !!k.grade, v: esc(gradeTitle(k.grade || "")), body: `<div class="grid grid-cols-3 gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-12 rounded-xl text-[14px] font-bold ring-1 transition bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>` }]
     .concat(tracks.length ? [{ id: "track", t: "الشعبة", q: "الشعبة إيه؟", done: !!k.grade && trackDone, v: esc(k.track || "لسه مش محددة"), body: `<p class="text-[11.5px] text-slate-500 -mt-1">نعرض كتب الشعبة + الكتب المشتركة</p><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div>` }] : [])
-    .concat([{ id: "type", t: "نوع المدرسة", q: "نوع المدرسة؟", done: typeDone, v: esc(k.type || "كل المدارس"), body: `<div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 bg-white ring-slate-200 active:scale-95" data-act="kdType" data-id="${esc(t[0])}">
+    .concat([{ id: "type", t: "نوع المدرسة", q: "نوع المدرسة؟", done: typeDone, v: esc(k.type || "كل المدارس"), body: `<div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 active:scale-95 ${(k.type || "") === t[0] && t[0] ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"}">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div>` }]);
   const curIx = steps.findIndex(x => !x.done), cur = steps[curIx];
   return `
