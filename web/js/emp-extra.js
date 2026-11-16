@@ -795,3 +795,16 @@ _wrap("/e/home", view => {
   const dl = Emp.daysLeft(); if (!Emp.open() || !Emp.dirty || dl === null || dl > 2) return;
   afterHead(view, `<section class="card p-4 mb-3 ring-2 ring-rose-200 bg-rose-50/50 flex items-center gap-3"><span class="text-[28px]">⏰</span><div class="flex-1"><b class="text-[14.5px] text-rose-800">عندك كتب في السلة لسه ما أكدتهاش</b><div class="text-[12.5px] text-slate-600">الحجز بيقفل ${dl <= 0 ? "النهارده" : dl === 1 ? "بكرة" : "بعد يومين"} — أكّد قبلها عشان أسبقيتك تتحسب.</div></div><button class="btn btn-primary btn-sm" data-act="openCart">أكّد</button></section>`);
 });
+
+// ================================================================ مرحلة مقفولة ومكانش ليه فيها حجز (وصلها من رابط/إشعار قديم): رسالة لطيفة بدل صفحة فاضية
+function noBookingPhaseCard() {
+  const r = APP.emp || {}, ph = r.activePhase; if (!ph || Emp.open()) return "";
+  if ((r.myReservationItems || []).some(i => i.Phase_ID === ph.Phase_ID) || (r.myInvoices || []).some(i => i.Phase_ID === ph.Phase_ID)) return "";
+  const open = (r.phases || []).find(p => p.Booking_Open), mine = Shell.empPhases(r).filter(p => p.Phase_ID !== ph.Phase_ID).pop();
+  const go = open ? `<button class="btn btn-primary btn-sm" data-act="setPhase" data-id="${esc(open.Phase_ID)}">${ic("sparkles")} الحجز مفتوح في «${esc(open.Phase_Name)}»</button>`
+    : mine ? `<button class="btn btn-outline btn-sm" data-act="setPhase" data-id="${esc(mine.Phase_ID)}">${ic("package-check")} حجزك في «${esc(mine.Phase_Name)}»</button>` : "";
+  return `<section class="card p-4 mb-4 ring-1 ring-slate-200"><div class="flex items-start gap-3"><span class="text-[26px]">📘</span><div class="flex-1 min-w-0">
+    <b class="text-[14.5px] text-slate-900">«${esc(ph.Phase_Name)}» اتقفلت ومكانش ليك فيها حجز</b>
+    <div class="text-[12.5px] text-slate-600 mt-0.5">${open ? "مفيش مشكلة — تقدر تحجز دلوقتي في المرحلة المفتوحة." : "أول ما تفتح مرحلة جديدة هيوصلك إشعار في الجرس."}</div>${go ? `<div class="mt-2.5">${go}</div>` : ""}</div></div></section>`;
+}
+["/e/home", "/e/orders", "/e/books"].forEach(p => _wrap(p, view => afterHead(view, noBookingPhaseCard())));
