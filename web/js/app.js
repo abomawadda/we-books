@@ -224,6 +224,11 @@ const Shell = {
   },
   rerender() { if (APP.user) Shell.mount(Router.current, Router.routes[Router.current]); },
 
+  /** مراحل الموظف المعروضة: اللي حجز فيها + المفتوحة للحجز فقط (المرحلة المقفولة بلا حجز لا تظهر) */
+  empPhases(d) {
+    const mine = new Set([...(d.myReservations || []), ...(d.myReservationItems || []), ...(d.myInvoices || [])].map(x => x.Phase_ID));
+    return (d.phases || []).filter(p => p.Booking_Open || mine.has(p.Phase_ID));
+  },
   renderPhaseBox() {
     const box = $("#phaseBox"); if (!box) return;
     const d = APP.user.userType === "ADMIN" ? APP.adm : APP.emp;
@@ -231,6 +236,11 @@ const Shell = {
     const ph = d.phases.find(p => p.Phase_ID === APP.phaseId) || {};
     const st = ph.Effective_Status || ph.Phase_Status;
     $("#hdSub").innerHTML = "";
+    const list = APP.user.userType === "ADMIN" ? d.phases : Shell.empPhases(d);
+    if (APP.user.userType !== "ADMIN" && list.length <= 1 && (!list.length || list[0].Phase_ID === APP.phaseId)) {
+      box.innerHTML = ph.Phase_Name ? `<span class="flex items-center gap-2 h-10 px-3 rounded-xl bg-white ring-1 ring-slate-200 max-w-[46vw] sm:max-w-xs"><span class="w-2 h-2 rounded-full shrink-0 ${st === "Open" ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}"></span><span class="text-[13px] font-semibold text-slate-700 truncate">${esc(ph.Phase_Name)}</span></span>` : "";
+      return;
+    }
     box.innerHTML = `<button data-act="pickPhase" class="flex items-center gap-2 h-10 pl-2.5 pr-3 rounded-xl bg-white ring-1 ring-slate-200 hover:ring-brand-300 transition max-w-[46vw] sm:max-w-xs">
       <span class="w-2 h-2 rounded-full shrink-0 ${st === "Open" ? "bg-emerald-500 animate-pulse" : st === "Completed" ? "bg-slate-300" : "bg-amber-500"}"></span>
       <span class="text-[13px] font-semibold text-slate-700 truncate">${esc(ph.Phase_Name || "اختر المرحلة")}</span>${ic("chevron-down", "text-slate-400")}</button>`;
@@ -270,12 +280,13 @@ on("toggleNatEye", (_, el) => { const i = $("#lgNat"); if (!i) return; i.type = 
 on("refresh", async (_, el) => { el.classList.add("animate-spin"); APP.settlement = null; await reloadData(); el.classList.remove("animate-spin"); });
 on("pickPhase", () => {
   const d = APP.user.userType === "ADMIN" ? APP.adm : APP.emp; if (!d) return;
-  const m = UI.open(`<div class="space-y-2">${d.phases.slice().reverse().map(p => {
+  const list = APP.user.userType === "ADMIN" ? d.phases : Shell.empPhases(d);
+  const m = UI.open(`<div class="space-y-2">${list.slice().reverse().map(p => {
     const st = p.Effective_Status || p.Phase_Status, cur = p.Phase_ID === APP.phaseId;
     return `<button data-act="setPhase" data-id="${esc(p.Phase_ID)}" class="w-full flex items-center gap-3 rounded-2xl p-3.5 text-right ring-1 transition ${cur ? "ring-brand-400 bg-brand-50" : "ring-slate-200 hover:bg-slate-50"}">
       <span class="w-10 h-10 rounded-xl flex items-center justify-center ${cur ? "bg-brand-700 text-white" : "bg-slate-100 text-slate-500"}">${ic("calendar-range")}</span>
-      <span class="flex-1 min-w-0"><span class="block font-bold text-slate-900 truncate">${esc(p.Phase_Name)}</span><span class="block text-xs text-slate-500 num">${esc(day(p.Start_DateTime))} ← ${esc(day(p.End_DateTime))}</span></span>${pill(st)}</button>`;
-  }).join("")}</div>`, { title: "اختر المرحلة", sub: "تُعرض البيانات والعمليات للمرحلة المختارة" });
+      <span class="flex-1 min-w-0"><span class="block font-bold text-slate-900 truncate">${esc(p.Phase_Name)}</span><span class="block text-xs text-slate-500 num">${esc(day(p.Start_DateTime))} ← ${esc(day(p.End_DateTime))}</span></span>${APP.user.userType !== "ADMIN" && p.Booking_Open && !(d.myReservationItems || []).some(i => i.Phase_ID === p.Phase_ID) ? `<span class="pill pill-green">ابدأ حجزك</span>` : pill(st)}</button>`;
+  }).join("")}</div>`, { title: "اختر المرحلة", sub: APP.user.userType === "ADMIN" ? "تُعرض البيانات والعمليات للمرحلة المختارة" : "مراحلك اللي حجزت فيها + المفتوحة للحجز" });
   Shell._phaseSheet = m;
 });
 on("setPhase", async id => {
