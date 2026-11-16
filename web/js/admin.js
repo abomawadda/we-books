@@ -79,7 +79,7 @@ const Admin = {
       }
     });
     (r.books || []).sort((a, b) => bookSortComparator(a, b, r.catalog));
-    APP.adm = r; store.set("cache", { t: "ADMIN", d: r, p: APP.phaseId });
+    APP.adm = r; store.set("cache", { t: "ADMIN", d: r, p: APP.__realPhase || APP.phaseId });
     if (r.brand) Brand.set(r.brand);
     if (!APP.phaseId || !r.phases.find(p => p.Phase_ID === APP.phaseId)) {
       const op = r.phases.filter(p => p.Phase_Status !== "Completed");

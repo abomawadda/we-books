@@ -650,3 +650,33 @@ Router.add("/a/wa", view => {
       <button class="btn ${sent[r.id] ? "btn-outline" : "btn-success"} btn-xs" data-act="waSend" data-id="${esc(r.id)}">${ic("send")} ${sent[r.id] ? "اتبعت ✓" : "ابعت"}</button></li>`).join("")}</ul>` : UI.empty("message-circle", "مفيش أعضاء في الفئة دي", "اختار فئة تانية")}`;
   const ta = view.querySelector("#waTpl"); if (ta) ta.addEventListener("input", () => { WA.tpl[WA.aud] = ta.value; });
 });
+
+// ================================================================ نطاق التقارير: المرحلة الحالية · كل المراحل · مراحل بعينها
+// تُدمج بيانات المراحل المختارة في «مرحلة افتراضية» __SCOPE مؤقتاً أثناء عرض التقارير فقط، فتعمل كل التقارير كما هي على النطاق كله.
+const RSC = { mode: "cur", pick: [] };
+function scopeOff() { if (!APP.__virt) return; if (APP.adm === APP.__virt) APP.adm = APP.__real; APP.phaseId = APP.__realPhase; APP.__virt = APP.__real = null; APP.__realPhase = null; }
+function scopeOn() {
+  if (RSC.mode === "cur" || !APP.adm) return;
+  const real = APP.adm, ids = RSC.mode === "all" ? real.phases.map(p => p.Phase_ID) : RSC.pick.filter(id => real.phases.some(p => p.Phase_ID === id));
+  if (!ids.length) return;
+  const set = new Set(ids), V = "__SCOPE", sel = real.phases.filter(p => set.has(p.Phase_ID)), virt = {};
+  Object.keys(real).forEach(k => { const v = real[k];
+    virt[k] = Array.isArray(v) && v.length && v[0] && typeof v[0] === "object" && "Phase_ID" in v[0] && k !== "phases" ? v.map(x => set.has(x.Phase_ID) ? Object.assign({}, x, { Phase_ID: V, _Phase: x.Phase_ID }) : x) : v; });
+  const last = sel[sel.length - 1] || {};
+  virt.phases = real.phases.concat([Object.assign({}, last, { Phase_ID: V, Phase_Name: RSC.mode === "all" ? `كل المراحل (${sel.length})` : sel.map(p => p.Phase_Name).join(" + "),
+    Start_DateTime: (sel[0] || {}).Start_DateTime, End_DateTime: last.End_DateTime })]);
+  APP.__real = real; APP.__realPhase = APP.phaseId; APP.__virt = virt; APP.adm = virt; APP.phaseId = V; APP.settlement = null;
+}
+// أي تنقل خارج التقارير يرجّع البيانات الحقيقية فوراً
+{ const _render0 = Router.render.bind(Router); Router.render = function () { if (!String(Router.path()).startsWith("/a/reports")) scopeOff(); return _render0(); }; }
+on("repScope", m => { scopeOff(); RSC.mode = m; if (m === "pick" && !RSC.pick.length) RSC.pick = [APP.phaseId]; Router.render(); });
+on("repScopePh", id => { scopeOff(); const i = RSC.pick.indexOf(id); i < 0 ? RSC.pick.push(id) : RSC.pick.splice(i, 1); if (!RSC.pick.length) RSC.mode = "cur"; Router.render(); });
+{ const base = Router.routes["/a/reports"]; if (base) Router.add("/a/reports", view => {
+  scopeOff(); const real = APP.adm, curName = (real.phases.find(p => p.Phase_ID === APP.phaseId) || {}).Phase_Name || ""; scopeOn();
+  base(view);
+  const chip = (k, l) => `<button data-act="repScope" data-id="${k}" class="rounded-full px-3 h-8 text-[12.5px] font-bold ring-1 transition ${RSC.mode === k ? "bg-white text-brand-900 ring-white" : "bg-white/10 text-white ring-white/25"}">${l}</button>`;
+  const phs = real.phases.slice().reverse().map(p => `<button data-act="repScopePh" data-id="${esc(p.Phase_ID)}" class="rounded-full px-2.5 h-7 text-[11.5px] font-semibold ring-1 ${RSC.pick.includes(p.Phase_ID) ? "bg-gold-400 text-brand-950 ring-gold-400" : "bg-white/10 text-white ring-white/25"}">${esc(p.Phase_Name)}</button>`).join("");
+  const bar = `<div class="relative mt-3 rounded-2xl bg-black/15 ring-1 ring-white/15 p-2.5"><div class="flex items-center gap-1.5 flex-wrap"><span class="text-[12px] text-white/80 ml-1">${ic("calendar-range", "inline -mt-0.5")} نطاق التقارير:</span>${chip("cur", "المرحلة الحالية" + (curName ? " · " + esc(curName) : ""))}${chip("all", "كل المراحل")}${chip("pick", "مراحل بعينها")}</div>
+    ${RSC.mode === "pick" ? `<div class="flex flex-wrap gap-1.5 mt-2">${phs}</div>` : ""}${RSC.mode !== "cur" ? `<div class="text-[11px] text-white/70 mt-1.5">${ic("info", "inline -mt-0.5")} الأرقام مجمّعة لكل المراحل المختارة — ولكل موظف يظهر كل حجوزاته وفواتيره فيها.</div>` : ""}</div>`;
+  const hero = view.querySelector("section.relative.overflow-hidden"); if (hero) hero.insertAdjacentHTML("beforeend", bar);
+}); }
