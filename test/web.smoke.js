@@ -67,7 +67,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   d.getElementById('fEmp').dispatchEvent(new w.Event('submit', { cancelable: true })); await settle(); await settle();
   check(w.location.hash === '#/e/home' && /الخير/.test(view()), 'employee home');
   check(d.querySelector('[data-act="kidsEdit"]'), 'kids invite on home');
-  await click('[data-act="kidsEdit"]'); await click('[data-act="kdStage"][data-id="المرحلة الابتدائية"]', dialog()); await click('[data-act="kdGrade"][data-id="4 ابتدائي"]', dialog()); await click('[data-act="kdType"][data-id="لغات"]', dialog());
+  await click('[data-act="kidsEdit"]'); await click('[data-act="kdConfirmName"]', dialog()); await click('[data-act="kdStage"][data-id="المرحلة الابتدائية"]', dialog()); await click('[data-act="kdGrade"][data-id="4 ابتدائي"]', dialog()); await click('[data-act="kdType"][data-id="لغات"]', dialog());
   await click('[data-act="kdSave"]', dialog()); await settle(); await sleep(450); await settle();
   check(w.eval('APP').emp.employee.kids.length === 1 && w.eval('Emp').filter.grade === '4 ابتدائي', 'kids saved and opened');
   expectNoErrorToasts('save kids');
