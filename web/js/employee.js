@@ -476,14 +476,14 @@ function kdHTML() {
       ${!nameDone ? `<button type="button" data-act="kdConfirmName" class="btn btn-primary w-full justify-center animate-pop-in">${ic("check")} تأكيد الاسم والمتابعة ←</button>` : ""}
     </div>
 
-    ${nameDone ? `<div class="animate-pop-in"><div class="label">1️⃣ في أي مرحلة؟</div>
+    ${nameDone ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">1</span>في أي مرحلة؟</div>
       <div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-2.5 text-[13.5px] font-bold ring-1 transition ${st === s ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div></div>` : ""}
 
-    ${nameDone && st ? `<div class="animate-pop-in"><div class="label">2️⃣ الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
+    ${nameDone && st ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">2</span>الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
 
-    ${nameDone && k.grade && tracks.length ? `<div class="animate-pop-in"><div class="label">3️⃣ الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t && (t || k._trackOk) ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
+    ${nameDone && k.grade && tracks.length ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">3</span>الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t && (t || k._trackOk) ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
 
-    ${nameDone && k.grade && trackDone ? `<div class="animate-pop-in"><div class="label">${tracks.length ? "4️⃣" : "3️⃣"} نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] && (t[0] || k._typeOk) ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
+    ${nameDone && k.grade && trackDone ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">${tracks.length ? 4 : 3}</span>نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] && (t[0] || k._typeOk) ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
 
     ${typeDone ? `<div class="animate-pop-in rounded-2xl bg-white ring-1 ring-emerald-200 p-3.5 space-y-3 shadow-xs">
@@ -931,133 +931,34 @@ function wzFamily() {
   if (WZ.skip) return wzGradePick();
   const firstName = String((APP.user && APP.user.fullName) || "").trim().split(/\s+/)[0];
   const fem = empGender() === "F";
-  const greetings = fem ? [
-    `أهلاً بكِ يا ${firstName || "أستاذة"} 🌸.. ربنا يبارك في أولادك ويقوّيكي على تعبك ومجهودك معاهم!`,
-    `تحية تقدير لتعبك واهتمامك بأولادك يا ${firstName || "غالية"} 💛.. إحنا هنا نسهّل عليكي مشوار الكتب!`,
-    `موسم دراسي سعيد عليكي وعلى أولادك يا ${firstName || "ست الكل"} 🎓.. سيبيلنا ترتيب الكتب وركّزي في تفوقهم!`
-  ] : [
-    `أهلاً بك يا ${firstName || "بطل"} 🌟.. ربنا يبارك في أولادك ويقوّيك على تعبك معاهم!`,
-    `تحية تقدير لجهدك وتعبك مع أولادك يا ${firstName || "غالي"} 💛.. إحنا هنا نسهّل عليك مشوار الكتب!`,
-    `موسم دراسي موفق يا ${firstName || "ولي الأمر"} 🎓.. سيب لنا ترتيب الكتب وركّز في نجاح أولادك!`
-  ];
-  const greet = greetings[(firstName.length + ks.length) % greetings.length];
+  const greet = `${fem ? "أهلاً بكِ" : "أهلاً بك"}${firstName ? " يا " + firstName : ""} — نجهّز كتب أولادك في دقائق`;
   let guideHidden = false;
   try { guideHidden = !!localStorage.getItem(wzGuideKey()); } catch (_) {}
   const showGuide = (!ks.length && !WZ.temp.length && !guideHidden) || !!WZ.forceGuide;
   const gs = Math.max(0, Math.min(2, WZ.guideStep || 0));
 
   if (showGuide) {
-    const dots = [0, 1, 2].map(d => `<span class="h-1.5 rounded-full transition-all duration-300 ${d === gs ? "w-7 bg-brand-600" : d < gs ? "w-3 bg-brand-400" : "w-2 bg-brand-200"}"></span>`).join("");
-    const stepBody = gs === 0 ? `
-      <div class="rounded-2xl bg-white ring-1 ring-brand-100/90 p-4 shadow-sm space-y-3">
-        <div class="flex items-center justify-between gap-2">
-          <span class="inline-flex items-center gap-1.5 text-[11.5px] font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-800 ring-1 ring-brand-200/70">الخطوة 1 من 3 · العائلة</span>
-          <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
-        </div>
-        <div>
-          <h2 class="text-[15px] font-bold text-brand-950">${gTxt("ليه بننصحك تسجّل أولادك الأول؟ ✨", "ليه بننصحك تسجّلي أولادك الأول؟ ✨")}</h2>
-          <p class="text-[12px] text-slate-500 mt-0.5">${gTxt("خطوة واحدة في البداية بتديك تحكم كامل وراحة في كل اللي جاي:", "خطوة واحدة في البداية بتديكي تحكم كامل وراحة في كل اللي جاي:")}</p>
-        </div>
-        <div class="rounded-2xl p-3 ring-1 ring-brand-200/80 space-y-2" style="background:linear-gradient(135deg,#faf7ff 0%,#fffdf7 100%)">
-          <div class="flex items-start gap-2.5">
-            <span class="w-7 h-7 rounded-xl bg-brand-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🎯</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">تمييز كتب كل ابن لوحده</b><span class="text-slate-600">كل ابن بملفه واسمه — ${gTxt("فتعرف كتب كل واحد وتستلمها بسهولة بدون أي لخبطة.", "فتعرفي كتب كل واحد وتستلميها بسهولة بدون أي لخبطة.")}</span></div>
-          </div>
-          <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
-            <span class="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">✏️</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">مرونة كاملة في الإضافة والإلغاء</b><span class="text-slate-600">${gTxt("حبّيت تلغي كتاب أو تضيف كتاب لابن معين؟ بتعدّل طلبه لوحده في ثانية من غير ما تأثر على باقي الأولاد.", "حبّيتي تلغي كتاب أو تضيفي كتاب لابن معين؟ بتعدّلي طلبه لوحده في ثانية من غير ما تأثري على باقي الأولاد.")}</span></div>
-          </div>
-          <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
-            <span class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🚀</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">استدعاء سريع في المراحل والسنين الجاية</b><span class="text-slate-600">لما الطالب يطلع سنة جديدة، ${gTxt("تقدر تستدعي ملفه وتجهّز كتبه الجديدة بضغطة واحدة!", "تقدري تستدعي ملفه وتجهّزي كتبه الجديدة بضغطة واحدة!")}</span></div>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-2 text-[11.5px]">
-          <div class="rounded-xl bg-sky-50/80 ring-1 ring-sky-200/70 p-2.5 flex items-start gap-2">
-            <span class="text-[16px] shrink-0">🤝</span>
-            <div><b class="block text-sky-950">إضافة قريب</b><span class="text-slate-600">${gTxt("تحجز لحد من العيلة بملف منفصل.", "تحجزي لحد من العيلة بملف منفصل.")}</span></div>
-          </div>
-          <div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/80 p-2.5 flex items-start gap-2">
-            <span class="text-[16px] shrink-0">⚡</span>
-            <div><b class="block text-slate-900">بدون تسجيل</b><span class="text-slate-600">${gTxt("تختار الصف مباشرة وتحجز فوراً.", "تختاري الصف مباشرة وتحجزي فوراً.")}</span></div>
-          </div>
-        </div>
-        <button type="button" data-act="wzGuideStep" data-id="1" class="btn btn-primary w-full justify-center">فهمت، التالي: طرق اختيار الكتب ←</button>
-      </div>` : gs === 1 ? `
-      <div class="rounded-2xl bg-white ring-1 ring-brand-100/90 p-4 shadow-sm space-y-3">
-        <div class="flex items-center justify-between gap-2">
-          <span class="inline-flex items-center gap-1.5 text-[11.5px] font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-800 ring-1 ring-brand-200/70">الخطوة 2 من 3 · طرق الكتب</span>
-          <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
-        </div>
-        <div>
-          <h2 class="text-[15px] font-bold text-brand-950">في الكتب، عندك 3 طرق أسهل من بعض 📚</h2>
-          <p class="text-[12px] text-slate-500 mt-0.5">${gTxt("كلها متاحة جوه الحجز وتقدر تبدّل بينها لكل ابن براحتك:", "كلها متاحة جوه الحجز وتقدري تبدّلي بينها لكل ابن براحتك:")}</p>
-        </div>
-        <div class="space-y-2 text-[12px]">
-          <div class="rounded-2xl bg-amber-50/75 ring-1 ring-amber-200/80 p-3 flex items-start gap-3">
-            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-amber-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🎒</span>
-            <div class="flex-1 min-w-0">
-              <div class="flex items-center gap-2"><b class="text-amber-950 text-[13px]">شنطة الكتب الجاهزة</b><span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950">الأسرع</span></div>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("اسم المادة شامل كل الكتب — بنجهّز لك الأشهر وتختار أو تبدّل منها بضغطة.", "اسم المادة شامل كل الكتب — بنجهّز لكِ الأشهر وتختاري أو تبدّلي منها بضغطة.")}</p>
-            </div>
-          </div>
-          <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200/80 p-3 flex items-start gap-3">
-            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-brand-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">📚</span>
-            <div class="flex-1 min-w-0">
-              <b class="text-brand-950 text-[13px] block">شركة واحدة (سلسلة كاملة)</b>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لك فوراً بدون ما تدور.", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لكِ فوراً بدون ما تدوري.")}</p>
-            </div>
-          </div>
-          <div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200/90 p-3 flex items-start gap-3">
-            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🔍</span>
-            <div class="flex-1 min-w-0">
-              <b class="text-slate-900 text-[13px] block">كتاب بكتاب</b>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("تتصفح كتب الصف وتختار كل كتاب بنفسك واحد واحد على مزاجك.", "تتصفحي كتب الصف وتختاري كل كتاب بنفسك واحد واحد على مزاجك.")}</p>
-            </div>
-          </div>
-        </div>
-        <div class="flex items-center gap-2 pt-0.5">
-          <button type="button" data-act="wzGuideStep" data-id="0" class="btn btn-ghost btn-sm">→ السابق</button>
-          <button type="button" data-act="wzGuideStep" data-id="2" class="btn btn-primary flex-1 justify-center">فهمت، الخطوة الأخيرة ←</button>
-        </div>
-      </div>` : `
-      <div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-4 shadow-sm space-y-3.5">
-        <div class="flex items-center justify-between gap-2">
-          <span class="inline-flex items-center gap-1.5 text-[12px] font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">✅ خلاص تمام فهمت · يلا نبدأ الحجز 🎉</span>
-          <button type="button" data-act="wzGuideStep" data-id="1" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">→ مراجعة</button>
-        </div>
-        <div>
-          <h2 class="text-[15px] font-bold text-slate-900">${fem ? "تحبي نبدأ بإيه دلوقتي؟" : "تحب نبدأ بإيه دلوقتي؟"}</h2>
-          <p class="text-[12px] text-slate-500 mt-0.5">${fem ? "تقدري تضيفي أولادك عشان تستفيدي بكل المميزات، أو تحجزي مباشرة بدون تسجيلهم." : "تقدر تضيف أولادك عشان تستفيد بكل المميزات، أو تحجز مباشرة بدون تسجيلهم."}</p>
-        </div>
-        <div class="grid sm:grid-cols-2 gap-2.5">
-          <button type="button" data-act="wzGuidePick" data-id="kids" class="text-right rounded-2xl p-3.5 ring-2 ring-brand-500 bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-sm active:scale-[.98] transition">
-            <div class="flex items-center justify-between mb-1.5"><span class="text-[22px]">👨‍👩‍👧‍👦</span><span class="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-gold-300 text-brand-950">الأسهل والأمرن</span></div>
-            <b class="block text-[14px]">يلا نبدأ نضيف الأولاد</b>
-            <span class="block text-[11.5px] text-brand-100 mt-0.5">تمييز الكتب + مرونة التعديل + حفظ للسنين الجاية</span>
-          </button>
-          <button type="button" data-act="wzGuidePick" data-id="skip" class="text-right rounded-2xl p-3.5 ring-1 ring-slate-200 bg-slate-50/70 hover:bg-slate-100 text-slate-900 active:scale-[.98] transition">
-            <div class="flex items-center justify-between mb-1.5"><span class="text-[22px]">⚡</span><span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-white text-slate-600 ring-1 ring-slate-200">حجز سريع</span></div>
-            <b class="block text-[14px]">نحجز بدون تسجيلهم</b>
-            <span class="block text-[11.5px] text-slate-500 mt-0.5">اختيار الصف الدراسي مباشرة والبدء فوراً</span>
-          </button>
-        </div>
-        <button type="button" data-act="wzGuidePick" data-id="stay" class="w-full text-center text-[12px] font-semibold text-brand-700 hover:underline pt-0.5">أو أضيف قريب / أستعرض الاختيارات بنفسي</button>
-      </div>`;
-
+    const why = [["🎯", "كتب كل ابن لوحدها"], ["✏️", "تعديل ابن بدون الباقي"], ["🔁", "استدعاء سريع السنة الجاية"]];
     return `
-      <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm space-y-3.5" style="background:linear-gradient(135deg,#f8f4ff 0%,#f1e8fc 55%,#fffaf0 100%)">
-        <div class="flex items-start gap-3">
-          <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
-          <div class="flex-1 min-w-0">
-            <h1 class="font-display font-bold text-[17.5px] sm:text-[19.5px] text-brand-950 leading-snug">${esc(greet)}</h1>
-            <div class="flex items-center gap-2 mt-2">${dots}<span class="text-[11px] font-bold text-brand-700 mr-1">دليل البداية (${gs + 1}/3)</span></div>
-          </div>
+      <section class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden mb-4">
+        <div class="p-5 text-white" style="background:linear-gradient(135deg,#552c83,#2e1650)">
+          <h1 class="font-display font-bold text-[19px] leading-snug">${esc(greet)}</h1>
+          <p class="text-[12.5px] text-brand-100 mt-1">${gTxt("اختار طريقة البداية — تقدر تغيّرها في أي وقت.", "اختاري طريقة البداية — تقدري تغيّريها في أي وقت.")}</p>
         </div>
-        ${stepBody}
-      </div>`;
+        <div class="p-4 space-y-3">
+          <button type="button" data-act="wzGuidePick" data-id="kids" class="w-full text-right rounded-2xl p-4 ring-2 ring-brand-500 bg-brand-50/60 active:scale-[.99] transition">
+            <div class="flex items-center gap-3"><span class="w-11 h-11 rounded-xl bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("users")}</span>
+              <div class="flex-1 min-w-0"><div class="flex items-center gap-2"><b class="text-[15px] text-brand-950">${gTxt("سجّل أولادك ونبدأ", "سجّلي أولادك ونبدأ")}</b><span class="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-gold-300 text-brand-950">موصى به</span></div>
+                <div class="flex flex-wrap gap-1.5 mt-1.5">${why.map(w => `<span class="text-[11px] text-brand-800 bg-white ring-1 ring-brand-100 rounded-full px-2 py-0.5">${w[0]} ${w[1]}</span>`).join("")}</div></div>${ic("chevron-left", "text-brand-400")}</div>
+          </button>
+          <button type="button" data-act="wzGuidePick" data-id="skip" class="w-full text-right rounded-2xl p-4 ring-1 ring-slate-200 bg-white hover:bg-slate-50 active:scale-[.99] transition">
+            <div class="flex items-center gap-3"><span class="w-11 h-11 rounded-xl bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">${ic("zap")}</span>
+              <div class="flex-1"><b class="block text-[15px] text-slate-900">${gTxt("احجز بالصف مباشرة", "احجزي بالصف مباشرة")}</b><span class="block text-[12px] text-slate-500 mt-0.5">من غير تسجيل — اختيار الصف والكتب فوراً</span></div>${ic("chevron-left", "text-slate-300")}</div>
+          </button>
+          <div class="flex items-center justify-between text-[12px] pt-1">${relOn() ? `<button type="button" data-act="addRel" class="font-semibold text-sky-700">${ic("users", "inline -mt-0.5")} إضافة قريب</button>` : "<span></span>"}<button type="button" data-act="wzHideGuide" class="font-semibold text-slate-400">تخطي</button></div>
+        </div>
+      </section>`;
   }
-
   const wzMemberLines = m => { const b = kidBen(m); return cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade)); };
   const ms = wzMembers();
   const pickCard = (k, i) => {
@@ -1086,11 +987,11 @@ function wzFamily() {
   return `
     <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
       <div class="flex items-start gap-3">
-        <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
+        <span class="w-11 h-11 rounded-2xl bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("users")}</span>
         <div class="flex-1 min-w-0">
           <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
           <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${ks.length ? gTxt("اختر تحب تبدأ بحجز مين الأول، أو أضف فرد جديد.", "اختاري تحبي تبدأي بحجز مين الأول، أو أضيفي فرد جديد.") : gTxt("اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني.", "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلكِ الكتب في ثواني.")}</p>
-          <button type="button" data-act="wzShowGuide" class="mt-2 inline-flex items-center gap-1 text-[11.5px] font-bold text-brand-700 hover:underline">📖 إزاي أحجز؟ (دليل سريع)</button>
+          
         </div>
       </div>
     </div>
