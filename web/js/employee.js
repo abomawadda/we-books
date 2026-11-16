@@ -1224,7 +1224,9 @@ Router.add("/e/orders", view => {
         const req = n(i.Requested_Qty), al = n(i.Allocated_Qty), dl = n(i.Delivered_Qty), rem = Math.max(0, req - dl), b = bm[i.Book_ID] || {}, [c1, c2] = toneOf(b.Subject);
         return `<article class="card p-4">
           <div class="flex items-start gap-3">
-            <div class="w-11 h-14 rounded-lg shrink-0 flex items-center justify-center text-white text-lg" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>
+            ${b.Cover_URL ? `<button type="button" class="w-16 h-[5.5rem] rounded-lg shrink-0 overflow-hidden ring-1 ring-slate-200 bg-slate-50 shadow-xs active:scale-95 transition" data-act="coverZoom" data-id="${esc(b.Book_ID)}" aria-label="تكبير الغلاف"><img src="${esc(b.Cover_URL)}" alt="غلاف ${esc(b.Book_Name || "")}" loading="lazy" decoding="async" class="w-full h-full object-cover"></button>`
+              : pubLogo(b.Publisher, b.Subject) ? `<div class="w-16 h-[5.5rem] rounded-lg shrink-0 ring-1 ring-slate-200 bg-white flex flex-col"><span class="h-1.5 rounded-t-lg" style="background:${c1}"></span><span class="flex-1 flex items-center justify-center p-1.5"><img src="${esc(pubLogo(b.Publisher, b.Subject))}" alt="${esc(b.Publisher || "")}" loading="lazy" class="max-w-full max-h-full object-contain"></span></div>`
+              : `<div class="w-16 h-[5.5rem] rounded-lg shrink-0 flex items-center justify-center text-white text-xl" style="background:linear-gradient(140deg,${c1},${c2})">${ic("book-open")}</div>`}
             <div class="flex-1 min-w-0"><div class="flex items-start justify-between gap-2"><h3 class="font-bold text-slate-900 leading-snug">${esc(b.Book_Name || i.Book_ID)}${carriedTag(i)}</h3>${stagePill(itemStage(i))}</div>
               <div class="text-[12px] text-slate-500 mt-0.5">${esc(b.Grade || "")} · ${fmt(i.Unit_Emp_Price)} ج.م للكتاب</div>
               <div class="text-[11.5px] text-slate-400 mt-0.5 flex items-center gap-1">${ic("clock")} أسبقية <span dir="ltr" class="num">${esc(i.Priority_Timestamp)}</span></div></div>
