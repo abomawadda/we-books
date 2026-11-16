@@ -612,9 +612,13 @@ on("installHide", () => { try { localStorage.setItem("wb_inst_hide", "1"); } cat
 // ================================================================ تقييم بعد الاستلام
 function feedbackCard() {
   const r = APP.emp; if (!r) return "";
-  const hs = (r.myReservations || []).filter(h => h.Res_Status !== "Cancelled" && !h.Feedback);
-  const h = hs.find(x => (r.myReservationItems || []).some(i => i.Res_ID === x.Res_ID && n(i.Delivered_Qty) > 0)); if (!h) return "";
-  return `<section class="card p-4 mb-4 ring-1 ring-amber-200 bg-amber-50/40"><b class="text-[14.5px]">استلمت كتبك؟ قولنا رأيك 🙏</b><div class="text-[12.5px] text-slate-600 mt-0.5">رأيك بيساعد النقابة تحسّن المبادرة السنة الجاية.</div>
+  // التقييم للمرحلة المعروضة فقط، وبعد ما يستلم كل كتبها الجاهزة (مش أول كتاب)
+  const h = (r.myReservations || []).find(x => x.Phase_ID === APP.phaseId && x.Res_Status !== "Cancelled" && !x.Feedback); if (!h) return "";
+  const its = (r.myReservationItems || []).filter(i => i.Res_ID === h.Res_ID && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  const dl = its.reduce((a, i) => a + n(i.Delivered_Qty), 0), pend = its.reduce((a, i) => a + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+  if (!dl || pend) return "";
+  const phName = ((r.activePhase || {}).Phase_Name) || "المرحلة دي";
+  return `<section class="card p-4 mb-4 ring-1 ring-amber-200 bg-amber-50/40"><b class="text-[14.5px]">استلمت كتب ${esc(phName)} — قيّم المرحلة دي 🙏</b><div class="text-[12.5px] text-slate-600 mt-0.5">رأيك بيساعد النقابة تحسّن المبادرة السنة الجاية.</div>
     <div class="flex justify-center gap-1.5 mt-3" dir="ltr">${[1, 2, 3, 4, 5].map(s => `<button class="text-[30px] leading-none hover:scale-110 transition" data-act="rate" data-id="${esc(h.Res_ID)}|${s}" aria-label="${s} نجوم">⭐</button>`).join("")}</div></section>`;
 }
 on("rate", async v => {
