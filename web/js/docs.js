@@ -136,7 +136,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
   waitNote(lines) {
     const w = lines.filter(l => n(l.req) > Math.max(n(l.alloc), n(l.deliv)));
     if (!w.length) return "";
-    const names = w.map(l => { const b = Doc.bk(l.code); return `${esc(b.Publisher || l.name)} ${esc(b.Subject || "")}${l.ben ? " (" + esc(l.ben) + ")" : ""}`; }).join("، ");
+    const names = w.map(l => { const b = Doc.bk(l.code); const g = Doc.shortGrade ? Doc.shortGrade(b.Grade || l.grade || "") : (b.Grade || l.grade || ""); return `${esc(b.Publisher || l.name)} ${esc(b.Subject || "")}${g ? " " + esc(g) : ""}${l.ben ? " (" + esc(l.ben) + ")" : ""}`; }).join("، ");
     const ch = w.every(l => l.choice === "carry") ? "وافق العضو على ترحيلها للمرحلة التالية بأسبقيته." : "ستُضاف للمرحلة التالية بأسبقية الحجز، أو يُنهي العضو حجزه على المتاح.";
     return `<div class="words" style="background:#f0f9ff;border-color:#bae6fd;color:#075985">⏳ كتب لم تصل بعد ولا تدخل هذه الفاتورة: ${names}. ${ch}</div>`;
   },
@@ -164,7 +164,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
         <div class="note">${d.note ? d.note : `• الأسعار بعد خصم العاملين، وتُحتسب الأسبقية بوقت حجز كل كتاب.<br>• هذا طلب حجز وليس فاتورة؛ تصدر الفاتورة عند جاهزية الكتب للتسليم.`}</div></div>
         <div class="sum">${Doc.kv("قبل الخصم", `<span class="num sub">${Doc.money(cover)}</span>`)}<div class="kv save"><span>توفيرك</span><b class="num">${Doc.money(cover - net)}</b></div><div class="kv big"><span>الإجمالي (ج.م)</span><b class="num">${Doc.money(net)}</b></div></div></div>
       <div class="words">${esc(Doc.words(net))}</div>
-      <div class="sig"><div>توقيع العضو</div><div>مسؤول المبادرة</div><div>الختم</div></div>${Doc.foot(d.no)}`, d.status === "ملغي" ? "ملغي" : "", "red", Doc.density(d.lines.length + keys.length, "A5"));
+      <div class="pay-row">${/^فاتورة/.test(d.title || "") && d.status !== "ملغي" ? `<div class="insta-slot" data-amt=""></div>` : ""}<div class="sig"><div>توقيع العضو</div><div>مسؤول المبادرة</div><div>الختم</div></div></div>${Doc.foot(d.no)}`, d.status === "ملغي" ? "ملغي" : "", "red", Doc.density(d.lines.length + keys.length, "A5"));
   },
   /** فاتورة: d = {no,date,phase,status,emp,lines:[{code,name,grade,ben,alloc,deliv,ret,price,cover}],adj,adjReason,paid,remaining,credit,down,method,schedule:[{label,due,amount,paid,rem,status}],payments:[{no,date,amount,method}]} */
   invoice(d) {
@@ -230,7 +230,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     const by = {}; d.lines.forEach(l => { const k = l.publisher || "أخرى"; (by[k] = by[k] || { pop: 0, q: 0, l: [] }).l.push(l); by[k].pop += n(l.pop); by[k].q += n(l.qty); });
     const pubs = Object.keys(by).sort((a, b) => by[b].pop - by[a].pop || by[b].q - by[a].q || a.localeCompare(b, "ar"));
     // تقسيم دقيق: كل صفحة عمودان (يمين ثم يسار) بسعة ثابتة؛ المجموعة المقسومة تكمل بعنوان «تابع»
-    const CAP1 = 39, CAP = 40; let i = 0;
+    const CAP1 = 36, CAP = 38; let i = 0;
     const cols = [[]]; let left = CAP1, pageCol = 0;
     const newCol = () => { cols.push([]); pageCol++; left = pageCol < 2 ? CAP1 : CAP; };
     pubs.forEach((pb, gi) => { const g = by[pb];
@@ -273,6 +273,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       .po-qr .qr{width:24mm;height:24mm;flex:none}.po-qr .qr svg{width:100%;height:100%}.po-qr b{color:#3b1d63}.po-qr small{color:#6b5f86;display:block;line-height:1.3}.po-qr .ref{font-size:.8em;color:#8d84a3}
       .po-pg{text-align:center;font-size:.8em;color:#6b5f86;margin-top:auto;padding-top:1.5mm}
       @media print{
+        .page{height:296mm!important;min-height:0!important;max-height:296mm;overflow:hidden!important;break-inside:avoid}.po-grid{flex:1;min-height:0}
         .po-top,.po-top .r b,.po-top .l b,.po-top .l span{color:#000!important;border-color:#000!important}
         .pog{border-color:#000!important}.pog td{border-color:#555!important;background:#fff!important;color:#000!important}
         .pog .pub td{background:#e6e6e6!important;color:#000!important;border-bottom-color:#000!important}
@@ -331,7 +332,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
     // رمز الدفع بإنستاباي على الفاتورة (لو عليها متبقي)
     const slots = doc.querySelectorAll(".insta-slot");
     if (slots.length && typeof instaQrSvg === "function") { const I = instaInfo(), q = await instaQrSvg(I.link);
-      if (q) slots.forEach(sl => { sl.innerHTML = `<div class="iq">${q}</div><div><b>ادفع المتبقي <span class="num">${esc(sl.dataset.amt)}</span> ج.م بإنستاباي</b><div>امسح الرمز من التطبيق أو حوّل على:</div><div class="num" dir="ltr">${esc(I.ipa)}</div></div>`; });
+      if (q) slots.forEach(sl => { sl.innerHTML = `<div class="iq">${q}</div><div><b>${sl.dataset.amt ? `ادفع المتبقي <span class="num">${esc(sl.dataset.amt)}</span> ج.م بإنستاباي` : "ادفع بإنستاباي"}</b><div>امسح الرمز من التطبيق أو حوّل على:</div><div class="num" dir="ltr">${esc(I.ipa)}</div></div>`; });
       else slots.forEach(sl => sl.remove()); } else slots.forEach(sl => sl.remove());
     if (N > 1) { doc.querySelectorAll(".po-pg").forEach(x => x.remove()); pages.forEach((pg, i) => pg.insertAdjacentHTML("beforeend", `<div class="pgno">صفحة ${i + 1} من ${N}</div>`)); }
   },
@@ -413,8 +414,8 @@ const DocVerify = {
     const app = document.getElementById("app") || document.body;
     const sp = document.getElementById("splash"); if (sp) sp.remove();
     const box = (icon, tone, title, body) => `<div class="min-h-screen grid place-items-center p-4 bg-slate-50"><div class="card w-full max-w-sm p-6 text-center">
-      <div class="text-[46px]">${icon}</div><h1 class="text-[19px] font-extrabold ${tone} mt-1">${title}</h1><div class="text-[12.5px] text-slate-500 num mt-1" dir="ltr">${esc(ref)}</div>
-      <div class="mt-4 text-right">${body}</div><a href="#/" class="btn btn-outline w-full mt-5">فتح المنصة</a></div></div>`;
+      <div class="flex items-center justify-center gap-2 mb-3 pb-3 border-b border-slate-100"><img src="icons/logo.svg" alt="" class="w-9 h-9" onerror="this.remove()"><div class="text-right leading-tight"><b class="text-[14px] text-brand-900">${esc(Brand.get().platform)}</b><div class="text-[11.5px] text-slate-500">${esc(Brand.get().org)} · التحقق من المستندات</div></div></div><div class="text-[46px]">${icon}</div><h1 class="text-[19px] font-extrabold ${tone} mt-1">${title}</h1><div class="text-[12.5px] text-slate-500 num mt-1" dir="ltr">${esc(ref)}</div>
+      <div class="mt-4 text-right">${body}</div><div class="text-[11px] text-slate-400 mt-3 num">وقت التحقق: ${esc(new Date().toLocaleString("ar-EG"))}</div><a href="./?" class="btn btn-outline w-full mt-3">فتح المنصة</a></div></div>`;
     app.innerHTML = box("⏳", "text-slate-700", "جاري التحقق…", "");
     let r; try { r = await call("VERIFY_DOC", { ref }); } catch (_) { r = { success: false, message: "تعذّر الاتصال — حاول تاني." }; }
     if (!r || !r.success) { app.innerHTML = box("⚠️", "text-amber-700", "تعذّر التحقق", `<p class="text-[13.5px] text-slate-600 text-center">${esc((r && r.message) || "")}</p>`); return; }
