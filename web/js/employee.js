@@ -504,16 +504,21 @@ function kdHTML() {
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; } } };
-function kidsEditor(addRel) {
+function kidsEditor(addRel, opt) { opt = opt || {};
   const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true, _saved: true }));
   KD.list = ks.length ? ks : [kdBlank(addRel)];
   if (addRel && ks.length) KD.list.push(kdBlank(true));
-  KD.i = addRel ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
-  KD.m = UI.open(kdHTML(), { title: addRel ? "🧒 إضافة قريب" : "👨‍👩‍👧 أبنائي وأقاربي", sub: "خطوة بخطوة — ونجهّز لكل واحد كتب صفه تلقائياً",
+  if (opt.addNew && ks.length) KD.list.push(kdBlank());
+  KD.i = addRel || opt.addNew ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
+  if (opt.kid) { const t = opt.kid, j = KD.list.findIndex(x => x.name === (t.name || "") && x.rel === (t.rel || "") && x.grade === t.grade); if (j >= 0) KD.i = j; }
+  KD.m = UI.open(kdHTML(), { title: addRel ? "🧒 إضافة قريب" : opt.kid ? "✏️ تعديل بيانات " + (opt.kid.name || (opt.kid.gender === "g" ? "البنت" : "الابن")) : opt.addNew ? "➕ إضافة فرد جديد" : "👨‍👩‍👧 أبنائي وأقاربي", sub: "خطوة بخطوة — ونجهّز لكل واحد كتب صفه تلقائياً",
     footer: `<button class="btn btn-primary btn-lg w-full" data-act="kdSave">${ic("check-check")} حفظ الكل</button>` });
   kdRender();
 }
 on("kidsEdit", () => { KD._addRel = false; kidsEditor(false); });
+/** تعديل فرد مسجّل بعينه (الاسم/المرحلة/الصف/الشعبة/المدرسة) — يفتح المحرر عليه مباشرة */
+on("kdEditOne", i => { const k = myKids()[+i]; if (!k) return; KD._addRel = false; kidsEditor(false, { kid: k }); });
+on("kidsAddNew", () => { KD._addRel = false; kidsEditor(false, { addNew: true }); });
 on("addRel", () => { KD._addRel = true; kidsEditor(true); });
 on("kdKind", v => { const k = KD.list[KD.i]; if (v === "rel") { k.rel = k.rel || (k.gender === "g" ? "ابنة أخ" : "ابن أخ"); k.gender = relGender(k.rel) || k.gender; } else { k.rel = ""; k.gender = v; } kdRender(); });
 on("kdRel", v => { const k = KD.list[KD.i]; k.rel = v; const g = relGender(v); if (g) k.gender = g; kdRender(); });
@@ -1039,7 +1044,7 @@ function wzFamily() {
         <button type="button" data-act="wzSel" data-id="${i}" aria-label="تضمين في الحجز" class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${sel.includes(i) ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${sel.includes(i) ? ic("check") : ""}</button>
       </div>
       <div class="flex items-center justify-between gap-2 pt-2 border-t border-slate-100">
-        ${status}
+        <span class="flex items-center gap-2 min-w-0">${status}<button type="button" data-act="kdEditOne" data-id="${i}" class="text-[11.5px] font-semibold text-slate-500 hover:text-brand-700 inline-flex items-center gap-1 shrink-0">${ic("pencil", "!w-3.5 !h-3.5")} البيانات</button></span>
         ${sel.includes(i) && mIdx >= 0 ? `<button type="button" data-act="wzStartOne" data-id="${mIdx}" class="btn btn-primary btn-sm !py-1.5 !px-3 text-[12px]">${lines.length ? "تعديل الكتب" : "ابدأ بـ " + esc(kidName(k, i).split(/\s+/)[0])} ←</button>` : ""}
       </div>
     </div>`;
@@ -1063,7 +1068,7 @@ function wzFamily() {
     ${rels.length ? `<div class="text-[12px] font-bold text-sky-700 mb-1.5">أقاربي</div><div class="grid sm:grid-cols-2 gap-2.5 mb-4">${rels.map(([k, i]) => pickCard(k, i)).join("")}</div>` : ""}
     ${WZ.temp.length ? `<div class="text-[12px] font-bold text-slate-600 mb-1.5">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => { const mIdx = ms.findIndex(x => x._temp && x.grade === t.grade); return `<span class="chip">${esc(gradeTitle(t.grade))}${mIdx >= 0 ? `<button type="button" data-act="wzStartOne" data-id="${mIdx}" class="text-brand-700 font-bold mr-1 underline">احجز</button>` : ""}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`; }).join("")}</div>` : ""}
     <div class="grid grid-cols-2 gap-2.5">
-      <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="kidsEdit">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : gTxt("أضف أبنائي (الأسهل)", "أضيفي أبنائي (الأسهل)")}</button>
+      <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="${kids.length ? "kidsAddNew" : "kidsEdit"}">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : gTxt("أضف أبنائي (الأسهل)", "أضيفي أبنائي (الأسهل)")}</button>
       ${relOn() ? `<button class="rounded-2xl p-3.5 border-2 border-dashed border-sky-300 bg-sky-50/40 hover:bg-sky-50 text-sky-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="addRel">${ic("users")} إضافة قريب</button>` : `<span></span>`}
     </div>
     <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : gTxt("أو كمّل بدون تسجيل — اختر الصف مباشرة", "أو كمّلي بدون تسجيل — اختاري الصف مباشرة")}</button>
