@@ -709,3 +709,25 @@ _wrap("/e/home", view => {
   afterHead(view, html);
 });
 on("retSeen", k => { const s = retSeen(); s[k] = 1; try { localStorage.setItem(RET_SEEN, JSON.stringify(s)); } catch (_) {} Router.render(); });
+
+// ================================================================ السلة بعد التسليم: الكتب المتبقية فقط (الحجز الكامل يُرى في «حجوزاتي»)
+/** المرحلة الحالية مقفولة واتوزعت (فيه فاتورة) ⇒ السلة تعرض المتبقي فقط */
+const cartPostDelivery = () => { const r = APP.emp || {}; return !!(r.activePhase && !Emp.open() && (r.myInvoices || []).some(i => i.Phase_ID === APP.phaseId)); };
+const cartLeftover = () => Emp.activeItems().filter(i => i.Waitlist_Choice !== "cancel" && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+function leftoverCartHTML() {
+  const r = APP.emp, bm = Emp.bookMap(), lo = cartLeftover(), openPh = (r.phases || []).find(p => p.Booking_Open && p.Phase_ID !== APP.phaseId);
+  const got = Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Delivered_Qty) - n(i.Returned_Qty)), 0);
+  const head = `<div class="rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 p-3 mb-3 text-[13px] text-emerald-900">${ic("circle-check", "inline -mt-0.5")} حجز «${esc(r.activePhase.Phase_Name)}» اتقفل واتوزّع${got ? ` — استلمت <b class="num">${got}</b> ${got === 1 ? "كتاب" : "كتب"}` : ""}. حجزك كامل وفاتورته في <a href="#/e/orders" class="font-bold underline">حجوزاتي</a>.</div>`;
+  const list = lo.length ? `<h3 class="text-[14px] font-bold text-slate-800 mb-1.5">${ic("hourglass", "inline -mt-0.5 text-sky-600")} الكتب المتبقية (${lo.length})</h3>
+    <ul class="rounded-2xl ring-1 ring-slate-200 divide-y divide-slate-100 px-3 mb-3">${lo.map(i => { const b = bm[i.Book_ID] || {}, q = n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty));
+      return `<li class="flex items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name || i.Book_ID)}</div><div class="text-[11.5px] text-slate-500">${esc(Doc.shortGrade(b.Grade || ""))}${i.Beneficiary ? " · لـ " + esc(i.Beneficiary) : ""} · ${i.Waitlist_Choice === "carry" ? "هيترحّل بأسبقيتك" : "مستني قرارك"}</div></div><span class="pill pill-blue num">${q}</span></li>`; }).join("")}</ul>
+    <div class="grid gap-2"><button class="btn btn-outline btn-sm" data-act="printLeftoverE">${ic("printer")} اطبع طلب الحجز بالمتبقي</button></div>`
+    : `<div class="text-center text-slate-500 text-[13.5px] py-4">${ic("package-check", "mx-auto mb-1")} مفيش كتب متبقية — كل حجزك اتسلّم 👌</div>`;
+  const next = openPh ? `<button class="btn btn-primary w-full mt-3" data-act="setPhase" data-id="${esc(openPh.Phase_ID)}">${ic("plus")} الحجز مفتوح في «${esc(openPh.Phase_Name)}» — ضيف كتب</button>`
+    : `<div class="rounded-2xl bg-slate-50 p-3 mt-3 text-[12.5px] text-slate-600">${ic("calendar-clock", "inline -mt-0.5")} عايز تضيف كتب تانية؟ استنى فتح المرحلة الجاية — هيوصلك إشعار في الجرس أول ما تفتح.</div>`;
+  return head + list + next;
+}
+if (typeof cartHTML === "function") { const _cartHTML0 = cartHTML; cartHTML = function () { return cartPostDelivery() && !Emp._noList ? leftoverCartHTML() : _cartHTML0(); }; }
+if (typeof refreshCartViews === "function") { const _rcv0 = refreshCartViews; refreshCartViews = function () { _rcv0();
+  if (!cartPostDelivery()) return; const lo = cartLeftover().length, bar = $("#cartBar"); if (bar) bar.classList.add("hidden");
+  const badge = $("#cartBadge"); if (badge) { badge.textContent = lo; badge.classList.toggle("hidden", !lo); } const hc = $("#cartCount"); if (hc) hc.textContent = lo; }; }
