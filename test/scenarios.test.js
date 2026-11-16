@@ -619,6 +619,12 @@ fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad c
     } else console.log('  (exchange window:', r.message, ')');
   }
 }
+// مسودة السلة على الخادم
+ok(api('SAVE_CART_DRAFT', { phaseId: 'PH-01', cart: { 'BK-101|': 2, 'bad|': 99 } }, e1), 'save cart draft');
+{ const d = JSON.parse(rows(S.EMPLOYEES).find(e => e.Emp_ID === '1001').Cart_Draft); assert.strictEqual(d.cart['BK-101|'], 2); assert.ok(!d.cart['bad|']); passed++; }
+ok(api('SAVE_CART_DRAFT', { phaseId: 'PH-01', cart: null }, e1), 'clear cart draft');
+assert.strictEqual(rows(S.EMPLOYEES).find(e => e.Emp_ID === '1001').Cart_Draft, ''); passed++;
+fail(api('SAVE_CART_DRAFT', { cart: {} }, coord), 'cart draft employee only');
 console.log('\nALL PASSED:', passed, 'checks');
 
 

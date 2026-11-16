@@ -153,7 +153,7 @@ function getDatabaseSchemaDefinition_() {
   return [
     { name: S.SETTINGS, color: "#1e293b", headers: ["Setting_Key", "Setting_Value", "Data_Type", "Description", "Updated_At", "Updated_By"] },
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
-    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON"] },
+    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON", "Cart_Draft"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL", "Tracks"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
@@ -619,6 +619,7 @@ const ACTION_ACL = {
   EMP_CANCEL_REQUEST: ["EMPLOYEE"],
   EMP_RETURN_REQUEST: ["EMPLOYEE"],
   EMP_FEEDBACK: ["EMPLOYEE"],
+  SAVE_CART_DRAFT: ["EMPLOYEE"],
   RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
@@ -712,6 +713,7 @@ function callServerApi(action, payload, sessionToken) {
       case "EMP_CANCEL_REQUEST": return E.empCancelRequest(session, payload);
       case "EMP_RETURN_REQUEST": return E.empReturnRequest(session, payload);
       case "EMP_FEEDBACK": return E.empFeedback(session, payload);
+      case "SAVE_CART_DRAFT": return E.saveCartDraft(session, payload);
       case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
@@ -1014,7 +1016,7 @@ const OperationsEngine = {
         EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || "", PAY_INSTAPAY_LINK: settings.PAY_INSTAPAY_LINK || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
-      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department) },
+      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department), cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })() },
       books: this.sortBooks_(books),
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
@@ -2453,6 +2455,19 @@ const OperationsEngine = {
    * ولا يمس المخزون أو الفاتورة إلا بعد اعتماد الإدارة (RESOLVE_RETURN_REQUEST ← نفس مسار المرتجع الرسمي).
    */
   /** تقييم الموظف بعد الاستلام: نجوم 1–5 + اقتراح (يُحفظ في رأس الحجز) */
+  /** مسودة السلة على الخادم (قبل التأكيد) — تُستعاد من أي جهاز؛ لا أثر مالي ولا على الحجز */
+  saveCartDraft: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId);
+      const cart = payload.cart && typeof payload.cart === "object" ? payload.cart : null;
+      const clean = {}; let n = 0;
+      if (cart) Object.keys(cart).slice(0, 200).forEach(k => { const q = parseInt(cart[k], 10) || 0; if (q > 0 && q <= 20 && String(k).length <= 120) { clean[k] = q; n++; } });
+      const val = cart ? JSON.stringify({ phaseId: Util.str(payload.phaseId), cart: clean, at: Util.now() }) : "";
+      Util.require(val.length <= 20000, "السلة كبيرة جداً.");
+      DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Cart_Draft: val });
+      return { success: true, saved: n };
+    });
+  },
   empFeedback: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S(), empId = Util.str(session.empId), stars = parseInt(payload.stars, 10) || 0;
