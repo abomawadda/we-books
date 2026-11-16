@@ -130,6 +130,11 @@ async function isLocked(k: string) {
   const [r] = await sql`select locked_until from books.auth_fails where k = ${k}`;
   return !!(r && r.locked_until && new Date(r.locked_until) > new Date());
 }
+async function registerFailN(k: string, max: number) {
+  await sql`insert into books.auth_fails as f (k, fails, updated_at) values (${k}, 1, now())
+    on conflict (k) do update set fails = case when f.updated_at < now() - interval '15 minutes' then 1 else f.fails + 1 end,
+      locked_until = case when (case when f.updated_at < now() - interval '15 minutes' then 1 else f.fails + 1 end) >= ${max} then now() + interval '15 minutes' else f.locked_until end, updated_at = now()`;
+}
 async function registerFail(k: string) {
   await sql`insert into books.auth_fails as f (k, fails, updated_at) values (${k}, 1, now())
     on conflict (k) do update set
@@ -291,6 +296,33 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
     const res = await rt.run(store, action, rt.apiFn(action, payload, s));
     if (res && res.success) res.message = (res.message || '') + ' (نسخة احتياطية: ' + name + ')';
     return res;
+  }
+  // التحقق العام من مستند مطبوع (رمز QR): بلا دخول، يعرض بيانات مختصرة فقط بلا أرقام هوية؛ 30 محاولة فاشلة/IP كل 15 دقيقة
+  if (action === 'VERIFY_DOC') {
+    const ref = String(payload?.ref || '').trim().slice(0, 60), vk = 'VER:' + (clientIp || 'x');
+    if (!/^[A-Za-z0-9؀-ۿ_\-]{3,60}$/.test(ref)) return { success: true, found: false };
+    if (await isLocked(vk)) return { success: false, message: 'محاولات كثيرة. حاول بعد 15 دقيقة.' };
+    const one = async (tbl: string, key: string) => (await sql`select data from books.records where tbl = ${tbl} and data->>${key} = ${ref} limit 50`).map((r: any) => r.data);
+    const emp = async (id: string) => { const [e] = await sql`select data->>'Full_Name' as n from books.records where tbl = '03_Employees' and data->>'Emp_ID' = ${String(id)} limit 1`;
+      const w = String(e?.n || '').trim().split(/\s+/); return w.length ? w[0] + (w[1] ? ' ' + w[1] : '') + (w.length > 2 ? ' …' : '') : ''; };
+    const phase = async (id: string) => { const [p] = await sql`select data->>'Phase_Name' as n from books.records where tbl = '06_Phases' and data->>'Phase_ID' = ${String(id)} limit 1`; return p?.n || id; };
+    const d10 = (x: any) => String(x || '').slice(0, 10), money = (x: any) => (Math.round(Number(x || 0) * 100) / 100).toLocaleString('en') + ' ج.م';
+    const ST: any = { Paid: 'مسددة', Partially_Paid: 'مسددة جزئياً', Unpaid: 'غير مسددة', Confirmed: 'مؤكد', Cancelled: 'ملغي', Voided: 'ملغاة' };
+    let fields: any[] | null = null, r: any[];
+    if ((r = await one('17_Employee_Payments', 'Receipt_No')).length) { const p = r[0];
+      fields = [['نوع المستند', 'إيصال سداد'], ['الحالة', String(p.Is_Voided).toUpperCase() === 'TRUE' ? 'ملغي ❌' : 'ساري ✅'], ['العضو', await emp(p.Emp_ID)], ['المبلغ', money(p.Amount)], ['التاريخ', d10(p.Payment_Date)], ['الفاتورة', p.Emp_Inv_ID]]; }
+    else if ((r = await one('15_Employee_Invoices', 'Emp_Inv_ID')).length) { const v = r[0];
+      fields = [['نوع المستند', 'فاتورة بيع كتب'], ['الحالة', ST[v.Invoice_Status] || v.Invoice_Status], ['العضو', await emp(v.Emp_ID)], ['المرحلة', await phase(v.Phase_ID)], ['صافي الفاتورة', money(v.Net_Final_Invoice_Amount)], ['المسدد', money(v.Total_Paid_Amount)], ['المتبقي', money(v.Remaining_Balance)], ['تاريخ الإصدار', d10(v.Issue_Date)]]; }
+    else if ((r = await one('07_Reservations_Header', 'Res_ID')).length) { const h = r[0];
+      const [c] = await sql`select count(*)::int as n, coalesce(sum((data->>'Requested_Qty')::numeric),0)::int as q from books.records where tbl = '08_Reservations_Items' and data->>'Res_ID' = ${ref} and coalesce(data->>'Allocation_Status','') not like 'Cancelled%'`;
+      fields = [['نوع المستند', 'طلب حجز كتب'], ['الحالة', ST[h.Res_Status] || h.Res_Status || 'مؤكد'], ['العضو', await emp(h.Emp_ID)], ['المرحلة', await phase(h.Phase_ID)], ['عدد النسخ', c?.q || 0], ['آخر تعديل', d10(h.Last_Modified_At || h.Created_At)]]; }
+    else if ((r = await one('14_Delivery_And_Returns', 'Printed_Receipt_No')).length) { const q = r.reduce((a: number, x: any) => a + Number(x.Qty || 0), 0);
+      fields = [['نوع المستند', String(r[0].Doc_Type || '').includes('RET') ? 'إذن مرتجع' : 'إذن تسليم كتب'], ['العضو', await emp(r[0].Party_ID)], ['عدد النسخ', q], ['التاريخ', d10(r[0].Trans_Date)]]; }
+    else { const m = ref.match(/^PO-(PH-\d+)-(.+)$/);
+      if (m) { const [c] = await sql`select count(*)::int as n, coalesce(sum((data->>'Net_Order_To_Supplier_Qty')::numeric),0)::int as q, max(data->>'Frozen_At') as f from books.records where tbl = '10_Purchase_Orders_Snapshot' and data->>'Phase_ID' = ${m[1]} and data->>'Supplier_ID' = ${m[2]}`;
+        if (c && c.n) fields = [['نوع المستند', 'طلب توريد كتب'], ['المرحلة', await phase(m[1])], ['الأصناف', c.n], ['إجمالي النسخ', c.q], ['تاريخ التجميد', d10(c.f)]]; } }
+    if (!fields) { await registerFailN(vk, 30); return { success: true, found: false }; }
+    return { success: true, found: true, fields: fields.filter(f => f[1] !== '' && f[1] !== undefined && f[1] !== null) };
   }
   // تسجيل ذاتي (زائر/معاش/تعهيد): 5 تسجيلات كحد أقصى لكل عنوان IP كل 15 دقيقة
   if (action === 'REGISTER_MEMBER') {

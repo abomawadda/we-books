@@ -1037,7 +1037,7 @@ on("printInv", () => {
   Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, emp: docEmp(),
     lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, req: n(i.Requested_Qty), choice: i.Waitlist_Choice, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
     adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, down: inv.Down_Payment_Required,
-    schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID });
+    schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID, ref: inv.Emp_Inv_ID });
 });
 /** طلب الحجز كمستند (صورة أو PDF) — من السلة الحالية */
 on("printRes", () => {
@@ -1049,11 +1049,11 @@ on("printRes", () => {
   lines.sort((a, b) => a._g - b._g);
   const pc = Emp.planCalc(Emp.totals().net);
   Doc.show("طلب حجز", Doc.reservation({ no: h.Res_ID || "مسودة", date: h.Created_At || new Date().toISOString(), phase: r.activePhase.Phase_Name, status: Emp.dirty || !h.Res_ID ? "غير محفوظ" : "مؤكد", emp: docEmp(), lines,
-    plan: { method: APP.plan.method, down: pc.down, count: pc.cnt, per: pc.per, last: pc.last } }), { file: "طلب-حجز-" + (h.Res_ID || APP.user.empId) });
+    plan: { method: APP.plan.method, down: pc.down, count: pc.cnt, per: pc.per, last: pc.last } }), { file: "طلب-حجز-" + (h.Res_ID || APP.user.empId), ref: Emp.dirty ? "" : h.Res_ID });
 });
 on("printRcptE", no => {
   const p = APP.emp.myPayments.find(x => x.Receipt_No === no); if (!p) return; const inv = APP.emp.myInvoices.find(i => i.Emp_Inv_ID === p.Emp_Inv_ID) || {};
-  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: docEmp(), amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By }), { file: no });
+  Doc.show("إيصال " + no, Doc.receipt({ no, date: p.Payment_Date, emp: docEmp(), amount: p.Amount, method: p.Payment_Method, ref: p.Transaction_Ref, inv: p.Emp_Inv_ID, net: inv.Net_Final_Invoice_Amount, remaining: inv.Remaining_Balance, collector: p.Collected_By }), { file: no, ref: no });
 });
 
 // ============================================================ مدفوعاتي
