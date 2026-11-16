@@ -489,3 +489,53 @@ on("printLeftover", id => {
     note: `• كتب حُجزت في «${esc(from)}» ولم تُسلَّم لعدم وصولها، وتُرحَّل إلى «${esc(next)}» بأسبقية الحجز الأصلية.<br>• الأسعار تقديرية وتُثبَّت عند التوزيع، ولا تدخل أي فاتورة سابقة.`,
     plan: { method: "", down: 0, count: 0, per: 0 } }), { file: "متبقي-" + id });
 });
+
+// ================================================================ صفحة المرتجعات (الإدارة): الطلبات المعلّقة + سجل القرارات + أذون المرتجع
+ADMIN_NAV[3].items.push(["returns", "undo-2", "المرتجعات"]);
+const RET = { tab: "pending", q: "" };
+const rjson = i => { try { return JSON.parse(i.Return_Request || "null"); } catch (_) { return null; } };
+on("retTab", t => { RET.tab = t; Router.render(); });
+Router.add("/a/returns", view => {
+  const d = A(), { e, b } = maps(), ph = by(d.phases, "Phase_ID"), win = n((d.settingsMap || {}).EMP_RETURN_WINDOW_DAYS) || 7;
+  const reqs = d.resItems.map(i => ({ i, r: rjson(i) })).filter(x => x.r);
+  const pend = reqs.filter(x => x.r.status === "Pending").sort((a, c) => String(a.r.at).localeCompare(String(c.r.at)));
+  const done = reqs.filter(x => x.r.status !== "Pending").sort((a, c) => String(c.r.resolvedAt || "").localeCompare(String(a.r.resolvedAt || "")));
+  const docs = d.deliveryReturns.filter(x => x.Doc_Type === "EMP_RETURN").sort((a, c) => String(c.Trans_Date).localeCompare(String(a.Trans_Date)));
+  const val = docs.reduce((s, x) => s + Math.abs(n(x.Total_Amount_Impact)), 0), qty = docs.reduce((s, x) => s + n(x.Qty), 0);
+  const appr = done.filter(x => x.r.status === "Approved").length, rej = done.length - appr;
+  const reasons = {}; reqs.forEach(x => { const k = String(x.r.reason || "بدون سبب").trim(); reasons[k] = (reasons[k] || 0) + 1; });
+  const topR = Object.entries(reasons).sort((a, c) => c[1] - a[1]).slice(0, 4);
+  const age = at => { const h = (Date.now() - new Date(String(at).replace(" ", "T"))) / 36e5; return isNaN(h) ? "" : h < 24 ? Math.max(1, Math.round(h)) + " ساعة" : Math.round(h / 24) + " يوم"; };
+  const who = id => `${empLink(id, empName(e, id))} <span class="text-[11px] text-slate-400 num">${esc(id)}</span>`;
+  const kpi = (l, v, t) => `<div class="card p-3"><div class="text-[12px] text-slate-500">${l}</div><b class="num text-[20px] ${t || "text-slate-900"}">${v}</b></div>`;
+  const tab = (k, l, c) => `<button class="chip" data-act="retTab" data-id="${k}" aria-pressed="${RET.tab === k}">${l} <span class="num opacity-70">${fmt(c)}</span></button>`;
+  const reqRow = x => { const i = x.i, r = x.r, bk = b[i.Book_ID] || {};
+    return { i, r, bk, ph: (ph[i.Phase_ID] || {}).Phase_Name || i.Phase_ID, amt: n(r.qty) * n(i.Unit_Emp_Price) }; };
+  let body = "";
+  if (RET.tab === "pending") body = pend.length ? UI.table([
+      { t: "الموظف", v: x => who(x.i.Emp_ID) },
+      { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.i.Book_ID))}</b><div class="text-[11.5px] text-slate-500">${esc(x.ph)}${x.i.Beneficiary ? " · لـ " + esc(x.i.Beneficiary) : ""}</div>` },
+      { t: "العدد", cls: "num", v: x => fmt(x.r.qty) }, { t: "القيمة", cls: "num", v: x => `<b>${fmt(x.amt)}</b>` },
+      { t: "السبب والحالة", v: x => `${esc(x.r.reason)}<div>${x.r.condition === "DAMAGED" ? pill("", "فيه عيب", "red") : pill("", "سليم", "green")}</div>` },
+      { t: "منذ", cls: "num whitespace-nowrap", v: x => `${esc(age(x.r.at))}<div class="text-[11px] text-slate-400">${esc(dt(x.r.at))}</div>` },
+      { t: "", actions: true, v: x => can("RESOLVE_RETURN_REQUEST") ? `<div class="inline-flex gap-1"><button class="btn btn-primary btn-xs" data-act="retRes" data-id="${esc(x.i.Res_Item_ID)}|1">${ic("check")} اعتماد</button><button class="btn btn-outline btn-xs" data-act="retRes" data-id="${esc(x.i.Res_Item_ID)}|0">رفض</button></div>` : "" }
+    ], pend.map(reqRow)) : UI.empty("undo-2", "مفيش طلبات مرتجع معلّقة 👌", "أي طلب من الموظفين هيظهر هنا للاعتماد أو الرفض");
+  else if (RET.tab === "log") body = done.length ? UI.table([
+      { t: "الموظف", v: x => who(x.i.Emp_ID) },
+      { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.i.Book_ID))}</b><div class="text-[11.5px] text-slate-500">${esc(x.ph)}</div>` },
+      { t: "العدد", cls: "num", v: x => fmt(x.r.qty) }, { t: "السبب", v: x => esc(x.r.reason) },
+      { t: "القرار", v: x => (x.r.status === "Approved" ? pill("", "معتمد", "green") : pill("", "مرفوض", "red")) + (x.r.note ? `<div class="text-[11.5px] text-slate-500 mt-0.5">${esc(x.r.note)}</div>` : "") },
+      { t: "بواسطة", v: x => `${esc(x.r.by || "")}<div class="text-[11px] text-slate-400 num">${esc(dt(x.r.resolvedAt))}</div>` }
+    ], done.map(reqRow)) : `<p class="text-center text-slate-500 py-8">لسه مفيش قرارات.</p>`;
+  else body = docs.length ? UI.table([
+      { t: "المستند", cls: "num", v: x => `<b>${esc(x.Printed_Receipt_No)}</b><div class="text-[11px] text-slate-400">${esc(dt(x.Trans_Date))}</div>` },
+      { t: "الموظف", v: x => who(x.Party_ID) }, { t: "الكتاب", v: x => esc(bookName(b, x.Book_ID)) },
+      { t: "العدد", cls: "num", v: x => fmt(x.Qty) }, { t: "القيمة", cls: "num", v: x => `<b>${fmt(Math.abs(n(x.Total_Amount_Impact)))}</b>` },
+      { t: "السبب", v: x => esc(x.Return_Reason || "") },
+      { t: "", actions: true, v: x => `<button class="act-ic act-ic-edit" data-act="printDoc" data-id="${esc(x.Printed_Receipt_No)}" title="طباعة إذن المرتجع" aria-label="طباعة إذن المرتجع">${ic("printer")}</button>` }
+    ], docs) : `<p class="text-center text-slate-500 py-8">لا توجد أذون مرتجع.</p>`;
+  view.innerHTML = `${UI.pageHead ? UI.pageHead("المرتجعات", `طلبات الموظفين وقراراتها وأذون المرتجع — مدة المرتجع ${win} أيام من الاستلام`) : `<h1 class="text-[20px] font-extrabold mb-1">المرتجعات</h1><p class="text-[12.5px] text-slate-500 mb-3">مدة المرتجع ${win} أيام من الاستلام</p>`}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">${kpi("طلبات معلّقة", fmt(pend.length), pend.length ? "text-amber-600" : "")}${kpi("معتمد / مرفوض", `${fmt(appr)} / ${fmt(rej)}`)}${kpi("نسخ مرتجعة", fmt(qty))}${kpi("قيمة المرتجع", fmt(val) + ' <span class="text-[12px] font-normal">ج.م</span>', "text-emerald-700")}</div>
+    ${topR.length ? `<div class="card p-3 mb-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5">أكثر أسباب المرتجع</div><div class="flex flex-wrap gap-1.5">${topR.map(([k, c]) => `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-[12px]">${esc(k)} <b class="num">${c}</b></span>`).join("")}</div></div>` : ""}
+    <div class="flex gap-1.5 overflow-x-auto pb-1 mb-3">${tab("pending", "معلّقة", pend.length)}${tab("log", "سجل القرارات", done.length)}${tab("docs", "أذون المرتجع", docs.length)}</div>${body}`;
+});
