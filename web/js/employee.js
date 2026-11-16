@@ -445,6 +445,8 @@ function kidSwitchSheet() {
   m.root.querySelectorAll("[data-kid-go]").forEach(b => b.onclick = () => { m.close(); setTimeout(() => openKid(+b.dataset.kidGo), 200); });
   const d = m.root.querySelector("[data-kid-done]"); if (d) d.onclick = () => { m.close(); setTimeout(() => ACTIONS.openCart(), 200); };
 }
+// شريط «جارٍ الحجز لـ…» يظهر بس بعد ما بطاقة الصف تختفي من الشاشة (منع تكرار المعلومة فوق)
+addEventListener("scroll", () => { const c = document.getElementById("ctxStick"); if (!c) return; const h = scrollY < 380; if (c.classList.contains("hidden") === h) return; c.classList.toggle("hidden", h); const st = $("#bkSticky"), g = $("#bookGrid"); if (st && g) g.style.setProperty("--subjTop", (64 + st.offsetHeight) + "px"); }, { passive: true });
 on("famTop", () => myKids().length > 1 ? kidSwitchSheet() : scrollTo({ top: 0, behavior: "smooth" }));
 on("kidSwitch", () => kidSwitchSheet());
 /** بطاقة آخر القائمة: خلّصت كتب الفرد ده؟ كمّل لفرد تاني أو أكّد */
@@ -453,10 +455,9 @@ function nextKidCard() {
   const others = ks.map((k, i) => ({ k, i })).filter(x => x.i !== c.i), t = Emp.totals(), done = kidCartCount(c.k);
   return `<section class="rounded-3xl p-4 my-5 ring-1 ring-brand-200 shadow-soft" style="background:linear-gradient(135deg,#faf7ff,#f1e9fc)">
     <div class="flex items-center gap-3"><span class="w-11 h-11 rounded-2xl bg-white flex items-center justify-center text-[24px] shadow-xs">${kidEmoji(c.k)}</span>
-      <div class="flex-1 min-w-0"><b class="block text-[15px] text-brand-950">${done ? `اخترت ${booksWord(done)} لـ ${esc(kidName(c.k, c.i))} ✓` : `${gTxt("خلّصت", "خلّصتي")} كتب ${esc(kidName(c.k, c.i))}؟`}</b><span class="block text-[12px] text-brand-800/70">${others.length ? gTxt("كمّل لفرد تاني من هنا على طول — أو أكّد الحجز", "كمّلي لفرد تاني من هنا على طول — أو أكّدي الحجز") : gTxt("لو خلّصت أكّد الحجز", "لو خلّصتي أكّدي الحجز")}</span></div></div>
+      <div class="flex-1 min-w-0"><b class="block text-[15px] text-brand-950">${done ? `كتب ${esc(kidName(c.k, c.i))} في السلة: ${booksWord(done)} ✓` : `${gTxt("خلّصت", "خلّصتي")} كتب ${esc(kidName(c.k, c.i))}؟`}</b><span class="block text-[12px] text-brand-800/70">${others.length ? gTxt("كمّل لفرد تاني من هنا على طول — أو أكّد من زر «إتمام الحجز» تحت", "كمّلي لفرد تاني من هنا على طول — أو أكّدي من زر «إتمام الحجز» تحت") : gTxt("لو خلّصت أكّد من زر «إتمام الحجز» تحت", "لو خلّصتي أكّدي من زر «إتمام الحجز» تحت")}</span></div></div>
     ${others.length ? `<div class="flex gap-2 overflow-x-auto mt-3 pb-1" style="scrollbar-width:none">${others.map(x => { const n2 = kidCartCount(x.k);
       return `<button type="button" class="shrink-0 flex items-center gap-2 rounded-2xl bg-white ring-1 ${x.k.rel ? "ring-sky-200" : "ring-brand-200"} px-3 py-2 active:scale-95 transition" data-act="pickKid" data-id="${x.i}"><span class="text-[20px]">${kidEmoji(x.k)}</span><span class="text-right leading-tight"><b class="block text-[13px] text-slate-900">${esc(kidName(x.k, x.i))}</b><span class="block text-[10.5px] ${n2 ? "text-emerald-600 font-bold" : "text-slate-500"}">${n2 ? n2 + " كتاب ✓" : esc(gradeShort(x.k.grade)) + " · ابدأ ←"}</span></span></button>`; }).join("")}</div>` : ""}
-    ${t.count ? `<button type="button" class="btn btn-primary w-full mt-3 justify-center" data-act="openCart">${ic("check-check")} ${gTxt("إتمام الحجز", "إتمام الحجز")} · ${booksWord(t.count)} · <span class="num">${money(t.net)}</span></button>` : ""}
   </section>`;
 }
 
@@ -530,7 +531,7 @@ function kdHTML() {
       </div>
     </div>` : ""}
   </div>
-  ${(KD.list.length > 1 || k.grade) ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${esc(k.name || (k.rel ? "هذا القريب" : k.gender === "g" ? "هذه البنت" : "هذا الابن"))}</button>` : ""}
+  ${(KD.list.length > 1 || k.grade) ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic(k._saved ? "trash-2" : "x")} ${k._saved ? "حذف" : "إلغاء إضافة"} ${esc(k.name || (k.rel ? "هذا القريب" : k.gender === "g" ? "هذه البنت" : "هذا الابن"))}</button>` : ""}
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; } } };
@@ -576,6 +577,7 @@ on("kdAdd", () => { const open = KD.list.findIndex(x => !x.grade && !x._saved);
 /** حذف فرد من العيلة: يُحفظ فوراً على الخادم، ويوضح أثره على حجز المرحلة الحالية، ولا يمس السجل التاريخي للمراحل السابقة */
 on("kdDel", async () => {
   const k = KD.list[KD.i]; if (!k) return;
+  if (!k._saved) { KD.list.splice(KD.i, 1); if (!KD.list.length) KD.list.push(kdBlank()); KD.i = Math.max(0, Math.min(KD.i, KD.list.length - 1)); return kdRender(); } // فرد جديد لم يُحفظ: إلغاء بلا أثر
   const nm = k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك"), r = APP.emp, bm = Emp.bookMap(), ben = kidBen(k);
   const same = x => (x.name || "") === (k.name || "") && (x.rel || "") === (k.rel || "") && x.grade === k.grade && (x.gender || "b") === (k.gender || "b");
   const saved = (r.employee.kids || []).some(same);
@@ -846,7 +848,7 @@ function ctxBar() {
   const pills = ks.length > 1 ? `<div class="scroll-x !mx-0 !px-0 mt-2 !pb-0">${ks.map((k, j) => { const on = j === i, c = kidCartCount(k);
     return `<button class="shrink-0 inline-flex items-center gap-1.5 h-8 rounded-full px-2.5 text-[12px] font-semibold ring-1 transition ${on ? "bg-gold-400 text-brand-950 ring-gold-400" : "bg-white/10 text-white ring-white/25 hover:bg-white/20"}" data-act="pickKid" data-id="${j}" aria-pressed="${on}">${kidEmoji(k)} ${esc(kidName(k, j))}${c ? `<span class="min-w-[18px] h-[18px] px-1 rounded-full text-[10.5px] font-bold flex items-center justify-center ${on ? "bg-brand-900 text-white" : "bg-gold-400 text-brand-950"}">${c}</span>` : ""}</button>`; }).join("")}</div>` : "";
   if (!cur) return ""; // الاختيار من لوحة «أبنائي» أعلى الصفحة — هنا تذكير لاصق بمن تحجز له فقط
-  return `<div class="hero text-white rounded-2xl px-3 py-2.5 mb-2 shadow-soft"><div class="flex items-center gap-2.5">${who}<button type="button" class="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 shrink-0" data-act="famTop">${myKids().length > 1 ? "👨‍👩‍👧 ابن تاني" : "تغيير"}</button></div></div>`;
+  return `<div id="ctxStick" class="hero text-white rounded-2xl px-3 py-2.5 mb-2 shadow-soft ${scrollY > 380 ? "" : "hidden"}"><div class="flex items-center gap-2.5">${who}<button type="button" class="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 shrink-0" data-act="famTop">${myKids().length > 1 ? "👨‍👩‍👧 ابن تاني" : "تغيير"}</button></div></div>`;
 }
 function gradeList() {
   const f = Emp.filter, list = APP.emp.books.filter(b => b.Grade === f.grade && typeOk(b, f.type));
@@ -900,7 +902,7 @@ function renderBookGrid() {
   } else {
     const { list, sorted } = gradeList(); count = list.length;
     const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
-    el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? "جرّب «كل المدارس»." : "")
+    el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? (curKid() ? "مفيش كتب مسجّلة لمدارس " + f.type + " في الصف ده لسه." : "جرّب «كل المدارس».") : "", f.type ? `<button class="btn btn-outline mt-4" data-act="fTypeAll">${ic("layout-grid")} اعرض كتب كل المدارس</button>` : "")
       : bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? bookModeHello() + `<div id="cartDiv">${cartDivider()}</div>` : Emp.open() && Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
           <span class="w-7 h-7 rounded-full flex items-center justify-center text-white shrink-0 shadow-soft" style="background:var(--tc)">${ic("book-open", "!w-3.5 !h-3.5")}</span><h3 class="font-display font-bold text-slate-900 text-[14.5px] flex-1 min-w-0 truncate">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}<span class="font-sans font-semibold text-[12px] text-slate-500"> — ${esc(gradeShort(Emp.filter.grade || ""))}</span></h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
           ${g.k !== "__p" && subjRank(g.k) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
@@ -964,6 +966,7 @@ function lockedKidMsg(what) {
   const b = m.root.querySelector("[data-lock-edit]"); if (b) b.onclick = () => { m.close(); setTimeout(() => kidsEditor(false, { kid: c.k }), 250); };
   return true;
 }
+on("fTypeAll", () => { Emp.filter.type = ""; Shell.rerender(); });
 on("fType", v => { if (curKid() && (v || "") !== (Emp.filter.type || "") && lockedKidMsg("type")) return; Emp.filter.type = v; Shell.rerender(); });
 on("fTrack", v => { if (curKid() && (v || "") !== (Emp.filter.track || "") && lockedKidMsg("track")) return; Emp.filter.track = v; Shell.rerender(); });
 on("jumpSubj", v => { const el = document.getElementById("sub_" + v); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); });

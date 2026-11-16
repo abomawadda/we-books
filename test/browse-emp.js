@@ -31,9 +31,32 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   await p.goto('https://app.test/'); await p.waitForTimeout(700);
   const sg = await p.$('#spGo'); if (sg) { await sg.click({ force: true }); await p.waitForTimeout(500); }
   await shot('login');
-  await p.fill('#lgEmp', '1001'); await p.fill('#lgNat', '4512'); await p.fill('#lgMob', '01012345678'); await p.click('#fEmp button.btn-gold'); await p.waitForTimeout(900);
+  await p.evaluate(() => { Shell.loginTab = 'emp'; Shell.renderLogin(); }); await p.waitForTimeout(300);
+  await p.evaluate(() => { const d = document; d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '4512'; d.getElementById('lgMob').value = '01012345678'; d.getElementById('fEmp').dispatchEvent(new Event('submit', { cancelable: true })); }); await p.waitForTimeout(1500);
   await shot('home0');
+  await p.evaluate(() => { try { wzMarkGuideOff(); } catch (_) {} });
   await go('#/e/books'); await shot('books0');
+  if (process.env.FAMILY) {
+    await p.evaluate(() => { const gs = [...new Set(APP.emp.books.map(b => b.Grade))]; APP.emp.employee.kids = [{ name: 'محمد', gender: 'b', grade: gs[0], type: '' }, { name: 'مريم', gender: 'g', grade: gs[1] || gs[0], type: '' }, { name: 'يوسف', gender: 'b', grade: gs[0], type: '', rel: 'ابن أخ' }]; Shell.rerender(); });
+    await p.waitForTimeout(500); await shot('fam-books');
+    await p.evaluate(() => openKid(0)); await p.waitForTimeout(500); await shot('fam-kid');
+    await p.click('[data-act="bookMode"][data-id="manual"]'); await p.waitForTimeout(400); await shot('fam-manual');
+    for (const el of (await p.$$('[data-act="cartInc"]')).slice(0, 4)) { await el.click(); await p.waitForTimeout(150); }
+    await p.evaluate(() => scrollTo(0, 1100)); await p.waitForTimeout(400); await shot('fam-scroll');
+    await p.evaluate(() => scrollTo(0, document.body.scrollHeight)); await p.waitForTimeout(400); await shot('fam-end');
+    await p.evaluate(() => ACTIONS.famTop()); await p.waitForTimeout(500); await shot('fam-switch');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    await p.evaluate(() => { scrollTo(0, 0); ACTIONS.fType(''); }); await p.waitForTimeout(500); await shot('fam-lock');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    await p.evaluate(() => ACTIONS.bagOpen()); await p.waitForTimeout(500); const bp = await p.$('[data-act="bagPick"]'); if (bp) await bp.click(); await p.waitForTimeout(400); await shot('fam-bag');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    await p.evaluate(() => kidsEditor(false, { kid: myKids()[0] })); await p.waitForTimeout(500); await shot('fam-kidedit');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    await p.evaluate(() => ACTIONS.kidsAddNew()); await p.waitForTimeout(500); await shot('fam-kidnew');
+    await p.keyboard.press('Escape'); await p.waitForTimeout(400);
+    await p.evaluate(() => Router.go('/e/wiz')); await p.waitForTimeout(600); await shot('fam-wiz');
+    await b.close(); return;
+  }
   for (const id of ['BK-101', 'BK-201']) { const el = await p.$(`[data-act="cartInc"][data-id="${id}"]`); if (el) { await el.click(); await p.waitForTimeout(150); } }
   await shot('books1');
   const oc = await p.$('[data-act="openCart"]'); if (oc) { await oc.click(); await p.waitForTimeout(500); await shot('cart'); const sb = await p.$('[data-act="submitRes"]'); if (sb) { await sb.click(); await p.waitForTimeout(900); await shot('saved'); } }
