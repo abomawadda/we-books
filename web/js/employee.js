@@ -827,13 +827,30 @@ function gradeList() {
 /** طرق الحجز: الشنطة · السلسلة · بنفسي — ثم قائمة الكتب بالمادة */
 function bookModeTabs() {
   if (!Emp.open()) return "";
-  const m = Emp.bookMode || "manual";
+  const m = Emp.bookMode || "";
   const t = (id, e, ttl, sub, act) => `<button type="button" class="min-w-0 text-right rounded-2xl p-3 ring-1 transition active:scale-[.98] ${m === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200"}" data-act="${act}" data-id="${id}" aria-pressed="${m === id}">
     <span class="block text-[24px] leading-none">${e}</span><b class="block text-[13px] mt-1.5 leading-tight">${ttl}</b><span class="block text-[10.5px] mt-0.5 leading-snug ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></button>`;
   return `<section class="mb-4"><div class="text-[12px] font-bold text-slate-500 mb-2">${gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟")}</div>
     <div class="grid grid-cols-3 gap-2">${t("manual", "🔍", "أختار بنفسي", "كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد", "bookMode")}</div></section>`;
 }
-on("bookMode", v => { Emp.bookMode = Emp.bookMode === v && v === "series" ? "manual" : v; renderBookGrid(); });
+on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? "" : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
+/** رسالة الترحيب قبل اختيار طريقة الحجز */
+function bookModeHello() {
+  const ki = myKids().findIndex(k => k.grade === Emp.filter.grade && kidBen(k) === Emp.ben), who = ki >= 0 ? kidName(myKids()[ki], ki) : "";
+  return `<div class="relative overflow-hidden rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs px-5 py-8 text-center">
+    <span class="absolute -top-10 -left-10 w-36 h-36 rounded-full bg-brand-50"></span><span class="absolute -bottom-12 -right-8 w-32 h-32 rounded-full bg-gold-50"></span>
+    <div class="relative">
+      <div class="mx-auto w-16 h-16 rounded-3xl flex items-center justify-center text-[34px] shadow-soft" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)">📚</div>
+      <h3 class="font-display font-bold text-[18px] text-slate-900 mt-4">${who ? `كتب ${esc(who)} جاهزة` : "كتب الصف جاهزة"} ✨</h3>
+      <p class="text-[13px] text-slate-500 mt-1.5 leading-relaxed max-w-xs mx-auto">${gTxt("اختار من فوق الطريقة اللي تريحك", "اختاري من فوق الطريقة اللي تريحك")} — وكل الكتب بخصم العاملين وتقدر${gTxt("", "ي")} تعدّل${gTxt("", "ي")} في أي وقت قبل القفل.</p>
+      <div class="mt-5 grid gap-2 text-right max-w-xs mx-auto text-[12.5px]">
+        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">🔍</span><span><b class="text-slate-800">أختار بنفسي</b> <span class="text-slate-500">— كل الكتب مادة مادة</span></span></div>
+        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">🎒</span><span><b class="text-slate-800">جهّز الشنطة</b> <span class="text-slate-500">— كتاب لكل مادة بسرعة</span></span></div>
+        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">📚</span><span><b class="text-slate-800">بالسلسلة</b> <span class="text-slate-500">— كتب ناشر واحد بضغطة</span></span></div>
+      </div>
+      <div class="mt-5 inline-flex items-center gap-1.5 text-[12px] font-bold text-brand-700 animate-bounce">${ic("arrow-up", "!w-4 !h-4")} ${gTxt("اختار طريقة", "اختاري طريقة")}</div>
+    </div></div>`;
+}
 /** فاصل السلة بعد قائمة الكتب */
 function cartDivider() {
   const t = Emp.totals(); if (!t.count) return "";
@@ -856,10 +873,10 @@ function renderBookGrid() {
     const { list, sorted } = gradeList(); count = list.length;
     const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
     el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? "جرّب «كل المدارس»." : "")
-      : bookModeTabs() + (Emp.bookMode === "series" ? bundles(list) : "") + groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] -mx-1 mb-2 flex items-center gap-2 rounded-2xl px-3 py-2 bg-white/95 backdrop-blur ring-1 ring-slate-200 shadow-xs" style="top:var(--subjTop,8.5rem);border-inline-start:4px solid ${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}">
+      : bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? bookModeHello() + `<div id="cartDiv">${cartDivider()}</div>` : Emp.open() && Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] -mx-1 mb-2 flex items-center gap-2 rounded-2xl px-3 py-2 bg-white/95 backdrop-blur ring-1 ring-slate-200 shadow-xs" style="top:var(--subjTop,8.5rem);border-inline-start:4px solid ${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}">
           <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0" style="background:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}">${ic("book-open", "!w-4 !h-4")}</span><h3 class="font-display font-bold text-slate-900 text-[15.5px] flex-1 truncate">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}</h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
           ${g.k !== "__p" && subjRank(g.k) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
-        <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="cartDiv">${cartDivider()}</div>`;
+        <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="cartDiv">${cartDivider()}</div>`);
   }
   const bc = $("#bookCount"); if (bc) bc.textContent = count ? count + " كتاب" : "";
   // اسم المادة يثبت تحت شريط البحث اللاصق مباشرة
