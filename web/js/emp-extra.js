@@ -10,7 +10,7 @@ Notif.list = function () {
   const bm = Emp.bookMap(), items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled"));
   items.filter(i => !n(i.Unit_Emp_Price) && n((bm[i.Book_ID] || {}).Emp_Selling_Price)).forEach(i => {
     const b = bm[i.Book_ID];
-    out.unshift({ id: "priced-" + i.Book_ID + "-" + b.Emp_Selling_Price, icon: "badge-percent", tone: "green", title: `اتسعّر «${b.Book_Name}» 🎉`, body: `سعره لك ${fmt(b.Emp_Selling_Price)} ج.م بدل ${fmt(b.Cover_Price)}${i.Beneficiary ? " — لـ " + i.Beneficiary : ""}`, href: "#/e/orders" });
+    out.unshift({ id: "priced-" + i.Book_ID + "-" + b.Emp_Selling_Price, icon: "badge-percent", tone: "green", title: `اتسعّر «${bookLbl(b, i.Book_ID)}» 🎉`, body: `سعره لك ${fmt(b.Emp_Selling_Price)} ج.م بدل ${fmt(b.Cover_Price)}${i.Beneficiary ? " — لـ " + i.Beneficiary : ""}`, href: "#/e/orders" });
   });
   const ready = items.reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
   if (ready) out.unshift({ id: "ready-" + ready, icon: "package-check", tone: "green", title: `كتبك جاهزة — ${booksWord(ready)} 📦`, body: "افتح «حجوزاتي» تشوف موعدك ورمز الاستلام", href: "#/e/orders" });
@@ -224,7 +224,7 @@ on("cartInc", async id => {
   Emp._dupOk = Emp._dupOk || {};
   if (saved > 0 && (APP.cart[key] || 0) >= saved && !Emp._dupOk[key]) {
     const b = Emp.bookMap()[bid] || {};
-    const yes = await UI.confirm({ title: "حجزته قبل كده 👀", message: `«${b.Book_Name || bid}» محجوز${ben ? " لـ " + ben : ""} بالفعل (${booksWord(saved)}). عايز تزوّد نسخة كمان؟`, ok: "أيوه، زوّد نسخة", cancel: "لا، كفاية كده" });
+    const yes = await UI.confirm({ title: "حجزته قبل كده 👀", message: `«${bookLbl(b, bid)}» محجوز${ben ? " لـ " + ben : ""} بالفعل (${booksWord(saved)}). عايز تزوّد نسخة كمان؟`, ok: "أيوه، زوّد نسخة", cancel: "لا، كفاية كده" });
     if (!yes) return;
     Emp._dupOk[key] = true;
   }
@@ -232,6 +232,8 @@ on("cartInc", async id => {
 });
 
 // ---------------------------------------------------------------- طلب مرتجع بعد الاستلام (خلال المدة) — يعتمده المسؤول
+/** اسم الكتاب كاملاً للعرض: الناشر — المادة — الصف (قاعدة ثابتة في كل الشاشات) */
+function bookLbl(b, id) { b = b || {}; const nm = b.Book_Name || id || "", g = Doc.shortGrade(b.Grade || ""); return g && !String(nm).includes(g) ? nm + " — " + g : nm; }
 function retReq(i) { try { return JSON.parse(i.Return_Request || "null"); } catch (_) { return null; } }
 function retLine(i) {
   const can = n(i.Delivered_Qty) - n(i.Returned_Qty), r = retReq(i);
@@ -243,7 +245,7 @@ function retLine(i) {
 on("retReq", async (id, kind0) => {
   const it = (APP.emp.myReservationItems || []).find(x => x.Res_Item_ID === id); if (!it) return;
   const can = n(it.Delivered_Qty) - n(it.Returned_Qty), b = Emp.bookMap()[it.Book_ID] || {}, win = n((APP.emp.settings || {}).EMP_RETURN_WINDOW_DAYS) || 7, dl = retDaysLeft(it);
-  const v = await UI.form({ title: "مرتجع أو استبدال", sub: b.Book_Name, intro: `• <b>مرتجع:</b> ترجّع الكتاب سليم خلال ${win} أيام من الاستلام، وتمنه يتخصم من فاتورتك (ولو دافع يرجعلك رصيد).<br>• <b>استبدال:</b> لو في الكتاب عيب (صفحات ناقصة/مقطوعة/طباعة) تاخد نسخة سليمة بدلها وفاتورتك زي ما هي.${dl !== null ? `<br>⏳ فاضل لك <b>${dl}</b> ${dl === 1 ? "يوم" : "أيام"} على انتهاء المدة.` : ""}`,
+  const v = await UI.form({ title: "مرتجع أو استبدال", sub: bookLbl(b, it.Book_ID), intro: `• <b>مرتجع:</b> ترجّع الكتاب سليم خلال ${win} أيام من الاستلام، وتمنه يتخصم من فاتورتك (ولو دافع يرجعلك رصيد).<br>• <b>استبدال:</b> لو في الكتاب عيب (صفحات ناقصة/مقطوعة/طباعة) تاخد نسخة سليمة بدلها وفاتورتك زي ما هي.${dl !== null ? `<br>⏳ فاضل لك <b>${dl}</b> ${dl === 1 ? "يوم" : "أيام"} على انتهاء المدة.` : ""}`,
     fields: [{ name: "kind", label: "نوع الطلب", type: "select", value: kind0 || "RETURN", options: [["RETURN", "مرتجع — رجّع الكتاب واخصم تمنه"], ["EXCHANGE", "استبدال — نسخة سليمة بدل المعيبة"]] },
       { name: "qty", label: "العدد", type: "number", value: 1, min: 1, max: can }, { name: "condition", label: "حالة الكتاب (للمرتجع)", type: "select", value: "GOOD", options: [["GOOD", "سليم"], ["DAMAGED", "فيه عيب"]] },
       { name: "reason", label: "السبب / العيب", placeholder: "مثال: مكرر / صفحات ناقصة من 40 لـ 56" }],
@@ -304,7 +306,7 @@ function bookedForKidHTML() {
   if (!ids.length) return "";
   const rows = ids.map(id => { const b = bm[id] || {}, k = ck(id, ben), q = APP.cart[k] || 0;
     return `<li class="flex items-center gap-2 py-2 min-w-0"><span class="w-1.5 h-1.5 rounded-full ${q ? "bg-emerald-500" : "bg-slate-300"} shrink-0"></span>
-      <span class="flex-1 min-w-0 truncate text-[13.5px]"><b>${esc(b.Publisher || b.Book_Name || id)}</b> · ${esc(b.Subject || "")}${carriedTag(saved[id].carried)}</span>
+      <span class="flex-1 min-w-0 truncate text-[13.5px]"><b>${esc(b.Publisher || b.Book_Name || id)}</b> · ${esc(b.Subject || "")} · ${esc(Doc.shortGrade(b.Grade || ""))}${carriedTag(saved[id].carried)}</span>
       <span class="inline-flex items-center gap-1 shrink-0"><button class="icon-btn w-8 h-8 ring-1 ring-slate-200" data-act="cartDec" data-id="${esc(k)}" aria-label="أقل">${ic("minus")}</button><b class="num w-5 text-center">${q}</b><button class="icon-btn w-8 h-8 ring-1 ring-slate-200" data-act="cartInc" data-id="${esc(k)}" aria-label="أكتر">${ic("plus")}</button></span></li>`; }).join("");
   return `<section id="bookedKid" class="card p-4 mb-3 ring-1 ring-emerald-200"><div class="flex items-center gap-2"><span class="text-[20px]">✅</span><div class="flex-1"><div class="font-bold text-[15px] text-slate-900">محجوز بالفعل${ben ? " لـ " + esc(ben) : ""}</div><div class="text-[12px] text-slate-500">${booksWord(ids.length)} — تقدر تزوّد أو تقلّل، وتحت تكمّل من الدليل</div></div></div><ul class="mt-1 divide-y divide-slate-100">${rows}</ul></section>`;
 }
@@ -678,7 +680,7 @@ Router.add("/e/returns", view => {
   const st = x => !x.r ? ["مرتجع مسجّل", "emerald", "circle-check"] : x.r.status === "Pending" ? [ex(x) ? "استبدال عند المسؤول" : "عند المسؤول", "amber", "hourglass"] : x.r.status === "Approved" ? [ex(x) ? "اتبدّلت بنسخة سليمة" : "اتقبل واتخصم", "emerald", "circle-check"] : ["مرفوض", "rose", "circle-x"];
   const card = x => { const s = st(x), who = x.i.Beneficiary || "";
     return `<li class="card p-3.5 mb-2.5"><div class="flex items-start gap-3"><span class="w-10 h-10 rounded-xl bg-${s[1]}-50 text-${s[1]}-600 flex items-center justify-center shrink-0">${ic(s[2])}</span>
-      <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 leading-snug">${esc(x.b.Book_Name || x.i.Book_ID)}</div>
+      <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 leading-snug">${esc(bookLbl(x.b, x.i.Book_ID))}</div>
         <div class="text-[12px] text-slate-500 mt-0.5">${esc(Doc.shortGrade(x.b.Grade || ""))} · ${esc(x.ph)}${who ? " · لـ " + esc(who) : ""}</div>
         <div class="flex flex-wrap gap-1.5 mt-2 text-[12px]"><span class="rounded-full bg-${s[1]}-50 text-${s[1]}-700 px-2.5 py-0.5 font-semibold">${s[0]}</span>
           ${x.r ? `<span class="rounded-full bg-slate-100 px-2.5 py-0.5">${booksWord(x.r.qty)}</span><span class="rounded-full bg-slate-100 px-2.5 py-0.5">${x.r.condition === "DAMAGED" ? "فيه عيب" : "سليم"}</span>` : ""}
@@ -690,7 +692,7 @@ Router.add("/e/returns", view => {
     <div class="grid grid-cols-3 gap-2 mb-3 text-center"><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">طلبات</div><b class="num text-[18px]">${fmt(list.length)}</b></div><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">عند المسؤول</div><b class="num text-[18px] text-amber-600">${fmt(pend)}</b></div><div class="card p-2.5"><div class="text-[11.5px] text-slate-500">اتخصم من فواتيرك</div><b class="num text-[18px] text-emerald-700">${fmt(val)}</b></div></div>
     <div class="rounded-2xl bg-sky-50 ring-1 ring-sky-100 p-3 mb-4 text-[12.5px] text-sky-900 leading-relaxed">${ic("info", "inline -mt-0.5")} تقدر ترجّع الكتاب خلال <b>${win} أيام</b> من استلامه وهو سليم. بعد ما المسؤول يستلمه ويعتمده، قيمته بتتخصم من فاتورتك، ولو كنت دافع أكتر بيبقى ليك رصيد يتخصم من الجاي أو يترد لك.</div>
     ${list.length ? `<h2 class="text-[14px] font-bold text-slate-700 mb-2">طلباتي</h2><ul>${list.map(card).join("")}</ul>` : `<div class="card p-6 text-center text-slate-500 mb-4">${ic("package-check", "mx-auto mb-1")}<div>مفيش مرتجعات — كل كتبك معاك 👌</div></div>`}
-    ${elig.length ? `<h2 class="text-[14px] font-bold text-slate-700 mt-4 mb-2">كتب استلمتها وممكن ترجّعها</h2><ul class="card divide-y divide-slate-100">${elig.map(x => `<li class="flex items-center gap-2 p-3"><div class="flex-1 min-w-0"><div class="text-[13.5px] font-semibold truncate">${esc(x.b.Book_Name || x.i.Book_ID)}</div><div class="text-[11.5px] text-slate-500">${esc(x.ph)}${x.i.Beneficiary ? " · لـ " + esc(x.i.Beneficiary) : ""}${(d => d === null ? "" : d > 0 ? ` · <span class="${d <= 2 ? "text-rose-600 font-semibold" : "text-amber-700"}">فاضل ${d} ${d === 1 ? "يوم" : "أيام"}</span>` : ` · <span class="text-slate-400">المدة خلصت</span>`)(retDaysLeft(x.i))}</div></div><button class="btn btn-outline btn-xs" data-act="retReq" data-id="${esc(x.i.Res_Item_ID)}">${ic("undo-2")} مرتجع / استبدال</button></li>`).join("")}</ul><p class="text-[11.5px] text-slate-400 mt-1.5">لو مدة المرتجع خلصت هيظهرلك ده لما تبعت الطلب.</p>` : ""}`;
+    ${elig.length ? `<h2 class="text-[14px] font-bold text-slate-700 mt-4 mb-2">كتب استلمتها وممكن ترجّعها</h2><ul class="card divide-y divide-slate-100">${elig.map(x => `<li class="flex items-center gap-2 p-3"><div class="flex-1 min-w-0"><div class="text-[13.5px] font-semibold truncate">${esc(bookLbl(x.b, x.i.Book_ID))}</div><div class="text-[11.5px] text-slate-500">${esc(x.ph)}${x.i.Beneficiary ? " · لـ " + esc(x.i.Beneficiary) : ""}${(d => d === null ? "" : d > 0 ? ` · <span class="${d <= 2 ? "text-rose-600 font-semibold" : "text-amber-700"}">فاضل ${d} ${d === 1 ? "يوم" : "أيام"}</span>` : ` · <span class="text-slate-400">المدة خلصت</span>`)(retDaysLeft(x.i))}</div></div><button class="btn btn-outline btn-xs" data-act="retReq" data-id="${esc(x.i.Res_Item_ID)}">${ic("undo-2")} مرتجع / استبدال</button></li>`).join("")}</ul><p class="text-[11.5px] text-slate-400 mt-1.5">لو مدة المرتجع خلصت هيظهرلك ده لما تبعت الطلب.</p>` : ""}`;
 });
 // مدخل «مرتجعاتي» من «حسابي» و«حجوزاتي»
 _wrap("/e/me", view => { const btn = view.querySelector('[data-act="faq"]'); if (!btn) return;
@@ -703,7 +705,7 @@ _wrap("/e/home", view => {
   const html = res.map(x => { const okd = x.r.status === "Approved";
     return `<section class="card p-4 mb-3 ring-2 ${okd ? "ring-emerald-200 bg-emerald-50/40" : "ring-rose-200 bg-rose-50/40"}"><div class="flex items-start gap-3"><span class="text-[28px]">${okd ? "✅" : "❌"}</span><div class="flex-1 min-w-0">
       <b class="text-[14.5px] ${okd ? "text-emerald-800" : "text-rose-800"}">${x.r.kind === "EXCHANGE" ? (okd ? "اتقبل طلب الاستبدال" : "اترفض طلب الاستبدال") : (okd ? "اتقبل طلب المرتجع" : "اترفض طلب المرتجع")}</b>
-      <div class="text-[13px] text-slate-700 mt-0.5">${esc(x.b.Book_Name || x.i.Book_ID)} — ${booksWord(x.r.qty)}</div>
+      <div class="text-[13px] text-slate-700 mt-0.5">${esc(bookLbl(x.b, x.i.Book_ID))} — ${booksWord(x.r.qty)}</div>
       <div class="text-[12.5px] text-slate-600 mt-1">${x.r.kind === "EXCHANGE" ? (okd ? "خدت نسخة سليمة بدل المعيبة، وفاتورتك زي ما هي." : "النسخة فاضلة معاك.") : okd ? `اتخصم <b class="num">${fmt(n(x.r.qty) * n(x.i.Unit_Emp_Price))}</b> ج.م من فاتورتك.` : "الكتاب فاضل معاك وفاتورتك زي ما هي."}${x.r.note ? `<br>ملاحظة المسؤول: ${esc(x.r.note)}` : ""}</div>
       <div class="flex gap-2 mt-2.5"><a href="#/e/returns" class="btn btn-outline btn-xs">التفاصيل</a><button class="btn btn-primary btn-xs" data-act="retSeen" data-id="${esc(x.i.Res_Item_ID + "@" + x.r.resolvedAt)}">تمام</button></div></div></div></section>`; }).join("");
   afterHead(view, html);
@@ -720,7 +722,7 @@ function leftoverCartHTML() {
   const head = `<div class="rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 p-3 mb-3 text-[13px] text-emerald-900">${ic("circle-check", "inline -mt-0.5")} حجز «${esc(r.activePhase.Phase_Name)}» اتقفل واتوزّع${got ? ` — استلمت <b class="num">${got}</b> ${got === 1 ? "كتاب" : "كتب"}` : ""}. حجزك كامل وفاتورته في <a href="#/e/orders" class="font-bold underline">حجوزاتي</a>.</div>`;
   const list = lo.length ? `<h3 class="text-[14px] font-bold text-slate-800 mb-1.5">${ic("hourglass", "inline -mt-0.5 text-sky-600")} الكتب المتبقية (${lo.length})</h3>
     <ul class="rounded-2xl ring-1 ring-slate-200 divide-y divide-slate-100 px-3 mb-3">${lo.map(i => { const b = bm[i.Book_ID] || {}, q = n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty));
-      return `<li class="flex items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(b.Book_Name || i.Book_ID)}</div><div class="text-[11.5px] text-slate-500">${esc(Doc.shortGrade(b.Grade || ""))}${i.Beneficiary ? " · لـ " + esc(i.Beneficiary) : ""} · ${i.Waitlist_Choice === "carry" ? "هيترحّل بأسبقيتك" : "مستني قرارك"}</div></div><span class="pill pill-blue num">${q}</span></li>`; }).join("")}</ul>
+      return `<li class="flex items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px] text-slate-800 truncate">${esc(bookLbl(b, i.Book_ID))}</div><div class="text-[11.5px] text-slate-500">${i.Beneficiary ? " · لـ " + esc(i.Beneficiary) : ""} · ${i.Waitlist_Choice === "carry" ? "هيترحّل بأسبقيتك" : "مستني قرارك"}</div></div><span class="pill pill-blue num">${q}</span></li>`; }).join("")}</ul>
     <div class="grid gap-2"><button class="btn btn-outline btn-sm" data-act="printLeftoverE">${ic("printer")} اطبع طلب الحجز بالمتبقي</button></div>`
     : `<div class="text-center text-slate-500 text-[13.5px] py-4">${ic("package-check", "mx-auto mb-1")} مفيش كتب متبقية — كل حجزك اتسلّم 👌</div>`;
   const next = openPh ? `<button class="btn btn-primary w-full mt-3" data-act="setPhase" data-id="${esc(openPh.Phase_ID)}">${ic("plus")} الحجز مفتوح في «${esc(openPh.Phase_Name)}» — ضيف كتب</button>`
@@ -731,3 +733,65 @@ if (typeof cartHTML === "function") { const _cartHTML0 = cartHTML; cartHTML = fu
 if (typeof refreshCartViews === "function") { const _rcv0 = refreshCartViews; refreshCartViews = function () { _rcv0();
   if (!cartPostDelivery()) return; const lo = cartLeftover().length, bar = $("#cartBar"); if (bar) bar.classList.add("hidden");
   const badge = $("#cartBadge"); if (badge) { badge.textContent = lo; badge.classList.toggle("hidden", !lo); } const hc = $("#cartCount"); if (hc) hc.textContent = lo; }; }
+
+// ================================================================ تحسينات السلة: تنبيهات قبل التأكيد + ملخص الدفع + مسودة على الخادم + تذكير القفل
+/** تنبيهات السلة: تغيّر السعر/التسعير، كتاب موقوف، نفس الكتاب لأكتر من ابن، تجاوز الحد الائتماني */
+function cartAlerts() {
+  const r = APP.emp || {}, bm = Emp.bookMap(), saved = {};
+  Emp.activeItems().forEach(i => { saved[ck(i.Book_ID, i.Beneficiary)] = i; });
+  const out = [], byBook = {};
+  Object.keys(APP.cart).forEach(k => { const id = bk(k), b = bm[id], it = saved[k];
+    (byBook[id] = byBook[id] || []).push(bn(k) || "");
+    if (!b) out.push(["rose", "ban", `«${esc(id)}» مش متاح دلوقتي في الدليل — شيله من السلة.`]);
+    else if (String(b.Book_Status || b.Status || "").match(/Discontinued|موقوف/i)) out.push(["rose", "ban", `«${esc(bookLbl(b, id))}» اتوقف — شيله أو بدّله.`]);
+    else if (it && n(it.Unit_Emp_Price) && n(b.Emp_Selling_Price) && Math.abs(n(it.Unit_Emp_Price) - n(b.Emp_Selling_Price)) > 0.004)
+      out.push(["amber", "badge-percent", `سعر «${esc(bookLbl(b, id))}» اتغيّر من <b class="num">${fmt(it.Unit_Emp_Price)}</b> لـ <b class="num">${fmt(b.Emp_Selling_Price)}</b> ج.م.`]);
+    else if (it && !n(it.Unit_Emp_Price) && n(b.Emp_Selling_Price)) out.push(["emerald", "badge-percent", `«${esc(bookLbl(b, id))}» اتسعّر: <b class="num">${fmt(b.Emp_Selling_Price)}</b> ج.م.`]);
+  });
+  Object.keys(byBook).filter(id => byBook[id].length > 1).forEach(id => { const who = byBook[id].map(x => x || "ابنك").join(" و");
+    out.push(["sky", "users", `«${esc(bookLbl(bm[id], id))}» في السلة لأكتر من فرد (${esc(who)}) — اتأكد إنك قاصد.`]); });
+  // الحد الائتماني: المؤجل في هذا الحجز + المتبقي عليك من مراحل تانية
+  const t = Emp.totals(), p = APP.plan || {};
+  if (p.method === "INSTALLMENT" && t.net > 0) { const pc = Emp.planCalc(t.net), deferred = Math.max(0, t.net - n(pc.down)),
+      other = (r.myInvoices || []).filter(i => i.Phase_ID !== APP.phaseId).reduce((s, i) => s + n(i.Remaining_Balance), 0), lim = n((r.employee || {}).creditLimit);
+    if (lim && deferred + other > lim) out.push(["rose", "triangle-alert", `المؤجل (<b class="num">${fmt(deferred)}</b>${other ? ` + <b class="num">${fmt(other)}</b> عليك من مراحل سابقة` : ""}) أكبر من حد التقسيط المسموح <b class="num">${fmt(lim)}</b> ج.م — زوّد المقدم أو قلّل الكتب أو ادفع نقداً.`]); }
+  return out;
+}
+function cartPaySummary() {
+  const t = Emp.totals(), p = APP.plan || {}; if (!t.count || !t.net) return "";
+  if (p.method !== "INSTALLMENT") return `<div class="rounded-2xl bg-brand-50 ring-1 ring-brand-100 p-3 mt-3 text-[13px] text-brand-900">${ic("wallet", "inline -mt-0.5")} هتدفع <b class="num">${fmt(t.net)}</b> ج.م ${p.method === "CASH" ? "نقداً عند الاستلام" : "تحويل"} — ووفّرت <b class="num">${fmt(t.cover - t.net)}</b> ج.م.</div>`;
+  const pc = Emp.planCalc(t.net), d = new Date(); d.setMonth(d.getMonth() + 1);
+  return `<div class="rounded-2xl bg-brand-50 ring-1 ring-brand-100 p-3 mt-3 text-[13px] text-brand-900 leading-relaxed">${ic("calendar-check", "inline -mt-0.5")} المقدم <b class="num">${fmt(pc.down)}</b> ج.م، وبعده <b class="num">${pc.cnt}</b> ${pc.cnt === 1 ? "قسط" : "أقساط"} كل شهر <b class="num">${fmt(pc.per)}</b> ج.م — أول قسط تقريباً <b class="num">${d.toISOString().slice(0, 10)}</b> (التاريخ النهائي يتحدد مع الفاتورة).</div>`;
+}
+if (typeof cartHTML === "function") { const _cartHTML1 = cartHTML; cartHTML = function () {
+  const html = _cartHTML1(); if (cartPostDelivery() || Emp._noList || !Emp.open()) return html;
+  const al = cartAlerts(), box = al.length ? `<div class="space-y-1.5 mb-3">${al.map(a => `<div class="rounded-xl bg-${a[0]}-50 ring-1 ring-${a[0]}-100 text-${a[0]}-800 px-3 py-2 text-[12.5px] flex gap-2">${ic(a[1], "shrink-0 mt-0.5")}<span>${a[2]}</span></div>`).join("")}</div>` : "";
+  const sum = cartPaySummary(), btn = '<button data-act="submitRes"';
+  return box + (sum && html.includes(btn) ? html.replace(btn, sum + btn) : html + sum);
+}; }
+
+// مسودة السلة على الخادم: تُحفظ بعد كل تعديل (بعد 5 ثوانٍ من آخر تغيير) وتُستعاد من أي جهاز
+let _draftT = null, _draftLast = "";
+const draftSave = () => { if (!APP.emp || !Emp.open() || !APP.user || APP.user.userType !== "EMPLOYEE") return;
+  const body = Emp.dirty ? JSON.stringify(APP.cart) : ""; if (body === _draftLast) return; _draftLast = body;
+  call("SAVE_CART_DRAFT", { phaseId: APP.phaseId, cart: Emp.dirty ? APP.cart : null }).catch(() => {}); };
+if (typeof refreshCartViews === "function") { const _rcv1 = refreshCartViews; refreshCartViews = function () { _rcv1(); clearTimeout(_draftT); _draftT = setTimeout(draftSave, 5000); }; }
+/** استعادة المسودة لو الجهاز ده مفيهوش تعديلات والمسودة أحدث من الحجز المحفوظ */
+function draftRestore() {
+  const r = APP.emp || {}, d = (r.employee || {}).cartDraft; if (!d || !d.cart || !Emp.open() || Emp.dirty || d.phaseId !== APP.phaseId) return;
+  const h = (r.myReservations || []).find(x => x.Phase_ID === APP.phaseId), savedAt = String((h && (h.Last_Modified_At || h.Created_At)) || "");
+  if (savedAt && String(d.at) <= savedAt) return;
+  const cur = JSON.stringify(APP.cart), nx = JSON.stringify(d.cart); if (cur === nx || !Object.keys(d.cart).length) return;
+  APP.cart = Object.assign({}, d.cart); Emp.dirty = true; _draftLast = nx;
+  toast("رجّعنا سلتك اللي ما اتأكدتش (من آخر جهاز) — راجعها وأكّد 👌", "info"); if (typeof refreshCartViews === "function") refreshCartViews();
+}
+_wrap("/e/home", () => setTimeout(draftRestore, 50));
+_wrap("/e/books", () => setTimeout(draftRestore, 50));
+// بعد التأكيد: امسح المسودة
+if (ACTIONS.submitRes) { const _sr0 = ACTIONS.submitRes; on("submitRes", async (...a) => { const r = await _sr0(...a); if (!Emp.dirty) { _draftLast = ""; call("SAVE_CART_DRAFT", { phaseId: APP.phaseId, cart: null }).catch(() => {}); } return r; }); }
+
+// تذكير قبل قفل الحجز: سلة ما اتأكدتش والحجز بيقفل خلال يومين
+_wrap("/e/home", view => {
+  const dl = Emp.daysLeft(); if (!Emp.open() || !Emp.dirty || dl === null || dl > 2) return;
+  afterHead(view, `<section class="card p-4 mb-3 ring-2 ring-rose-200 bg-rose-50/50 flex items-center gap-3"><span class="text-[28px]">⏰</span><div class="flex-1"><b class="text-[14.5px] text-rose-800">عندك كتب في السلة لسه ما أكدتهاش</b><div class="text-[12.5px] text-slate-600">الحجز بيقفل ${dl <= 0 ? "النهارده" : dl === 1 ? "بكرة" : "بعد يومين"} — أكّد قبلها عشان أسبقيتك تتحسب.</div></div><button class="btn btn-primary btn-sm" data-act="openCart">أكّد</button></section>`);
+});
