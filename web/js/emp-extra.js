@@ -808,3 +808,53 @@ function noBookingPhaseCard() {
     <div class="text-[12.5px] text-slate-600 mt-0.5">${open ? "مفيش مشكلة — تقدر تحجز دلوقتي في المرحلة المفتوحة." : "أول ما تفتح مرحلة جديدة هيوصلك إشعار في الجرس."}</div>${go ? `<div class="mt-2.5">${go}</div>` : ""}</div></div></section>`;
 }
 ["/e/home", "/e/orders", "/e/books"].forEach(p => _wrap(p, view => afterHead(view, noBookingPhaseCard())));
+
+// ================================================================ «زي اللي فات بضغطة»: نفس الناشرين والمواد لصف كل ابن الحالي
+/** اقتراحات لكل فرد من حجوزاته السابقة (السنة اللي فاتت بصفها السابق، أو ترم سابق بنفس الصف) */
+function repeatSuggestions() {
+  const r = APP.emp || {}; if (!Emp.open()) return [];
+  const grades = ((r.catalog || {}).grades || []).map(g => g.label), bm = Emp.bookMap(), books = r.books || [];
+  const past = (r.myReservationItems || []).filter(i => i.Phase_ID !== APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > 0);
+  if (!past.length) return [];
+  const owned = new Set(past.map(i => i.Book_ID + "|" + (i.Beneficiary || "")));
+  return myKids().map((k, ix) => {
+    const ben = kidBen(k), gi = grades.indexOf(k.grade), prev = gi > 0 ? grades[gi - 1] : null;
+    const mine = past.filter(i => (i.Beneficiary || "") === ben && bm[i.Book_ID] && [k.grade, prev].includes(bm[i.Book_ID].Grade));
+    const seen = new Set(), picks = [];
+    mine.forEach(i => { const o = bm[i.Book_ID], key = o.Publisher + "|" + o.Subject + "|" + (o.Book_Part || ""); if (seen.has(key)) return; seen.add(key);
+      const nb = books.find(b => b.Grade === k.grade && b.Publisher === o.Publisher && b.Subject === o.Subject && (b.Book_Part || "") === (o.Book_Part || "") && typeOk(b, k.type, k.track || "") && !owned.has(b.Book_ID + "|" + ben))
+        || books.find(b => b.Grade === k.grade && b.Publisher === o.Publisher && b.Subject === o.Subject && typeOk(b, k.type, k.track || "") && !owned.has(b.Book_ID + "|" + ben));
+      if (nb && !(APP.cart || {})[ck(nb.Book_ID, ben)]) picks.push(nb); });
+    return { k, ix, ben, picks, fromLastYear: mine.some(i => bm[i.Book_ID].Grade === prev) };
+  }).filter(x => x.picks.length);
+}
+function repeatCard() {
+  const sg = repeatSuggestions(); if (!sg.length) return "";
+  return `<section class="card p-4 mb-4 ring-1 ring-gold-200 bg-gold-50/40"><div class="flex items-center gap-2 mb-2"><span class="text-[24px]">🔁</span><div class="flex-1"><b class="text-[15px] text-slate-900">احجز زي اللي فات بضغطة</b><div class="text-[12px] text-slate-600">نفس الناشرين والمواد اللي اخترتها قبل كده — لصف كل واحد دلوقتي</div></div></div>
+    <ul class="space-y-2">${sg.map(x => `<li class="rounded-2xl bg-white ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><span class="text-[20px]">${kidEmoji(x.k)}</span><div class="flex-1 min-w-0"><b class="text-[13.5px]">${esc(kidName(x.k, x.ix))}</b> <span class="text-[12px] text-slate-500">· ${esc(Doc.shortGrade(x.k.grade))}${x.fromLastYear ? " · من السنة اللي فاتت" : ""}</span>
+        <div class="text-[11.5px] text-slate-500 truncate">${x.picks.map(b => esc(b.Publisher + " " + b.Subject)).join("، ")}</div></div>
+        <button class="btn btn-primary btn-sm shrink-0" data-act="repeatAdd" data-id="${x.ix}">${ic("plus")} ضيف ${x.picks.length}</button></div></li>`).join("")}</ul>
+    <p class="text-[11.5px] text-slate-500 mt-2">${ic("info", "inline -mt-0.5")} بتتضاف للسلة بس — تقدر تشيل أي كتاب قبل ما تأكد.</p></section>`;
+}
+on("repeatAdd", v => { const x = repeatSuggestions().find(s => s.ix === +v); if (!x) return;
+  x.picks.forEach(b => { const key = ck(b.Book_ID, x.ben); APP.cart[key] = Math.max(APP.cart[key] || 0, 1); });
+  Emp.dirty = true; if (x.ben && !Emp.bens.includes(x.ben)) Emp.bens.push(x.ben);
+  toast(`اتضاف ${x.picks.length} ${x.picks.length > 2 ? "كتب" : "كتاب"} لـ ${kidName(x.k, x.ix)} 🎉 — راجع السلة وأكّد`, "success"); refreshCartViews(); Router.render(); });
+["/e/home", "/e/books"].forEach(p => _wrap(p, view => afterHead(view, repeatCard())));
+
+// ================================================================ ميزانية الأسرة: حد اختياري يحدده الموظف وتنبيه في السلة
+const BUDGET_KEY = () => "wb_budget_" + ((APP.user && APP.user.empId) || "");
+const budgetGet = () => { try { return n(localStorage.getItem(BUDGET_KEY())); } catch (_) { return 0; } };
+on("setBudget", async () => {
+  const v = await UI.form({ title: "ميزانية الكتب", intro: "حط أقصى مبلغ عايز تصرفه على الكتب المرحلة دي — هننبهك لو السلة عدّته. (محفوظة على موبايلك بس، وتقدر تمسحها بإنك تسيبها فاضية)", fields: [{ name: "b", label: "الميزانية (ج.م)", type: "number", value: budgetGet() || "", min: 0 }], ok: "حفظ" });
+  if (!v) return; try { n(v.b) > 0 ? localStorage.setItem(BUDGET_KEY(), String(n(v.b))) : localStorage.removeItem(BUDGET_KEY()); } catch (_) {}
+  toast(n(v.b) > 0 ? "اتحفظت الميزانية 👌" : "اتشالت الميزانية", "success"); refreshCartViews();
+});
+if (typeof cartHTML === "function") { const _cartHTML2 = cartHTML; cartHTML = function () {
+  const html = _cartHTML2(); if (cartPostDelivery() || Emp._noList || !Emp.open()) return html;
+  const bud = budgetGet(), t = Emp.totals();
+  if (!bud) return html + `<button class="w-full text-center text-[12.5px] text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} حدد ميزانية للكتب</button>`;
+  const pct = Math.min(100, Math.round(t.net / bud * 100)), over = t.net > bud;
+  return `<div class="rounded-2xl ${over ? "bg-rose-50 ring-rose-200" : "bg-emerald-50 ring-emerald-100"} ring-1 p-3 mb-3"><div class="flex items-center justify-between text-[12.5px]"><span class="${over ? "text-rose-800" : "text-emerald-800"} font-semibold">${ic("piggy-bank", "inline -mt-0.5")} ${over ? `عديت ميزانيتك بـ <b class="num">${fmt(t.net - bud)}</b> ج.م` : `فاضل من ميزانيتك <b class="num">${fmt(bud - t.net)}</b> ج.م`}</span><button class="text-brand-700 font-semibold" data-act="setBudget">تعديل</button></div>
+    <div class="mt-2 h-2 rounded-full bg-white overflow-hidden"><div class="h-full rounded-full ${over ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-emerald-500"}" style="width:${pct}%"></div></div><div class="text-[11px] text-slate-500 mt-1 num">${fmt(t.net)} من ${fmt(bud)} ج.م</div></div>` + html;
+}; }

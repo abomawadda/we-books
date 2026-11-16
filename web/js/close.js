@@ -547,3 +547,106 @@ Router.add("/a/returns", view => {
     ${topR.length ? `<div class="card p-3 mb-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5">أكثر أسباب المرتجع</div><div class="flex flex-wrap gap-1.5">${topR.map(([k, c]) => `<span class="rounded-full bg-slate-100 px-2.5 py-1 text-[12px]">${esc(k)} <b class="num">${c}</b></span>`).join("")}</div></div>` : ""}
     <div class="flex gap-1.5 overflow-x-auto pb-1 mb-3">${tab("pending", "معلّقة", pend.length)}${tab("log", "سجل القرارات", done.length)}${tab("docs", "أذون المرتجع", docs.length)}</div>${body}`;
 });
+
+// ================================================================ أفكار خارج الصندوق (الإدارة): أثر المبادرة · التفاوض الجماعي · رسائل واتساب جاهزة
+ADMIN_NAV[5].items.push(["impact", "trending-up", "أثر المبادرة"], ["negotiate", "scale", "التفاوض مع المكتبة"], ["wa", "message-circle", "رسائل واتساب"]);
+const liveItems = () => A().resItems.filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > 0);
+const kpiBox = (l, v, sub, tone) => `<div class="card p-3.5"><div class="text-[12px] text-slate-500">${l}</div><b class="num text-[22px] ${tone || "text-slate-900"}">${v}</b>${sub ? `<div class="text-[11.5px] text-slate-400 mt-0.5">${sub}</div>` : ""}</div>`;
+
+// ---------------------------------------------------------------- 6) تقرير أثر المبادرة (صفحة واحدة للجمعية العمومية/المجلس)
+function impactData() {
+  const d = A(), { e, b } = maps(), its = liveItems(), invs = d.empInvoices.filter(i => n(i.Net_Final_Invoice_Amount) > 0);
+  const fams = new Set(its.map(i => i.Emp_ID)), kids = new Set(its.map(i => i.Emp_ID + "|" + (i.Beneficiary || (b[i.Book_ID] || {}).Grade || "")));
+  const copies = its.reduce((s, i) => s + Math.max(n(i.Delivered_Qty) - n(i.Returned_Qty), 0), 0) || its.reduce((s, i) => s + n(i.Requested_Qty), 0);
+  const net = invs.reduce((s, i) => s + n(i.Net_Final_Invoice_Amount), 0), cover = invs.reduce((s, i) => s + n(i.Total_Cover_Amount), 0);
+  const saved = invs.reduce((s, i) => s + n(i.Total_Savings), 0) || Math.max(0, cover - net);
+  const inst = invs.filter(i => i.Payment_Plan_Type === "INSTALLMENT").length, rels = new Set(its.filter(i => i.Beneficiary).map(i => i.Emp_ID + "|" + i.Beneficiary)).size;
+  const dep = {}; fams.forEach(id => { const k = (e[id] || {}).Department || "أخرى"; dep[k] = (dep[k] || 0) + 1; });
+  const pub = {}; its.forEach(i => { const p = (b[i.Book_ID] || {}).Publisher || "أخرى"; pub[p] = (pub[p] || 0) + n(i.Requested_Qty); });
+  return { fams: fams.size, kids: kids.size, rels, copies, net, cover, saved, inst, invs: invs.length, phases: new Set(its.map(i => i.Phase_ID)).size,
+    avg: fams.size ? saved / fams.size : 0, pct: cover ? Math.round(saved / cover * 100) : 0,
+    dep: Object.entries(dep).sort((a, c) => c[1] - a[1]).slice(0, 6), pub: Object.entries(pub).sort((a, c) => c[1] - a[1]).slice(0, 6) };
+}
+Router.add("/a/impact", view => {
+  const x = impactData(), bar = (rows, tot) => rows.map(([k, v]) => `<div class="mb-1.5"><div class="flex justify-between text-[12.5px]"><span>${esc(k)}</span><b class="num">${fmt(v)}</b></div><div class="h-1.5 rounded-full bg-slate-100"><div class="h-full rounded-full bg-brand-600" style="width:${Math.round(v / (tot || 1) * 100)}%"></div></div></div>`).join("");
+  view.innerHTML = `${UI.pageHead("أثر المبادرة", "صفحة واحدة بالأرقام للمجلس والجمعية العمومية", `<button class="btn btn-primary btn-sm" data-act="impactPrint">${ic("printer")} طباعة / صورة</button>`)}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">${kpiBox("أسرة استفادت", fmt(x.fams), x.rels ? `+ ${fmt(x.rels)} قريب` : "")}${kpiBox("طفل / طالب", fmt(x.kids))}${kpiBox("كتاب وصل للبيوت", fmt(x.copies))}${kpiBox("وفّرنا للأسر", fmt(x.saved) + ' <span class="text-[12px] font-normal">ج.م</span>', `${x.pct}% من سعر الغلاف · متوسط ${fmt(Math.round(x.avg))} للأسرة`, "text-emerald-700")}</div>
+    <div class="grid lg:grid-cols-2 gap-3"><div class="card p-4"><b class="text-[14px]">الأكثر مشاركة (جهات العمل)</b><div class="mt-2">${bar(x.dep, x.dep[0] ? x.dep[0][1] : 1)}</div></div>
+      <div class="card p-4"><b class="text-[14px]">الناشرون الأكثر طلباً (نسخ)</b><div class="mt-2">${bar(x.pub, x.pub[0] ? x.pub[0][1] : 1)}</div></div></div>
+    <div class="card p-4 mt-3 text-[13px] text-slate-600">${ic("info", "inline -mt-0.5")} ${fmt(x.inst)} أسرة اختارت التقسيط من ${fmt(x.invs)} فاتورة · ${fmt(x.phases)} مرحلة · قيمة الكتب بعد الخصم ${fmt(x.net)} ج.م بدل ${fmt(x.cover)} ج.م.</div>`;
+});
+on("impactPrint", () => {
+  const x = impactData(), br = Brand.get(), cell = (l, v, s) => `<div style="flex:1;border:1px solid #e4def0;border-radius:3mm;padding:3mm;text-align:center"><div style="font-size:.85em;color:#6b5f86">${l}</div><div style="font-size:1.9em;font-weight:800;color:#3b1d63" class="num">${v}</div>${s ? `<div style="font-size:.75em;color:#8d84a3">${s}</div>` : ""}</div>`;
+  const list = rows => `<table style="width:100%">${rows.map(([k, v]) => `<tr><td>${esc(k)}</td><td class="num" style="text-align:left"><b>${fmt(v)}</b></td></tr>`).join("")}</table>`;
+  Doc.show("أثر المبادرة", Doc.page(`${Doc.head("أثر مبادرة الكتب", new Date().toISOString().slice(0, 10))}
+    <p style="font-size:1.05em;line-height:1.8;margin:2mm 0 4mm">بفضل الله ثم تعاون الزملاء، استفادت <b class="num">${fmt(x.fams)}</b> أسرة من أعضاء ${esc(br.org)} بالحصول على كتب أبنائهم بخصم العاملين وبالتقسيط الميسّر، ووفّرت المبادرة للأسر <b class="num">${fmt(x.saved)}</b> جنيهاً.</p>
+    <div style="display:flex;gap:3mm;margin-bottom:3mm">${cell("أسرة", fmt(x.fams))}${cell("طفل / طالب", fmt(x.kids))}${cell("كتاب", fmt(x.copies))}</div>
+    <div style="display:flex;gap:3mm;margin-bottom:5mm">${cell("وفّرنا (ج.م)", fmt(x.saved), x.pct + "% من سعر الغلاف")}${cell("متوسط توفير الأسرة", fmt(Math.round(x.avg)))}${cell("اختاروا التقسيط", fmt(x.inst))}</div>
+    <div style="display:flex;gap:5mm"><div style="flex:1"><h4>الأكثر مشاركة</h4>${list(x.dep)}</div><div style="flex:1"><h4>الناشرون الأكثر طلباً</h4>${list(x.pub)}</div></div>
+    <div class="sig"><div>مسؤول المبادرة</div><div>أمين الصندوق</div><div>رئيس النقابة</div></div>${Doc.foot("أثر المبادرة")}`, "", "", ""), { size: "A4", file: "أثر-المبادرة" });
+});
+
+// ---------------------------------------------------------------- 7) التفاوض الجماعي مع المكتبة: الكميات حسب الناشر + محاكاة خصم إضافي + خطاب جاهز
+const NEG = { extra: 5 };
+function negData() {
+  const { b } = maps(), its = liveItems().filter(i => i.Phase_ID === APP.phaseId), by = {};
+  its.forEach(i => { const bk = b[i.Book_ID] || {}, p = bk.Publisher || "أخرى", q = n(i.Requested_Qty), o = (by[p] = by[p] || { q: 0, cover: 0, disc: 0, titles: new Set() });
+    o.q += q; o.cover += q * n(bk.Cover_Price); o.disc += q * n(bk.Cover_Price) * n(bk.Supplier_Discount_Pct) / 100; o.titles.add(i.Book_ID); });
+  return Object.entries(by).map(([p, o]) => ({ p, q: o.q, cover: o.cover, pct: o.cover ? o.disc / o.cover * 100 : 0, titles: o.titles.size })).sort((a, c) => c.q - a.q);
+}
+on("negExtra", () => {});
+Router.add("/a/negotiate", view => {
+  const rows = negData(), tq = rows.reduce((s, r) => s + r.q, 0), tc = rows.reduce((s, r) => s + r.cover, 0), gain = tc * NEG.extra / 100;
+  view.innerHTML = `${UI.pageHead("التفاوض مع المكتبة", `قوة الشراء الجماعي في «${esc(phaseObj().Phase_Name || "")}» — قبل طلب التوريد`, `<button class="btn btn-primary btn-sm" data-act="negPrint">${ic("printer")} خطاب طلب خصم</button>`)}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 mb-3">${kpiBox("نسخ محجوزة", fmt(tq))}${kpiBox("ناشرون", fmt(rows.length))}${kpiBox("قيمة الغلاف", fmt(tc) + ' <span class="text-[12px] font-normal">ج.م</span>')}${kpiBox(`خصم إضافي ${NEG.extra}% يوفّر`, fmt(Math.round(gain)) + ' <span class="text-[12px] font-normal">ج.م</span>', "تقدر توزعه على الموظفين أو المبادرة", "text-emerald-700")}</div>
+    <div class="card p-3 mb-3 flex items-center gap-3"><span class="text-[13px] font-semibold">الخصم الإضافي المطلوب</span><input type="range" min="1" max="15" value="${NEG.extra}" class="flex-1" id="negR"><b class="num w-10 text-center" id="negV">${NEG.extra}%</b></div>
+    ${UI.table([{ t: "الناشر", v: r => `<b>${esc(r.p)}</b><div class="text-[11.5px] text-slate-500">${fmt(r.titles)} عنوان</div>` }, { t: "النسخ", cls: "num", v: r => `<b>${fmt(r.q)}</b>` },
+      { t: "قيمة الغلاف", cls: "num", v: r => fmt(Math.round(r.cover)) }, { t: "خصم المكتبة الحالي", cls: "num", v: r => r.pct ? r.pct.toFixed(1) + "%" : "—" },
+      { t: "توفير الخصم الإضافي", cls: "num", v: r => `<b class="text-emerald-700">${fmt(Math.round(r.cover * NEG.extra / 100))}</b>` }], rows)}`;
+  const rg = view.querySelector("#negR"); if (rg) rg.addEventListener("change", () => { NEG.extra = +rg.value; Router.render(); });
+});
+on("negPrint", () => {
+  const rows = negData(), tq = rows.reduce((s, r) => s + r.q, 0), tc = rows.reduce((s, r) => s + r.cover, 0), br = Brand.get();
+  Doc.show("خطاب طلب خصم كميات", Doc.page(`${Doc.head("طلب خصم كميات", new Date().toISOString().slice(0, 10))}
+    <p style="line-height:1.9">السادة/ مكتبة الإيمان بالمنصورة — تحية طيبة وبعد،<br>نحيطكم علماً بأن حجوزات أعضاء ${esc(br.org)} في «${esc(phaseObj().Phase_Name || "")}» بلغت <b class="num">${fmt(tq)}</b> نسخة بقيمة غلاف <b class="num">${fmt(Math.round(tc))}</b> جنيهاً، موزعة على الناشرين كما يلي. ونظراً لحجم الطلب المجمّع وسداده المنتظم، نرجو التكرم بمنحنا خصم كميات إضافياً قدره <b class="num">${NEG.extra}%</b> على إجمالي التوريد.</p>
+    <table><thead><tr><th>م</th><th>الناشر</th><th class="c">العناوين</th><th class="c">النسخ</th><th class="l">قيمة الغلاف</th></tr></thead><tbody>${rows.map((r, i) => `<tr><td class="c num">${i + 1}</td><td><b>${esc(r.p)}</b></td><td class="c num">${r.titles}</td><td class="c num"><b>${r.q}</b></td><td class="l num">${fmt(Math.round(r.cover))}</td></tr>`).join("")}</tbody></table>
+    <p style="margin-top:4mm">وتفضلوا بقبول فائق الاحترام،</p><div class="sig"><div>مسؤول المبادرة<br><small>محمود العراقي · 01550100025</small></div><div></div><div>موافقة المكتبة</div></div>${Doc.foot("طلب خصم كميات")}`, "", "", ""), { size: "A4", file: "طلب-خصم-كميات" });
+});
+
+// ---------------------------------------------------------------- 8) رسائل واتساب جاهزة لكل فئة (بدون مزوّد): رسالة شخصية لكل عضو + متابعة اللي اتبعتله
+const WA = { aud: "ready", tpl: {} };
+const WA_SEEN = () => "wb_wa_sent_" + APP.phaseId + "_" + WA.aud;
+const waSent = () => { try { return JSON.parse(localStorage.getItem(WA_SEEN()) || "{}"); } catch (_) { return {}; } };
+const WA_AUD = {
+  ready: ["كتبه جاهزة للاستلام", "أهلاً {الاسم} 👋\nكتب ولادك جاهزة للاستلام من مبادرة الكتب ✅\nالمطلوب عند الاستلام: {المبلغ} ج.م\nافتح التطبيق لمواعيد ومكان الاستلام: {الرابط}"],
+  notBooked: ["لسه ما حجزش", "أهلاً {الاسم} 👋\nالحجز مفتوح في «{المرحلة}» بخصم العاملين وبالتقسيط 📚\nاحجز كتب ولادك من هنا: {الرابط}"],
+  due: ["عليه متبقي", "أهلاً {الاسم} 👋\nتذكير ودي: المتبقي على فاتورة الكتب {المبلغ} ج.م.\nتقدر تدفع بإنستاباي من التطبيق: {الرابط}"],
+  credit: ["ليه رصيد", "أهلاً {الاسم} 👋\nليك رصيد {المبلغ} ج.م في مبادرة الكتب — هيتخصم من فاتورتك الجاية أو تقدر تطلب استرداده من التطبيق: {الرابط}"]
+};
+function waList() {
+  const d = A(), { e } = maps(), ph = APP.phaseId, emp = id => e[id] || {}, link = location.href.replace(/#.*$/, "");
+  let rows = [];
+  if (WA.aud === "ready") { const by = {}; d.resItems.filter(i => i.Phase_ID === ph && n(i.Allocated_Qty) > n(i.Delivered_Qty)).forEach(i => { by[i.Emp_ID] = 1; });
+    rows = Object.keys(by).map(id => { const inv = d.empInvoices.find(v => v.Emp_ID === id && v.Phase_ID === ph) || {}; return { id, amt: Math.max(n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount), 0) }; }); }
+  else if (WA.aud === "notBooked") { const booked = new Set(d.resItems.filter(i => i.Phase_ID === ph).map(i => i.Emp_ID)); rows = d.employees.filter(x => !booked.has(x.Emp_ID) && x.Mobile).map(x => ({ id: x.Emp_ID, amt: 0 })); }
+  else if (WA.aud === "due") rows = d.empInvoices.filter(v => n(v.Remaining_Balance) > 0).map(v => ({ id: v.Emp_ID, amt: n(v.Remaining_Balance) }));
+  else rows = d.empInvoices.filter(v => n(v.Credit_Balance) > 0).map(v => ({ id: v.Emp_ID, amt: n(v.Credit_Balance) }));
+  const merged = {}; rows.forEach(r => { merged[r.id] = merged[r.id] ? { id: r.id, amt: merged[r.id].amt + r.amt } : r; });
+  return Object.values(merged).map(r => ({ ...r, name: emp(r.id).Full_Name || r.id, mobile: emp(r.id).Mobile || "", link })).filter(r => r.mobile);
+}
+const waText = r => (WA.tpl[WA.aud] || WA_AUD[WA.aud][1]).replace(/{الاسم}/g, String(r.name).split(/\s+/)[0]).replace(/{المبلغ}/g, fmt(r.amt)).replace(/{المرحلة}/g, phaseObj().Phase_Name || "").replace(/{الرابط}/g, r.link);
+on("waAud", v => { WA.aud = v; Router.render(); });
+on("waSend", id => { const r = waList().find(x => x.id === id); if (!r) return; window.open(Brand.waLink(r.mobile, waText(r)), "_blank");
+  const s = waSent(); s[id] = 1; try { localStorage.setItem(WA_SEEN(), JSON.stringify(s)); } catch (_) {} setTimeout(() => Router.render(), 300); });
+on("waReset", () => { try { localStorage.removeItem(WA_SEEN()); } catch (_) {} Router.render(); });
+Router.add("/a/wa", view => {
+  const list = waList(), sent = waSent(), done = list.filter(r => sent[r.id]).length;
+  view.innerHTML = `${UI.pageHead("رسائل واتساب جاهزة", "رسالة شخصية لكل عضو بضغطة — من موبايلك، بدون أي مزوّد")}
+    <div class="flex gap-1.5 overflow-x-auto pb-1 mb-3">${Object.keys(WA_AUD).map(k => `<button class="chip shrink-0" data-act="waAud" data-id="${k}" aria-pressed="${WA.aud === k}">${WA_AUD[k][0]}</button>`).join("")}</div>
+    <div class="card p-3 mb-3"><div class="label">نص الرسالة <span class="text-slate-400 font-normal">({الاسم} {المبلغ} {المرحلة} {الرابط})</span></div><textarea id="waTpl" class="input !h-auto" rows="4">${esc(WA.tpl[WA.aud] || WA_AUD[WA.aud][1])}</textarea></div>
+    <div class="flex items-center justify-between mb-2"><b class="text-[14px]">${fmt(list.length)} عضو · اتبعت لـ <span class="num text-emerald-700">${fmt(done)}</span></b>${done ? `<button class="text-[12px] text-slate-500" data-act="waReset">بدء من جديد</button>` : ""}</div>
+    <div class="h-2 rounded-full bg-slate-100 mb-3 overflow-hidden"><div class="h-full bg-emerald-500" style="width:${list.length ? Math.round(done / list.length * 100) : 0}%"></div></div>
+    ${list.length ? `<ul class="card divide-y divide-slate-100">${list.map(r => `<li class="flex items-center gap-2 p-3 ${sent[r.id] ? "opacity-60" : ""}"><div class="flex-1 min-w-0"><b class="text-[13.5px]">${esc(r.name)}</b><div class="text-[11.5px] text-slate-500 num">${esc(r.id)}${r.amt ? " · " + fmt(r.amt) + " ج.م" : ""}</div></div>
+      <button class="btn ${sent[r.id] ? "btn-outline" : "btn-success"} btn-xs" data-act="waSend" data-id="${esc(r.id)}">${ic("send")} ${sent[r.id] ? "اتبعت ✓" : "ابعت"}</button></li>`).join("")}</ul>` : UI.empty("message-circle", "مفيش أعضاء في الفئة دي", "اختار فئة تانية")}`;
+  const ta = view.querySelector("#waTpl"); if (ta) ta.addEventListener("input", () => { WA.tpl[WA.aud] = ta.value; });
+});
