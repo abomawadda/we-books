@@ -3321,13 +3321,17 @@ on("printResA", empId => {
 on("printPO", () => {
   const d = A(), { b, s } = maps(), snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId && n(p.Net_Order_To_Supplier_Qty) > 0);
   if (!snaps.length) return toast("لا يوجد مطلوب من المكتبات في هذه المرحلة", "info");
+  const sm = d.settingsMap || {}, br = Brand.get(), gl = (d.catalog.grades || []).map(g => g.label);
+  const pop = {}; d.resItems.filter(i => i.Phase_ID === APP.phaseId && !String(i.Allocation_Status).startsWith("Cancelled")).forEach(i => { pop[i.Book_ID] = (pop[i.Book_ID] || 0) + n(i.Requested_Qty); });
+  const requester = { org: br.org, platform: br.platform, name: sm.PO_CONTACT_NAME || sm.CASH_ACCOUNT_HOLDER || APP.user.fullName, phone: sm.PO_CONTACT_PHONE || br.phone };
   const bySup = {}; snaps.forEach(p => (bySup[p.Supplier_ID || "—"] = bySup[p.Supplier_ID || "—"] || []).push(p));
   const pages = Object.keys(bySup).map(sid => { const sp = s[sid] || {}, lines = bySup[sid];
-    return Doc.purchaseOrder({ no: "PO-" + APP.phaseId + "-" + sid, date: (lines[0].Frozen_At || "").slice(0, 10), phase: phaseObj().Phase_Name, by: lines[0].Frozen_By,
-      supplier: { name: sp.Supplier_Name || sid, contact: sp.Contact_Person, phone: sp.Phone, terms: sp.Payment_Terms, returnDays: sp.Return_Policy_Days },
-      lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, name: bk.Book_Name || p.Book_ID, grade: bk.Grade, subject: bk.Subject, qty: n(p.Net_Order_To_Supplier_Qty) }; }).sort((x, y) => String(x.code).localeCompare(String(y.code))) }); }).join("");
-  Doc.show("أوامر التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "أمر-توريد-" + APP.phaseId });
+    return Doc.purchaseOrder({ no: "PO-" + APP.phaseId + "-" + sid, date: (lines[0].Frozen_At || "").slice(0, 10), phase: phaseObj().Phase_Name, requester,
+      supplier: { name: sp.Supplier_Name || sid, contact: sp.Contact_Person, phone: sp.Phone },
+      lines: lines.map(p => { const bk = b[p.Book_ID] || {}; return { code: p.Book_ID, publisher: bk.Publisher, subject: bk.Subject, part: bk.Book_Part, grade: Doc.shortGrade(bk.Grade), gradeRank: gl.indexOf(bk.Grade), tracks: String(bk.Tracks || "").replace(/،/g, " / "), qty: n(p.Net_Order_To_Supplier_Qty), pop: pop[p.Book_ID] || 0 }; }) }); }).join("");
+  Doc.show("طلب التوريد · " + phaseObj().Phase_Name, pages, { size: "A4", file: "طلب-توريد-" + APP.phaseId });
 });
+
 
 // ============================================================ الإيصالات والخزينة
 Router.add("/a/cash", view => {

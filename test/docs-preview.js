@@ -18,14 +18,14 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
     invoicelong: `Doc.invoice(${JSON.stringify({ no: 'EINV-PH-01-1002', date: '2027-01-10', phase: 'المرحلة الأولى', status: 'Unpaid', method: 'CASH', emp, paid: 0, remaining: 2400, credit: 0, down: 2400,
       lines: Array.from({ length: 20 }, (_, i) => ({ code: 'P' + (1 + i % 6) + '-0' + (10 + i), name: 'x', publisher: ['الأضواء', 'المعاصر', 'سلاح التلميذ', 'الامتحان'][i % 4], subject: ['رياضيات', 'لغة عربية', 'علوم', 'English', 'دراسات'][i % 5], grade: 'الصف ' + ['الأول', 'الرابع', 'السادس'][i % 3] + ' الابتدائي', ben: ['مريم', 'عمر', 'يوسف'][i % 3], alloc: 1, deliv: 0, ret: 0, price: 120, cover: 150 })) })})`,
     receipt: `Doc.receipt(${JSON.stringify({ no: 'RCP-2027-00012', date: '2027-01-10 11:32', emp, amount: 120, method: 'INSTAPAY', ref: 'TX99821', inv: 'EINV-PH-01-1001', net: 345, remaining: 225, collector: 'أمين الصندوق' })})`,
-    po: `Doc.purchaseOrder(${JSON.stringify({ no: 'PO-PH-01-SUP-01', date: '2027-01-02', phase: 'المرحلة الأولى', by: 'مسؤول المبادرة', supplier: { name: 'مكتبة النور', contact: 'أ. محمود', phone: '01000000000', terms: '30 يوماً', returnDays: 14 },
-      lines: Array.from({ length: 14 }, (_, i) => ({ code: 'P' + (1 + i % 6) + '-0' + (10 + i), name: ['سلاح التلميذ — عربي', 'الأضواء — رياضيات', 'المعاصر — إنجليزي', 'الامتحان — علوم'][i % 4], grade: (1 + i % 6) + ' ابتدائي', publisher: ['سلاح التلميذ', 'الأضواء', 'المعاصر', 'الامتحان'][i % 4], qty: 5 + i * 3, cover: 120 + i * 5, disc: 25, cost: 90 + i * 4 })) })}, {size:'A4'})`
+    po: `Doc.purchaseOrder(${JSON.stringify({ no: 'PO-PH-02-SUP-02', date: '2026-11-16', phase: 'تكملة الترم الثاني 2027', requester: { org: 'النقابة العامة بالدقهلية', platform: 'منصة حجز الكتب المخفضة', name: 'محمود العراقي', phone: '01550100025' }, supplier: { name: 'مكتبة الفتح بالفجالة', contact: 'ياسر', phone: '01001621417' },
+      lines: Array.from({ length: 58 }, (_, i) => ({ code: ['P4', 'P5', 'P6', 'M1', 'M2'][i % 5] + '-0' + (10 + i), publisher: ['سلاح التلميذ', 'الأضواء', 'المعاصر', 'الامتحان', 'بيت باي بيت'][i % 5], subject: ['عربي', 'إنجليزي', 'رياضيات', 'علوم', 'دراسات', 'دين', 'ماث', 'ساينس'][i % 8], part: i % 9 === 0 ? 'بلاس' : '', grade: ['4 ابتدائي', '5 ابتدائي', '6 ابتدائي', '1 إعدادي', '2 إعدادي'][i % 5], gradeRank: i % 5, qty: 1 + (i % 3 === 0 ? 1 : 0), pop: 10 - (i % 5) * 2 })) })})`,
   };
   for (const [k, expr] of Object.entries(docs)) {
     await p.evaluate(([e, k]) => { document.querySelectorAll('.fixed').forEach(x => x.remove()); Doc.show(k, eval(e), { size: k === 'po' ? 'A4' : 'A5' }); }, [expr.replace(", {size:'A4'})", ")"), k]);
     await p.waitForTimeout(900);
     const fr = await (await p.$('iframe')).contentFrame(); await fr.evaluate(() => document.body.style.zoom = 1);
-    await (await fr.$('.page')).screenshot({ path: path.join(OUT, 'doc-' + k + '.png') });
+    const pgs = await fr.$$('.page'); for (let pi = 0; pi < pgs.length; pi++) await pgs[pi].screenshot({ path: path.join(OUT, 'doc-' + k + (pi ? '-' + (pi + 1) : '') + '.png') });
   }
   await b.close();
 })();

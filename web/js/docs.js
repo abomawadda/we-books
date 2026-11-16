@@ -221,18 +221,62 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="sig"><div>توقيع المستلم</div><div>أمين المخزن</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A5"));
   },
   /** طلب توريد للمكتبة (A4): d = {no,date,phase,supplier:{name,contact,phone,terms,discount},lines:[{code,name,grade,publisher,qty,cover,disc,cost}],by} */
+  /** أمر توريد (A4) احترافي: مجمّع بالناشر (الأكثر حجزاً أولاً) ثم المادة ثم الصف، في عمودين يكمل أحدهما الآخر، بلا تكرار
+   *  d = {no,date,phase,requester:{org,platform,name,phone},supplier:{name,contact,phone},lines:[{code,publisher,subject,part,grade,gradeRank,tracks,qty,pop}]} */
   purchaseOrder(d) {
     const qty = d.lines.reduce((x, l) => x + n(l.qty), 0);
-    let i = 0;
-    return Doc.page(`${Doc.head("أمر توريد", d.no, `<div class="n">التاريخ: ${esc(Doc.date(d.date))}</div>`)}
-      <div class="meta"><div class="box"><h4>إلى المورد</h4>${Doc.kv("المكتبة", esc(d.supplier.name))}${d.supplier.contact ? Doc.kv("المسؤول", esc(d.supplier.contact)) : ""}${d.supplier.phone ? Doc.kv("الهاتف", `<span class="num">${esc(d.supplier.phone)}</span>`) : ""}</div>
-        <div class="box"><h4>بيانات الأمر</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("عدد الأصناف", `<span class="num">${d.lines.length}</span>`)}${Doc.kv("إجمالي الكتب", `<b class="num">${qty}</b>`)}</div></div>
-      <p style="margin:3mm 0 0">السادة/ ${esc(d.supplier.name)}، تحية طيبة وبعد، نرجو التكرم بتوريد الكتب الموضحة أدناه:</p>
-      <table><thead><tr><th class="c" style="width:6%">#</th><th style="width:14%">كود الكتاب</th><th>اسم الكتاب</th><th style="width:16%">المادة</th><th style="width:15%">الصف</th><th class="c" style="width:11%">العدد المطلوب</th></tr></thead>
-        <tbody>${d.lines.map(l => `<tr><td class="c num">${++i}</td><td class="num">${esc(l.code)}</td><td><b>${esc(l.name)}</b></td><td>${esc(l.subject || "")}</td><td>${esc(l.grade || "")}</td><td class="c num"><b>${l.qty}</b></td></tr>`).join("")}</tbody>
-        <tfoot><tr><td colspan="5">الإجمالي</td><td class="c num">${qty}</td></tr></tfoot></table>
-      <div class="note">• يُرجى الإشارة إلى رقم الأمر <span class="num">${esc(d.no)}</span> في فاتورة التوريد، مع فاتورة مفصلة بالأصناف والكميات.</div>
-      <div class="sig"><div>مسؤول المبادرة</div><div>المدير المالي</div><div>استلام المورد</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A4"));
+    const SUBJ = ["عربي", "اللغة العربية", "إنجليزي", "اللغة الإنجليزية", "رياضيات", "ماث", "علوم", "ساينس", "دراسات", "دين", "تربية دينية", "فرنساوي", "ألماني", "حاسب آلي", "تكنولوجيا", "أي سي تي", "مهارات"];
+    const sr = x => { const k = SUBJ.indexOf(String(x || "").trim()); return k < 0 ? 99 : k; };
+    const by = {}; d.lines.forEach(l => { const k = l.publisher || "أخرى"; (by[k] = by[k] || { pop: 0, q: 0, l: [] }).l.push(l); by[k].pop += n(l.pop); by[k].q += n(l.qty); });
+    const pubs = Object.keys(by).sort((a, b) => by[b].pop - by[a].pop || by[b].q - by[a].q || a.localeCompare(b, "ar"));
+    // تقسيم دقيق: كل صفحة عمودان (يمين ثم يسار) بسعة ثابتة؛ المجموعة المقسومة تكمل بعنوان «تابع»
+    const CAP1 = 12, CAP = 19; let i = 0;
+    const cols = [[]]; let left = CAP1, pageCol = 0;
+    const newCol = () => { cols.push([]); pageCol++; left = pageCol < 2 ? CAP1 : CAP; };
+    pubs.forEach((pb, gi) => { const g = by[pb];
+      g.l.sort((a, b) => sr(a.subject) - sr(b.subject) || String(a.subject).localeCompare(String(b.subject), "ar") || n(a.gradeRank) - n(b.gradeRank) || String(a.code).localeCompare(String(b.code)));
+      if (left < 4) newCol();
+      cols[cols.length - 1].push({ h: 1, pb, gi, g }); left -= 2;
+      let prev = null;
+      g.l.forEach(l => { if (left < 1) { newCol(); cols[cols.length - 1].push({ h: 1, pb, gi, g, cont: 1 }); left -= 2; prev = null; }
+        cols[cols.length - 1].push({ l, n: ++i, same: l.subject === prev }); prev = l.subject; left -= 1; }); });
+    const colHTML = items => { let html = "", open = false;
+      items.forEach(it => { if (it.h) { if (open) html += "</tbody></table>";
+          html += `<table class="pog"><colgroup><col style="width:9%"><col><col style="width:30%"><col style="width:13%"></colgroup><thead><tr class="pub"><th colspan="4"><span class="pn">${it.gi + 1}</span>${esc(it.pb)}${it.cont ? ` <small>(تابع)</small>` : ""}<span class="ps">${it.g.l.length} صنف · <b>${it.g.q}</b> نسخة</span></th></tr></thead><tbody><tr class="hd"><td>#</td><td>المادة</td><td>الصف</td><td>العدد</td></tr>`; open = true; return; }
+        const l = it.l;
+        html += `<tr><td class="c num sub">${it.n}</td><td>${it.same ? `<span class="dit">〃</span>` : `<b>${esc(l.subject || "—")}</b>`}${l.part ? ` <span class="pt">${esc(l.part)}</span>` : ""}<div class="cd num">${esc(l.code)}</div></td><td>${esc(l.grade || "")}${l.tracks ? `<div class="cd">${esc(l.tracks)}</div>` : ""}</td><td class="c num q">${l.qty}</td></tr>`; });
+      return html + (open ? "</tbody></table>" : ""); };
+    const rq = d.requester || {}, css = `<style>
+      .po-grid{display:grid;grid-template-columns:1fr 1fr;gap:6mm;margin-top:3mm;align-items:start;flex:1}
+      .po-grid>div{min-width:0}.po-grid>div+div{border-right:1px dashed #d9cdea;padding-right:3mm}
+      .pog{width:100%;table-layout:fixed;border-collapse:separate;border-spacing:0;margin:0 0 3.5mm;border:1px solid #d9cdea;border-radius:2.5mm;overflow:hidden;font-size:.94em}
+      .pog th,.pog td{width:auto}
+      .pog .pub th{background:linear-gradient(90deg,#3b1d63,#6a3aa0);color:#fff;text-align:right;padding:2mm 2.4mm;font-size:1.04em}
+      .pog .pub small{font-weight:500;opacity:.8}
+      .pog .pn{display:inline-flex;width:5.2mm;height:5.2mm;border-radius:50%;background:#f9b224;color:#3b1d63;align-items:center;justify-content:center;font-size:.78em;margin-left:1.5mm;vertical-align:middle}
+      .pog .ps{float:left;font-weight:500;font-size:.78em;opacity:.92;margin-top:.4mm}
+      .pog tr.hd td{background:#f3edfa!important;color:#4c1d95;font-weight:700;font-size:.78em;padding:1mm 1.4mm;border-bottom:1px solid #d9cdea}
+      .pog tr.hd td:first-child,.pog tr.hd td:last-child{text-align:center}.pog{border-color:#cdbfe3!important;margin-top:0!important}.pog td{border-left:0!important}
+      .pog td{padding:1.45mm 1.6mm;border-bottom:1px solid #eee7f6;vertical-align:middle;line-height:1.3}
+      .pog tbody tr:last-child td{border-bottom:0}.pog tbody tr:nth-child(even) td{background:#fbf9fe}
+      .pog .dit{color:#b9a6d6;font-weight:700}.pog .pt{display:inline-block;font-size:.74em;background:#fff6dc;color:#8a5a00;border-radius:1mm;padding:0 1.2mm;margin-right:.6mm}
+      .pog .cd{font-size:.72em;color:#8d84a3;margin-top:.2mm}.pog .q{font-weight:800;font-size:1.1em;color:#3b1d63}
+      .po-meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2.5mm}
+      .po-sum{display:flex;gap:2mm;margin-top:2.5mm}.po-sum div{flex:1;border-radius:2mm;background:#f6f1fc;padding:1.4mm 2mm;text-align:center;font-size:.9em}.po-sum b{display:block;font-size:1.3em;color:#3b1d63}
+      .po-cont{display:flex;justify-content:space-between;align-items:center;border-bottom:1.5px solid #3b1d63;padding-bottom:1.5mm;font-size:.9em;color:#4c1d95}
+    </style>`;
+    const pairs = []; for (let k = 0; k < cols.length; k += 2) pairs.push([cols[k], cols[k + 1] || []]);
+    return pairs.map((pr, pi) => Doc.page(`${pi === 0 ? css + Doc.head("طلب توريد كتب", d.no, `<div class="n">التاريخ: ${esc(Doc.date(d.date))}</div>`) + `
+      <div class="meta po-meta">
+        <div class="box"><h4>الجهة الطالبة</h4>${Doc.kv("الجهة", esc(rq.org || ""))}${rq.platform ? Doc.kv("المبادرة", esc(rq.platform)) : ""}${rq.name ? Doc.kv("المسؤول", `<b>${esc(rq.name)}</b>`) : ""}${rq.phone ? Doc.kv("الموبايل", `<b class="num">${esc(rq.phone)}</b>`) : ""}</div>
+        <div class="box"><h4>إلى المورد</h4>${Doc.kv("المكتبة", `<b>${esc(d.supplier.name)}</b>`)}${d.supplier.contact ? Doc.kv("المسؤول", esc(d.supplier.contact)) : ""}${d.supplier.phone ? Doc.kv("الهاتف", `<span class="num">${esc(d.supplier.phone)}</span>`) : ""}</div>
+        <div class="box"><h4>بيانات الطلب</h4>${Doc.kv("المرحلة", esc(d.phase))}${Doc.kv("رقم الطلب", `<span class="num">${esc(d.no)}</span>`)}${Doc.kv("التاريخ", `<span class="num">${esc(Doc.date(d.date))}</span>`)}</div></div>
+      <div class="po-sum"><div>الناشرون<b class="num">${pubs.length}</b></div><div>الأصناف<b class="num">${d.lines.length}</b></div><div>إجمالي النسخ<b class="num">${qty}</b></div><div>عدد الصفحات<b class="num">${pairs.length}</b></div></div>
+      <p style="margin:2.5mm 0 0">السادة/ ${esc(d.supplier.name)} — تحية طيبة وبعد، نرجو التكرم بتوريد الكتب الموضحة أدناه، مرتبة حسب الناشر (الأكثر طلباً أولاً) ثم المادة ثم الصف:</p>`
+      : css + `<div class="po-cont"><b>طلب توريد كتب · ${esc(d.supplier.name)}</b><span class="num">${esc(d.no)} · صفحة ${pi + 1} من ${pairs.length}</span></div>`}
+      <div class="po-grid"><div>${colHTML(pr[0])}</div><div>${colHTML(pr[1])}</div></div>
+      ${pi === pairs.length - 1 ? `<div class="note">• يُرجى ذكر رقم الطلب <span class="num">${esc(d.no)}</span> في فاتورة التوريد مع فاتورة مفصلة بالأكواد والكميات. · العلامة 〃 = نفس المادة السابقة لنفس الناشر.</div>
+      <div class="sig"><div>مسؤول المبادرة<br><small>${esc(rq.name || "")}</small></div><div>المدير المالي</div><div>استلام المورد</div></div>` : ""}${Doc.foot(d.no + (pairs.length > 1 ? " · " + (pi + 1) + "/" + pairs.length : ""))}`, "", "", "")).join("");
   },
   /** فاتورة توريد مكتبة (A4): d = {ref,no,date,phase,status,supplier,volPct,volAmt,afterFirst,net,damaged,stated,variance,by,lines:[{code,name,ord,rec,dmg,cover,disc,unit,total,flag,mismatch}]} */
   supplierInvoice(d) {
