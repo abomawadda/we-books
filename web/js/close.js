@@ -680,3 +680,47 @@ on("repScopePh", id => { scopeOff(); const i = RSC.pick.indexOf(id); i < 0 ? RSC
     ${RSC.mode === "pick" ? `<div class="flex flex-wrap gap-1.5 mt-2">${phs}</div>` : ""}${RSC.mode !== "cur" ? `<div class="text-[11px] text-white/70 mt-1.5">${ic("info", "inline -mt-0.5")} الأرقام مجمّعة لكل المراحل المختارة — ولكل موظف يظهر كل حجوزاته وفواتيره فيها.</div>` : ""}</div>`;
   const hero = view.querySelector("section.relative.overflow-hidden"); if (hero) hero.insertAdjacentHTML("beforeend", bar);
 }); }
+
+// ================================================================ متابعة طلب التوريد: الإرسال للمكتبة ← الحالة ← الاستلام وطريقته (SAVE_PO_TRACKING / إعداد PO_TRACKING)
+const PO_ST = [["draft", "لم يُرسل", "file-text"], ["sent", "أُرسل للمكتبة", "send"], ["confirmed", "أكّدت المكتبة", "circle-check"], ["preparing", "قيد التجهيز", "package"], ["shipped", "في الطريق", "truck"], ["partial", "استُلم جزئياً", "package-check"], ["received", "استُلم بالكامل", "check-check"]];
+const PO_METHODS = ["شحن (شركة نقل)", "عربية مؤجرة", "استلام بنفسي من المكتبة", "توصيل من المكتبة", "أخرى"];
+const PO_VIA = ["واتساب", "إيميل", "ورقي باليد", "تليفون"];
+const poTrackAll = () => { const v = (A().settingsMap || {}).PO_TRACKING; try { return (typeof v === "string" ? JSON.parse(v || "{}") : v) || {}; } catch (_) { return {}; } };
+/** مرحلة الطلب: المسجّلة يدوياً، أو المستنتجة من الكميات المستلمة فعلاً */
+function poTrackOf(phaseId, supId) {
+  const t = poTrackAll()[phaseId + "|" + supId] || {}, snaps = A().poSnapshots.filter(p => p.Phase_ID === phaseId && (p.Supplier_ID || "—") === supId);
+  const need = snaps.reduce((s, p) => s + n(p.Net_Order_To_Supplier_Qty), 0), got = snaps.reduce((s, p) => s + n(p.Received_Qty_To_Date), 0);
+  let status = t.status || (snaps.length ? "draft" : "");
+  const auto = need && got >= need ? "received" : got > 0 ? "partial" : "";
+  if (auto && PO_ST.findIndex(x => x[0] === auto) > PO_ST.findIndex(x => x[0] === status)) status = auto;
+  return Object.assign({}, t, { status, need, got, frozen: (snaps[0] || {}).Frozen_At || "" });
+}
+function poTrackCard(phaseId, supId, supName) {
+  const t = poTrackOf(phaseId, supId), idx = PO_ST.findIndex(x => x[0] === t.status), late = t.expectedAt && t.status !== "received" && t.expectedAt < new Date().toISOString().slice(0, 10);
+  const step = (x, i) => `<div class="flex flex-col items-center gap-1 min-w-[64px]"><span class="w-8 h-8 rounded-full flex items-center justify-center ${i < idx ? "bg-emerald-500 text-white" : i === idx ? "bg-brand-700 text-white ring-4 ring-brand-100" : "bg-slate-100 text-slate-400"}">${ic(x[2], "!w-4 !h-4")}</span><span class="text-[10.5px] text-center leading-tight ${i === idx ? "font-bold text-brand-800" : "text-slate-500"}">${x[1]}</span></div>`;
+  const fact = (l, v) => v ? `<div class="rounded-xl bg-slate-50 px-2.5 py-1.5"><div class="text-[10.5px] text-slate-500">${l}</div><div class="text-[12.5px] font-semibold text-slate-800">${v}</div></div>` : "";
+  return `<section class="card p-4 mb-4"><div class="flex items-center justify-between gap-2 mb-3"><div><b class="text-[15px] text-slate-900">${ic("truck", "inline -mt-0.5 text-brand-600")} متابعة الطلب — ${esc(supName)}</b>
+      <div class="text-[12px] text-slate-500">${t.need ? `مطلوب <b class="num">${fmt(t.need)}</b> نسخة · استُلم <b class="num">${fmt(t.got)}</b>` : "لسه ما اتجمّدش الحصر"}${t.frozen ? ` · تجميد ${esc(String(t.frozen).slice(0, 10))}` : ""}</div></div>
+      ${can("SAVE_PO_TRACKING") && t.need ? `<button class="btn btn-primary btn-sm" data-act="poTrackEdit" data-id="${esc(phaseId + "|" + supId)}">${ic("pencil")} تحديث</button>` : ""}</div>
+    <div class="flex gap-1 overflow-x-auto pb-1">${PO_ST.map(step).join("")}</div>
+    ${late ? `<div class="mt-2 rounded-xl bg-rose-50 text-rose-700 text-[12.5px] px-3 py-2">${ic("triangle-alert", "inline -mt-0.5")} تأخر عن الموعد المتوقع (${esc(t.expectedAt)})</div>` : ""}
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">${fact("أُرسل في", t.sentAt ? `<span class="num">${esc(t.sentAt)}</span>${t.sentVia ? " · " + esc(t.sentVia) : ""}` : "")}${fact("الموعد المتوقع", t.expectedAt ? `<span class="num">${esc(t.expectedAt)}</span>` : "")}${fact("طريقة الاستلام", esc(t.method || ""))}${fact("الناقل / السائق", esc(t.carrier || ""))}${fact("تكلفة النقل", t.cost ? `<span class="num">${fmt(t.cost)}</span> ج.م` : "")}${fact("تاريخ الاستلام", t.receivedAt ? `<span class="num">${esc(t.receivedAt)}</span>` : "")}${fact("استلمه", esc(t.receivedBy || ""))}</div>
+    ${t.notes ? `<p class="text-[12.5px] text-slate-600 mt-2">${ic("info", "inline -mt-0.5")} ${esc(t.notes)}</p>` : ""}
+    ${(t.log || []).length ? `<details class="mt-2 text-[12px] text-slate-500"><summary class="cursor-pointer font-semibold">سجل المتابعة (${t.log.length})</summary><ul class="mt-1.5 space-y-1">${t.log.map(l => `<li>• <span class="num">${esc(String(l.at).slice(0, 16))}</span> — ${esc((PO_ST.find(x => x[0] === l.status) || [])[1] || l.status)}${l.by ? " · " + esc(l.by) : ""}${l.note ? " · " + esc(l.note) : ""}</li>`).join("")}</ul></details>` : ""}</section>`;
+}
+on("poTrackEdit", async key => {
+  const [phaseId, supId] = key.split("|"), t = poTrackOf(phaseId, supId), today = new Date().toISOString().slice(0, 10);
+  const v = await UI.form({ title: "تحديث متابعة طلب التوريد", intro: "سجّل كل خطوة: الإرسال، تأكيد المكتبة، الشحن، والاستلام — تظهر في سجل المتابعة.",
+    fields: [{ name: "status", label: "المرحلة الحالية", type: "select", value: t.status === "draft" ? "sent" : t.status, options: PO_ST.map(x => [x[0], x[1]]) },
+      { name: "sentAt", label: "تاريخ الإرسال للمكتبة", type: "date", value: t.sentAt || today }, { name: "sentVia", label: "أُرسل عن طريق", type: "select", value: t.sentVia || "واتساب", options: PO_VIA.map(x => [x, x]) },
+      { name: "expectedAt", label: "الموعد المتوقع للاستلام", type: "date", value: t.expectedAt || "" }, { name: "method", label: "طريقة الاستلام", type: "select", value: t.method || PO_METHODS[0], options: PO_METHODS.map(x => [x, x]) },
+      { name: "carrier", label: "الناقل / السائق / رقم الشحنة", value: t.carrier || "" }, { name: "cost", label: "تكلفة النقل (ج.م)", type: "number", value: t.cost || "" },
+      { name: "receivedAt", label: "تاريخ الاستلام", type: "date", value: t.receivedAt || "" }, { name: "receivedBy", label: "استلمه", value: t.receivedBy || "" },
+      { name: "notes", label: "ملاحظات", type: "textarea", rows: 2, value: t.notes || "" }], ok: "حفظ" });
+  if (!v) return;
+  await act("SAVE_PO_TRACKING", Object.assign({ phaseId, supplierId: supId }, v));
+});
+const poTrackCards = phaseId => { const { s } = maps(), sups = [...new Set(A().poSnapshots.filter(p => p.Phase_ID === phaseId).map(p => p.Supplier_ID || "—"))];
+  return sups.map(id => poTrackCard(phaseId, id, (s[id] || {}).Supplier_Name || id)).join(""); };
+_wrapA("/a/po", view => { const h = poTrackCards(APP.phaseId); if (!h) return; const head = view.firstElementChild; head ? head.insertAdjacentHTML("afterend", h) : view.insertAdjacentHTML("afterbegin", h); });
+_wrapA("/a/receive", view => { const h = poTrackCards(APP.phaseId); if (!h) return; const head = view.firstElementChild; head ? head.insertAdjacentHTML("afterend", h) : view.insertAdjacentHTML("afterbegin", h); });
