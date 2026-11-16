@@ -112,7 +112,7 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
   density(rows, size) { const cap = size === "A4" ? [10, 22, 34] : [6, 12, 20]; return rows <= cap[0] ? "roomy" : rows <= cap[1] ? "" : rows <= cap[2] ? "dense" : "xdense"; },
   kv(k, v) { return `<div class="kv"><span>${k}</span><b>${v}</b></div>`; },
   page(inner, wm, wmCls, dens) { return `<section class="page ${dens || ""}">${wm ? `<div class="wm ${wmCls || ""}">${esc(wm)}</div>` : ""}${inner}</section>`; },
-  methodAr(m) { return ({ INSTALLMENT: "تقسيط", CASH: "نقدي", INSTAPAY: "إنستاباي", WALLET: "محفظة إلكترونية", PAYROLL: "خصم من المرتب" })[m] || ar(m) || "—"; },
+  methodAr(m) { return ({ INSTALLMENT: "تقسيط", CASH: "نقدي", INSTAPAY: "إنستاباي", WALLET: "محفظة إلكترونية", PAYROLL: "خصم من المرتب", CREDIT: "تسوية رصيد" })[m] || ar(m) || "—"; },
 
   // ---------------------------------------------------------------- القوالب
   /** بيانات الكتاب من الدليل المحمّل (الإدارة أو الموظف) لأعمدة الكود/الناشر/المادة/الصف */
