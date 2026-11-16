@@ -453,39 +453,41 @@ function kdHTML() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), k = KD.list[KD.i] || kdBlank();
   const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
   const tracks = k.grade ? gradeTracks(k.grade) : [];
-  const nameDone = !!(k._nameOk || k.grade || st || !k.rel); // اسم الابن اختياري: لا خطوة تأكيد إلا للقريب (اسمه إجباري)
+  const nameDone = !!k._nameOk; // خطوة «مين؟» أولاً لكل فرد (الاسم اختياري للأبناء وإجباري للقريب)
   const trackDone = !tracks.length || !!(k._trackOk || k.track || k.type);
   const typeDone = !!(k.grade && trackDone && (k._typeOk || k.type));
   const done = KD.list.filter(x => x.grade).length;
   const types = [["حكومي", "building-2", "عربي"], ["لغات", "graduation-cap", "تجريبي / لغات"], ["أزهر", "book-marked", "معاهد أزهرية"], ["", "layout-grid", "اعرض الكل"]];
+  const who = k.rel ? esc(relYou(k.rel)) + (k.name ? " " + esc(k.name) : "") : (k.gender === "g" ? "👧 بنتك" : "👦 ابنك") + (k.name ? " " + esc(k.name) : "");
+  const whoBody = `<div class="seg ${relOn() ? "grid-cols-3" : "grid-cols-2"} !bg-white ring-1 ring-slate-200">${[["b", "👦 ابني"], ["g", "👧 بنتي"]].concat(relOn() ? [["rel", "🧒 قريب"]] : []).map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${o[0] === "rel" ? !!k.rel : !k.rel && k.gender === o[0]}">${o[1]}</button>`).join("")}</div>
+    ${k.rel ? `<div><div class="label">صلة القرابة</div><div class="flex flex-wrap gap-1.5">${RELS.map(r => `<button class="chip !h-8 !text-xs" data-act="kdRel" data-id="${esc(r)}" aria-pressed="${k.rel === r}">${esc(r)}</button>`).join("")}</div>
+      <p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5")} كتب القريب تُحسب على حسابك وتظهر باسمه في الطلب.</p></div>` : ""}
+    <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
+      <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="${k.gender === "g" ? "مثلاً: مريم" : "مثلاً: محمد"}" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
+      ${k.rel && !relGender(k.rel) ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>` : ""}
+    </div>
+    <button type="button" data-act="kdConfirmName" class="btn btn-primary w-full justify-center">التالي ←</button>`;
+  const steps = [{ id: "who", t: "الفرد", q: gTxt("مين اللي هتحجز له؟", "مين اللي هتحجزي له؟"), done: nameDone, v: who, body: whoBody },
+    { id: "stage", t: "المرحلة", q: "في أي مرحلة دراسية؟", done: nameDone && !!st, v: esc(st), body: `<div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-3 text-[13.5px] font-bold ring-1 transition bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div>` },
+    { id: "grade", t: "الصف", q: "في سنة كام؟", done: !!k.grade, v: esc(gradeTitle(k.grade || "")), body: `<div class="grid grid-cols-3 gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-12 rounded-xl text-[14px] font-bold ring-1 transition bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>` }]
+    .concat(tracks.length ? [{ id: "track", t: "الشعبة", q: "الشعبة إيه؟", done: !!k.grade && trackDone, v: esc(k.track || "لسه مش محددة"), body: `<p class="text-[11.5px] text-slate-500 -mt-1">نعرض كتب الشعبة + الكتب المشتركة</p><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right bg-white text-slate-700 ring-slate-200 active:scale-95" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div>` }] : [])
+    .concat([{ id: "type", t: "نوع المدرسة", q: "نوع المدرسة؟", done: typeDone, v: esc(k.type || "كل المدارس"), body: `<div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 bg-white ring-slate-200 active:scale-95" data-act="kdType" data-id="${esc(t[0])}">
+        <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"}">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div>` }]);
+  const curIx = steps.findIndex(x => !x.done), cur = steps[curIx];
   return `
   <div class="flex items-center gap-2 overflow-x-auto pb-2 -mx-1 px-1">${KD.list.map((x, i) => `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdPick" data-id="${i}">
       <span class="w-14 h-14 rounded-2xl flex items-center justify-center text-[28px] transition ${i === KD.i ? "bg-brand-700 ring-4 ring-brand-100" : x.grade ? "bg-gold-100" : "bg-slate-100"}">${kidEmoji(x)}</span>
       <span class="text-[11px] font-semibold truncate w-full text-center ${i === KD.i ? "text-brand-800" : "text-slate-500"}">${esc(x.name || (x.rel ? "قريب" : "ابن " + (i + 1)))}</span></button>`).join("")}
     ${KD.list.length < 12 ? `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdAdd"><span class="w-14 h-14 rounded-2xl border-2 border-dashed border-brand-300 text-brand-600 flex items-center justify-center text-2xl">${ic("plus")}</span><span class="text-[11px] font-semibold text-brand-700">إضافة</span></button>` : ""}</div>
 
-  <div class="rounded-3xl bg-slate-50 p-4 mt-2 space-y-4">
-    <div class="seg ${relOn() ? "grid-cols-3" : "grid-cols-2"} !bg-white ring-1 ring-slate-200">${[["b", "👦 ابني"], ["g", "👧 بنتي"]].concat(relOn() ? [["rel", "🧒 قريب"]] : []).map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${o[0] === "rel" ? !!k.rel : !k.rel && k.gender === o[0]}">${o[1]}</button>`).join("")}</div>
-    ${k.rel ? `<div><div class="label">صلة القرابة</div><div class="flex flex-wrap gap-1.5">${RELS.map(r => `<button class="chip !h-8 !text-xs" data-act="kdRel" data-id="${esc(r)}" aria-pressed="${k.rel === r}">${esc(r)}</button>`).join("")}</div>
-      <p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5")} كتب القريب تُحسب على حسابك (المقدم والأقساط) وتظهر باسمه في الطلب.</p></div>` : ""}
-    <div class="space-y-2">
-      <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
-        <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="${k.gender === "g" ? "مثلاً: مريم" : "مثلاً: محمد"}" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
-        ${k.rel && !relGender(k.rel) ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>` : `<span class="h-11 px-3 rounded-xl bg-white ring-1 ring-slate-200 flex items-center text-[13px] font-semibold text-slate-600">${k.gender === "g" ? "👧 بنت" : "👦 ولد"}</span>`}
-      </div>
-      ${!nameDone ? `<button type="button" data-act="kdConfirmName" class="btn btn-primary w-full justify-center animate-pop-in">${ic("check")} تأكيد الاسم والمتابعة ←</button>` : ""}
-    </div>
-
-    ${nameDone ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">1</span>في أي مرحلة؟</div>
-      <div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-2.5 text-[13.5px] font-bold ring-1 transition ${st === s ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div></div>` : ""}
-
-    ${nameDone && st ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">2</span>الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
-
-    ${nameDone && k.grade && tracks.length ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">3</span>الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t && (t || k._trackOk) ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
-
-    ${nameDone && k.grade && trackDone ? `<div class="animate-pop-in"><div class="label"><span class="inline-flex w-5 h-5 rounded-full bg-brand-700 text-white text-[11px] items-center justify-center ml-1.5 num">${tracks.length ? 4 : 3}</span>نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] && (t[0] || k._typeOk) ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
-        <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
-
+  <div class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs p-4 mt-2 space-y-3" id="kdCard">
+    <div class="flex items-center justify-between gap-2"><b class="text-[14.5px] text-slate-900">${k.grade && k._saved ? "تعديل " + esc(k.name || (k.rel ? "القريب" : k.gender === "g" ? "البنت" : "الابن")) : k.rel ? "قريب جديد" : k.gender === "g" ? "بنت جديدة" : "ابن جديد"}</b>
+      ${!typeDone ? `<span class="text-[11.5px] font-semibold text-slate-500">خطوة <b class="num text-brand-700">${curIx + 1}</b> من <span class="num">${steps.length}</span></span>` : `<span class="text-[11.5px] font-bold text-emerald-700">${ic("circle-check", "inline -mt-0.5")} اكتملت البيانات</span>`}</div>
+    <div class="flex gap-1">${steps.map((x, i) => `<span class="h-1.5 flex-1 rounded-full ${x.done ? "bg-emerald-500" : i === curIx ? "bg-brand-600" : "bg-slate-200"}"></span>`).join("")}</div>
+    ${steps.filter(x => x.done).map(x => `<div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="w-6 h-6 shrink-0 rounded-full bg-emerald-500 text-white flex items-center justify-center">${ic("check", "!w-3.5 !h-3.5")}</span>
+      <span class="min-w-0 flex-1 leading-tight"><span class="block text-[10.5px] text-slate-500">${x.t}</span><span class="block text-[13px] font-bold text-slate-800 truncate">${x.v}</span></span>
+      <button type="button" class="text-[12px] font-semibold text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50" data-act="kdGoStep" data-id="${x.id}">تغيير</button></div>`).join("")}
+    ${cur ? `<div class="animate-pop-in rounded-2xl ring-2 ring-brand-100 bg-brand-50/30 p-3.5 space-y-3"><div class="text-[14px] font-bold text-slate-900">${cur.q}</div>${cur.body}</div>` : ""}
     ${typeDone ? `<div class="animate-pop-in rounded-2xl bg-white ring-1 ring-emerald-200 p-3.5 space-y-3 shadow-xs">
       <div class="flex items-start gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500 shrink-0 mt-0.5")} <span>${k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك "}<b>${esc(k.name || "")}</b> في <b>${esc(gradeTitle(k.grade))}</b>${k.track ? " (" + esc(k.track) + ")" : ""}${k.type ? " · " + esc(k.type) : ""} — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>
       <div class="pt-2 border-t border-slate-100">
@@ -503,7 +505,7 @@ function kdHTML() {
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; } } };
 function kidsEditor(addRel) {
-  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true }));
+  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true, _saved: true }));
   KD.list = ks.length ? ks : [kdBlank(addRel)];
   if (addRel && ks.length) KD.list.push(kdBlank(true));
   KD.i = addRel ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
@@ -523,8 +525,19 @@ on("kdGrade", v => { const k = KD.list[KD.i]; k._nameOk = true; k.grade = v; if 
 on("kdTrack", v => { const k = KD.list[KD.i]; k.track = v; k._trackOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdType", v => { const k = KD.list[KD.i]; k.type = v; k._typeOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdEditAgain", () => { const k = KD.list[KD.i]; if (!k) return; k._nameOk = false; k._trackOk = false; k._typeOk = false; kdRender(); });
-on("kdPick", v => { KD.i = +v; kdRender(); });
-on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast(gTxt("اختر الصف أولاً 👆", "اختاري الصف أولاً 👆"), "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
+on("kdPick", v => { KD.i = +v; kdRender(); kdTop(); });
+const kdTop = () => { const c = KD.m && KD.m.root && KD.m.root.querySelector("#kdCard"); if (c && c.scrollIntoView) c.scrollIntoView({ block: "start", behavior: "smooth" }); };
+on("kdGoStep", v => { const k = KD.list[KD.i]; if (!k) return;
+  if (v === "who") k._nameOk = false;
+  if (v === "stage") { k._stage = ""; k.grade = ""; k.track = ""; k._trackOk = false; k._typeOk = false; }
+  if (v === "grade") { k._stage = k._stage || ((APP.emp.catalog.grades || []).find(g => g.label === k.grade) || {}).stage || ""; k.grade = ""; k.track = ""; k._trackOk = false; k._typeOk = false; }
+  if (v === "track") { k.track = ""; k._trackOk = false; k._typeOk = false; }
+  if (v === "type") k._typeOk = false;
+  kdRender(); });
+// إضافة فرد جديد: دايماً بطاقة جديدة فاضية (لو فيه فرد جديد لسه ناقص نفتحه هو بدل ما نكرر)
+on("kdAdd", () => { const open = KD.list.findIndex(x => !x.grade && !x._saved);
+  if (open >= 0) KD.i = open; else { KD.list.push(kdBlank()); KD.i = KD.list.length - 1; }
+  kdRender(); kdTop(); const inp = KD.m && KD.m.root.querySelector("#kdName"); if (inp) setTimeout(() => inp.focus(), 250); });
 /** حذف فرد من العيلة: يُحفظ فوراً على الخادم، ويوضح أثره على حجز المرحلة الحالية، ولا يمس السجل التاريخي للمراحل السابقة */
 on("kdDel", async () => {
   const k = KD.list[KD.i]; if (!k) return;
