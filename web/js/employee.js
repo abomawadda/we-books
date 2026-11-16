@@ -918,53 +918,110 @@ function wzFamily() {
   const gs = Math.max(0, Math.min(2, WZ.guideStep || 0));
 
   if (showGuide) {
-    const dots = [0, 1, 2].map(d => `<span class="h-1.5 rounded-full transition-all ${d === gs ? "w-6 bg-brand-600" : d < gs ? "w-2.5 bg-brand-400" : "w-2.5 bg-brand-200"}"></span>`).join("");
+    const dots = [0, 1, 2].map(d => `<span class="h-1.5 rounded-full transition-all duration-300 ${d === gs ? "w-7 bg-brand-600" : d < gs ? "w-3 bg-brand-400" : "w-2 bg-brand-200"}"></span>`).join("");
     const stepBody = gs === 0 ? `
-      <div class="rounded-2xl bg-white/95 ring-1 ring-brand-100 p-3.5 shadow-sm space-y-2.5">
-        <div class="text-[13.5px] font-bold text-brand-950">الخطوة 1 من 3 — مين محتاج كتب السنة دي؟ 👨‍👩‍👧‍👦</div>
-        <p class="text-[12.5px] text-slate-600 leading-relaxed">${fem ? "عرّفينا على أولادك أو قرايبك الأول، وعندك 3 اختيارات مرنة:" : "عرّفنا على أولادك أو قرايبك الأول، وعندك 3 اختيارات مرنة:"}</p>
-        <div class="space-y-1.5 text-[12.5px]">
-          <div class="flex items-start gap-2 rounded-xl bg-brand-50/70 p-2.5 ring-1 ring-brand-100"><span>⭐</span><span><b>${fem ? "تضيفي أولادك الأول (الأسهل):" : "تضيف أولادك الأول (الأسهل):"}</b> بنحفظهم عندك ونجهّز كتبهم كل سنة بضغطة واحدة.</span></div>
-          <div class="flex items-start gap-2 rounded-xl bg-sky-50/70 p-2.5 ring-1 ring-sky-100"><span>🤝</span><span><b>${fem ? "أو تضيفي قريب:" : "أو تضيف قريب:"}</b> لو بتحجز${fem ? "ي" : ""} لابن أخ، أخت، أو حد من العيلة.</span></div>
-          <div class="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-200/70"><span>⚡</span><span><b>${fem ? "أو تكمّلي بدون تسجيلهم:" : "أو تكمّل بدون تسجيلهم:"}</b> تختار${fem ? "ي" : ""} الصف الدراسي مباشرة وتحجز${fem ? "ي" : ""} فوراً.</span></div>
+      <div class="rounded-2xl bg-white ring-1 ring-brand-100/90 p-4 shadow-sm space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="inline-flex items-center gap-1.5 text-[11.5px] font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-800 ring-1 ring-brand-200/70">الخطوة 1 من 3 · العائلة</span>
+          <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
         </div>
-        <div class="flex items-center justify-between pt-1">
-          <button type="button" data-act="wzHideGuide" class="text-[12px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
-          <button type="button" data-act="wzGuideStep" data-id="1" class="btn btn-primary btn-sm">فهمت، التالي: طرق الكتب ←</button>
+        <div>
+          <h2 class="text-[15px] font-bold text-brand-950">ليه بننصحك تسجّل أولادك الأول؟ ✨</h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">خطوة واحدة في البداية بتديك تحكم كامل وراحة في كل اللي جاي:</p>
         </div>
+        <div class="rounded-2xl p-3 ring-1 ring-brand-200/80 space-y-2" style="background:linear-gradient(135deg,#faf7ff 0%,#fffdf7 100%)">
+          <div class="flex items-start gap-2.5">
+            <span class="w-7 h-7 rounded-xl bg-brand-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🎯</span>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">تمييز كتب كل ابن لوحده</b><span class="text-slate-600">كل ابن بملفه واسمه — فتعرف${fem ? "ي" : ""} كتب كل واحد وتستلم${fem ? "ي" : ""}ها بسهولة بدون أي لخبطة.</span></div>
+          </div>
+          <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
+            <span class="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">✏️</span>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">مرونة كاملة في الإضافة والإلغاء</b><span class="text-slate-600">حبّيت${fem ? "ي" : ""} تلغي كتاب أو تضيف${fem ? "ي" : ""} كتاب لابن معين؟ بتعدّل${fem ? "ي" : ""} طلبه لوحده في ثانية من غير ما تأثر${fem ? "ي" : ""} على باقي الأولاد.</span></div>
+          </div>
+          <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
+            <span class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🚀</span>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">استدعاء سريع في المراحل والسنين الجاية</b><span class="text-slate-600">لما الطالب يطلع سنة جديدة، تقدر${fem ? "ي" : ""} تستدعي ملفه وتجهّز${fem ? "ي" : ""} كتبه الجديدة بضغطة واحدة!</span></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-[11.5px]">
+          <div class="rounded-xl bg-sky-50/80 ring-1 ring-sky-200/70 p-2.5 flex items-start gap-2">
+            <span class="text-[16px] shrink-0">🤝</span>
+            <div><b class="block text-sky-950">إضافة قريب</b><span class="text-slate-600">تحجز${fem ? "ي" : ""} لحد من العيلة بملف منفصل.</span></div>
+          </div>
+          <div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/80 p-2.5 flex items-start gap-2">
+            <span class="text-[16px] shrink-0">⚡</span>
+            <div><b class="block text-slate-900">بدون تسجيل</b><span class="text-slate-600">تختار${fem ? "ي" : ""} الصف مباشرة وتحجز${fem ? "ي" : ""} فوراً.</span></div>
+          </div>
+        </div>
+        <button type="button" data-act="wzGuideStep" data-id="1" class="btn btn-primary w-full justify-center">فهمت، التالي: طرق اختيار الكتب ←</button>
       </div>` : gs === 1 ? `
-      <div class="rounded-2xl bg-white/95 ring-1 ring-brand-100 p-3.5 shadow-sm space-y-2.5">
-        <div class="text-[13.5px] font-bold text-brand-950">الخطوة 2 من 3 — في الكتب، عندك 3 طرق أسهل من بعض 📚</div>
-        <p class="text-[12.5px] text-slate-600 leading-relaxed">${fem ? "لما تدخلي مرحلة الكتب هتلاقي 3 طرق جاهزة عشانك:" : "لما تدخل مرحلة الكتب هتلاقي 3 طرق جاهزة عشانك:"}</p>
-        <div class="space-y-1.5 text-[12.5px]">
-          <div class="flex items-start gap-2 rounded-xl bg-amber-50/80 p-2.5 ring-1 ring-amber-200/70"><span>🎒</span><span><b>شنطة الكتب الجاهزة:</b> اسم المادة شامل كل الكتب، بنجهّزلك الأشهر وتختار${fem ? "ي" : ""} أو تبدّل${fem ? "ي" : ""} منها براحتك.</span></div>
-          <div class="flex items-start gap-2 rounded-xl bg-brand-50/80 p-2.5 ring-1 ring-brand-200/70"><span>📚</span><span><b>شركة واحدة (سلسلة كاملة):</b> لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ بنجهّزها لك فوراً بدون ما تدور${fem ? "ي" : ""}.</span></div>
-          <div class="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-200"><span>🔍</span><span><b>كتاب بكتاب:</b> تتصفح${fem ? "ي" : ""} الكتب وتختار${fem ? "ي" : ""} كل كتاب بنفسك واحد واحد.</span></div>
+      <div class="rounded-2xl bg-white ring-1 ring-brand-100/90 p-4 shadow-sm space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <span class="inline-flex items-center gap-1.5 text-[11.5px] font-bold px-2.5 py-1 rounded-full bg-brand-50 text-brand-800 ring-1 ring-brand-200/70">الخطوة 2 من 3 · طرق الكتب</span>
+          <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
         </div>
-        <div class="flex items-center justify-between pt-1">
+        <div>
+          <h2 class="text-[15px] font-bold text-brand-950">في الكتب، عندك 3 طرق أسهل من بعض 📚</h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">${fem ? "كلها متاحة جوه الحجز وتقدري تبدّلي بينها لكل ابن براحتك:" : "كلها متاحة جوه الحجز وتقدر تبدّل بينها لكل ابن براحتك:"}</p>
+        </div>
+        <div class="space-y-2 text-[12px]">
+          <div class="rounded-2xl bg-amber-50/75 ring-1 ring-amber-200/80 p-3 flex items-start gap-3">
+            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-amber-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🎒</span>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2"><b class="text-amber-950 text-[13px]">شنطة الكتب الجاهزة</b><span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950">الأسرع</span></div>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">اسم المادة شامل كل الكتب — بنجهّزلك الأشهر وتختار${fem ? "ي" : ""} أو تبدّل${fem ? "ي" : ""} منها بضغطة.</p>
+            </div>
+          </div>
+          <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200/80 p-3 flex items-start gap-3">
+            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-brand-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">📚</span>
+            <div class="flex-1 min-w-0">
+              <b class="text-brand-950 text-[13px] block">شركة واحدة (سلسلة كاملة)</b>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لك فوراً بدون ما تدور${fem ? "ي" : ""}.</p>
+            </div>
+          </div>
+          <div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200/90 p-3 flex items-start gap-3">
+            <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🔍</span>
+            <div class="flex-1 min-w-0">
+              <b class="text-slate-900 text-[13px] block">كتاب بكتاب</b>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">تتصفح${fem ? "ي" : ""} كتب الصف وتختار${fem ? "ي" : ""} كل كتاب بنفسك واحد واحد على مزاجك.</p>
+            </div>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 pt-0.5">
           <button type="button" data-act="wzGuideStep" data-id="0" class="btn btn-ghost btn-sm">→ السابق</button>
-          <button type="button" data-act="wzGuideStep" data-id="2" class="btn btn-primary btn-sm">فهمت، الخطوة الأخيرة ←</button>
+          <button type="button" data-act="wzGuideStep" data-id="2" class="btn btn-primary flex-1 justify-center">فهمت، الخطوة الأخيرة ←</button>
         </div>
       </div>` : `
-      <div class="rounded-2xl bg-white/95 ring-1 ring-emerald-200 p-4 shadow-sm space-y-3">
-        <div class="flex items-center gap-2 text-emerald-700 font-bold text-[14px]"><span>✅</span> <span>خلاص تمام فهمت! يلا نبدأ الحجز 🎉</span></div>
-        <p class="text-[13px] font-semibold text-slate-800">${fem ? "تحبي نبدأ نضيف الأولاد الأول ولا نحجز بدون تسجيلهم؟" : "تحب نبدأ نضيف الأولاد الأول ولا نحجز بدون تسجيلهم؟"}</p>
-        <div class="grid sm:grid-cols-2 gap-2">
-          <button type="button" data-act="wzGuidePick" data-id="kids" class="btn btn-primary w-full justify-center py-3 text-[13.5px]">👨‍👩‍👧‍👦 يلا نبدأ نضيف الأولاد</button>
-          <button type="button" data-act="wzGuidePick" data-id="skip" class="btn btn-outline w-full justify-center py-3 text-[13.5px]">⚡ نحجز بدون تسجيلهم</button>
+      <div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-4 shadow-sm space-y-3.5">
+        <div class="flex items-center justify-between gap-2">
+          <span class="inline-flex items-center gap-1.5 text-[12px] font-bold px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">✅ خلاص تمام فهمت · يلا نبدأ الحجز 🎉</span>
+          <button type="button" data-act="wzGuideStep" data-id="1" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">→ مراجعة</button>
         </div>
-        <div class="flex items-center justify-between pt-0.5">
-          <button type="button" data-act="wzGuideStep" data-id="1" class="text-[12px] font-semibold text-slate-400 hover:text-slate-600">→ مراجعة الشرح</button>
-          <button type="button" data-act="wzGuidePick" data-id="stay" class="text-[12px] font-semibold text-brand-700 hover:underline">أو أضيف قريب / أختار بنفسي</button>
+        <div>
+          <h2 class="text-[15px] font-bold text-slate-900">${fem ? "تحبي نبدأ بإيه دلوقتي؟" : "تحب نبدأ بإيه دلوقتي؟"}</h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">${fem ? "تقدري تضيفي أولادك عشان تستفيدي بكل المميزات، أو تحجزي مباشرة بدون تسجيلهم." : "تقدر تضيف أولادك عشان تستفيد بكل المميزات، أو تحجز مباشرة بدون تسجيلهم."}</p>
         </div>
+        <div class="grid sm:grid-cols-2 gap-2.5">
+          <button type="button" data-act="wzGuidePick" data-id="kids" class="text-right rounded-2xl p-3.5 ring-2 ring-brand-500 bg-gradient-to-br from-brand-600 to-brand-800 text-white shadow-sm active:scale-[.98] transition">
+            <div class="flex items-center justify-between mb-1.5"><span class="text-[22px]">👨‍👩‍👧‍👦</span><span class="text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-gold-300 text-brand-950">الأسهل والأمرن</span></div>
+            <b class="block text-[14px]">يلا نبدأ نضيف الأولاد</b>
+            <span class="block text-[11.5px] text-brand-100 mt-0.5">تمييز الكتب + مرونة التعديل + حفظ للسنين الجاية</span>
+          </button>
+          <button type="button" data-act="wzGuidePick" data-id="skip" class="text-right rounded-2xl p-3.5 ring-1 ring-slate-200 bg-slate-50/70 hover:bg-slate-100 text-slate-900 active:scale-[.98] transition">
+            <div class="flex items-center justify-between mb-1.5"><span class="text-[22px]">⚡</span><span class="text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-white text-slate-600 ring-1 ring-slate-200">حجز سريع</span></div>
+            <b class="block text-[14px]">نحجز بدون تسجيلهم</b>
+            <span class="block text-[11.5px] text-slate-500 mt-0.5">اختيار الصف الدراسي مباشرة والبدء فوراً</span>
+          </button>
+        </div>
+        <button type="button" data-act="wzGuidePick" data-id="stay" class="w-full text-center text-[12px] font-semibold text-brand-700 hover:underline pt-0.5">أو أضيف قريب / أستعرض الاختيارات بنفسي</button>
       </div>`;
 
     return `
-      <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm space-y-3.5" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
+      <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm space-y-3.5" style="background:linear-gradient(135deg,#f8f4ff 0%,#f1e8fc 55%,#fffaf0 100%)">
         <div class="flex items-start gap-3">
           <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
           <div class="flex-1 min-w-0">
-            <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
+            <h1 class="font-display font-bold text-[17.5px] sm:text-[19.5px] text-brand-950 leading-snug">${esc(greet)}</h1>
             <div class="flex items-center gap-2 mt-2">${dots}<span class="text-[11px] font-bold text-brand-700 mr-1">دليل البداية (${gs + 1}/3)</span></div>
           </div>
         </div>
