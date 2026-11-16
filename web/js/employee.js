@@ -445,11 +445,17 @@ function kidsStrip(compact) {
 }
 
 // ---------------- محرّر الأبناء: خطوات قصيرة لكل ابن ----------------
+const empGender = () => (APP.emp && APP.emp.employee && APP.emp.employee.gender) || (APP.user && APP.user.gender) || "M";
+const gTxt = (m, f) => empGender() === "F" ? f : m;
 const KD = { list: [], i: 0, m: null };
-const kdBlank = rel => ({ name: "", gender: "b", grade: "", type: "", rel: rel ? "ابن أخ" : "" });
+const kdBlank = rel => ({ name: "", gender: "b", grade: "", type: "", rel: rel ? "ابن أخ" : "", _nameOk: false, _trackOk: false, _typeOk: false });
 function kdHTML() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), k = KD.list[KD.i] || kdBlank();
   const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
+  const tracks = k.grade ? gradeTracks(k.grade) : [];
+  const nameDone = !!(k._nameOk || k.grade || st);
+  const trackDone = !tracks.length || !!(k._trackOk || k.track || k.type);
+  const typeDone = !!(k.grade && trackDone && (k._typeOk || k.type));
   const done = KD.list.filter(x => x.grade).length;
   const types = [["حكومي", "building-2", "عربي"], ["لغات", "graduation-cap", "تجريبي / لغات"], ["أزهر", "book-marked", "معاهد أزهرية"], ["", "layout-grid", "اعرض الكل"]];
   return `
@@ -462,29 +468,47 @@ function kdHTML() {
     <div class="seg ${relOn() ? "grid-cols-3" : "grid-cols-2"} !bg-white ring-1 ring-slate-200">${[["b", "👦 ابني"], ["g", "👧 بنتي"]].concat(relOn() ? [["rel", "🧒 قريب"]] : []).map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${o[0] === "rel" ? !!k.rel : !k.rel && k.gender === o[0]}">${o[1]}</button>`).join("")}</div>
     ${k.rel ? `<div><div class="label">صلة القرابة</div><div class="flex flex-wrap gap-1.5">${RELS.map(r => `<button class="chip !h-8 !text-xs" data-act="kdRel" data-id="${esc(r)}" aria-pressed="${k.rel === r}">${esc(r)}</button>`).join("")}</div>
       <p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5")} كتب القريب تُحسب على حسابك (المقدم والأقساط) وتظهر باسمه في الطلب.</p></div>` : ""}
-    <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
-      <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="${k.gender === "g" ? "مثلاً: مريم" : "مثلاً: محمد"}" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
-      ${k.rel && !relGender(k.rel) ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>` : `<span class="h-11 px-3 rounded-xl bg-white ring-1 ring-slate-200 flex items-center text-[13px] font-semibold text-slate-600">${k.gender === "g" ? "👧 بنت" : "👦 ولد"}</span>`}
+    <div class="space-y-2">
+      <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
+        <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="${k.gender === "g" ? "مثلاً: مريم" : "مثلاً: محمد"}" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
+        ${k.rel && !relGender(k.rel) ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>` : `<span class="h-11 px-3 rounded-xl bg-white ring-1 ring-slate-200 flex items-center text-[13px] font-semibold text-slate-600">${k.gender === "g" ? "👧 بنت" : "👦 ولد"}</span>`}
+      </div>
+      ${!nameDone ? `<button type="button" data-act="kdConfirmName" class="btn btn-primary w-full justify-center animate-pop-in">${ic("check")} تأكيد الاسم والمتابعة ←</button>` : ""}
     </div>
-    <div><div class="label">في أي مرحلة؟</div>
-      <div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-2.5 text-[13.5px] font-bold ring-1 transition ${st === s ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div></div>
-    ${st ? `<div class="animate-pop-in"><div class="label">الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
-    ${k.grade ? `<div class="animate-pop-in"><div class="label">نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
+
+    ${nameDone ? `<div class="animate-pop-in"><div class="label">1️⃣ في أي مرحلة؟</div>
+      <div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-2.5 text-[13.5px] font-bold ring-1 transition ${st === s ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div></div>` : ""}
+
+    ${nameDone && st ? `<div class="animate-pop-in"><div class="label">2️⃣ الصف</div><div class="flex flex-wrap gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-11 min-w-[64px] px-3 rounded-xl text-[14px] font-bold ring-1 transition ${k.grade === g.label ? "bg-gold-400 text-brand-950 ring-gold-400 shadow-soft" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div></div>` : ""}
+
+    ${nameDone && k.grade && tracks.length ? `<div class="animate-pop-in"><div class="label">3️⃣ الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t && (t || k._trackOk) ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
+
+    ${nameDone && k.grade && trackDone ? `<div class="animate-pop-in"><div class="label">${tracks.length ? "4️⃣" : "3️⃣"} نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] && (t[0] || k._typeOk) ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
-    ${k.grade && gradeTracks(k.grade).length ? `<div class="animate-pop-in"><div class="label">الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${gradeTracks(k.grade).concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
-    ${k.grade ? `<div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-3 flex items-center gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500")} <span>${k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك "}${esc(k.name || "")} في <b>${esc(gradeTitle(k.grade))}</b> — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>` : ""}
+
+    ${typeDone ? `<div class="animate-pop-in rounded-2xl bg-white ring-1 ring-emerald-200 p-3.5 space-y-3 shadow-xs">
+      <div class="flex items-start gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500 shrink-0 mt-0.5")} <span>${k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك "}<b>${esc(k.name || "")}</b> في <b>${esc(gradeTitle(k.grade))}</b>${k.track ? " (" + esc(k.track) + ")" : ""}${k.type ? " · " + esc(k.type) : ""} — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>
+      <div class="pt-2 border-t border-slate-100">
+        <div class="text-[12.5px] font-bold text-slate-800 mb-2">${gTxt("تحب تحفظ على كده ولا هتعدّل البيانات؟", "تحبي تحفظي على كده ولا هتعدّلي البيانات؟")}</div>
+        <div class="grid grid-cols-2 gap-2">
+          <button type="button" data-act="kdSave" class="btn btn-primary btn-sm justify-center">${ic("check-check")} حفظ على كده</button>
+          <button type="button" data-act="kdAdd" class="btn btn-outline btn-sm justify-center">${ic("plus")} ${gTxt("إضافة ابن تاني", "إضافة ابن تاني")}</button>
+        </div>
+        <button type="button" data-act="kdEditAgain" class="w-full text-center text-[11.5px] font-semibold text-slate-500 hover:text-brand-700 mt-2">✏️ تعديل البيانات</button>
+      </div>
+    </div>` : ""}
   </div>
   ${(KD.list.length > 1 || k.grade) ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${esc(k.name || (k.rel ? "هذا القريب" : k.gender === "g" ? "هذه البنت" : "هذا الابن"))}</button>` : ""}
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
-const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; b.innerHTML = `${ic("check-check")} حفظ ${n2 > 1 ? "(" + n2 + ")" : ""}`; } } };
+const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; } } };
 function kidsEditor(addRel) {
-  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "" }));
+  const ks = (APP.emp.employee.kids || []).map(k => ({ name: k.name || "", gender: k.gender || "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "", _nameOk: true, _trackOk: true, _typeOk: true }));
   KD.list = ks.length ? ks : [kdBlank(addRel)];
   if (addRel && ks.length) KD.list.push(kdBlank(true));
   KD.i = addRel ? KD.list.length - 1 : Math.max(0, KD.list.findIndex(k => !k.grade));
-  KD.m = UI.open(kdHTML(), { title: addRel ? "🧒 إضافة قريب" : "👨‍👩‍👧 أبنائي وأقاربي", sub: "20 ثانية لكل فرد — ونجهّز لكل واحد كتب صفه تلقائياً",
-    footer: `<button class="btn btn-primary btn-lg w-full" data-act="kdSave">${ic("check-check")} حفظ</button>` });
+  KD.m = UI.open(kdHTML(), { title: addRel ? "🧒 إضافة قريب" : "👨‍👩‍👧 أبنائي وأقاربي", sub: "خطوة بخطوة — ونجهّز لكل واحد كتب صفه تلقائياً",
+    footer: `<button class="btn btn-primary btn-lg w-full" data-act="kdSave">${ic("check-check")} حفظ الكل</button>` });
   kdRender();
 }
 on("kidsEdit", () => { KD._addRel = false; kidsEditor(false); });
@@ -492,13 +516,15 @@ on("addRel", () => { KD._addRel = true; kidsEditor(true); });
 on("kdKind", v => { const k = KD.list[KD.i]; if (v === "rel") { k.rel = k.rel || (k.gender === "g" ? "ابنة أخ" : "ابن أخ"); k.gender = relGender(k.rel) || k.gender; } else { k.rel = ""; k.gender = v; } kdRender(); });
 on("kdRel", v => { const k = KD.list[KD.i]; k.rel = v; const g = relGender(v); if (g) k.gender = g; kdRender(); });
 on("kdName", v => { (KD.list[KD.i] || {}).name = v; });
+on("kdConfirmName", () => { const k = KD.list[KD.i]; if (!k) return; if (k.rel && !(k.name || "").trim()) return toast(gTxt("اكتب اسم القريب الأول", "اكتبي اسم القريب الأول"), "warning"); k._nameOk = true; kdRender(); });
 on("kdGender", v => { KD.list[KD.i].gender = v; kdRender(); });
-on("kdStage", v => { const k = KD.list[KD.i]; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) k.grade = ""; kdRender(); });
-on("kdGrade", v => { const k = KD.list[KD.i]; k.grade = v; if (!gradeTracks(v).includes(k.track)) k.track = ""; kdRender(); });
-on("kdTrack", v => { KD.list[KD.i].track = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
-on("kdType", v => { KD.list[KD.i].type = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("kdStage", v => { const k = KD.list[KD.i]; k._nameOk = true; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) { k.grade = ""; k.track = ""; k._trackOk = false; k._typeOk = false; } kdRender(); });
+on("kdGrade", v => { const k = KD.list[KD.i]; k._nameOk = true; k.grade = v; if (!gradeTracks(v).includes(k.track)) k.track = ""; k._trackOk = false; k._typeOk = false; kdRender(); });
+on("kdTrack", v => { const k = KD.list[KD.i]; k.track = v; k._trackOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("kdType", v => { const k = KD.list[KD.i]; k.type = v; k._typeOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("kdEditAgain", () => { const k = KD.list[KD.i]; if (!k) return; k._nameOk = false; k._trackOk = false; k._typeOk = false; kdRender(); });
 on("kdPick", v => { KD.i = +v; kdRender(); });
-on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast("اختر الصف أولاً 👆", "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
+on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast(gTxt("اختر الصف أولاً 👆", "اختاري الصف أولاً 👆"), "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
 on("kdDel", async () => {
   const k = KD.list[KD.i]; if (!k) return;
   const nm = k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك"), c = k.grade ? kidCartCount(k) : 0;
@@ -893,7 +919,6 @@ const personCard = (k, i, on, act) => `<button class="min-w-0 text-right rounded
   <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span></span>
   <span class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check") : ""}</span></button>`;
 
-const empGender = () => (APP.emp && APP.emp.employee && APP.emp.employee.gender) || (APP.user && APP.user.gender) || "M";
 const wzGuideKey = () => "wb_wz_guide_off_" + ((APP.user && APP.user.empId) || "");
 const wzMarkGuideOff = () => { try { localStorage.setItem(wzGuideKey(), "1"); } catch (_) {} };
 
@@ -926,31 +951,31 @@ function wzFamily() {
           <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
         </div>
         <div>
-          <h2 class="text-[15px] font-bold text-brand-950">ليه بننصحك تسجّل أولادك الأول؟ ✨</h2>
-          <p class="text-[12px] text-slate-500 mt-0.5">خطوة واحدة في البداية بتديك تحكم كامل وراحة في كل اللي جاي:</p>
+          <h2 class="text-[15px] font-bold text-brand-950">${gTxt("ليه بننصحك تسجّل أولادك الأول؟ ✨", "ليه بننصحك تسجّلي أولادك الأول؟ ✨")}</h2>
+          <p class="text-[12px] text-slate-500 mt-0.5">${gTxt("خطوة واحدة في البداية بتديك تحكم كامل وراحة في كل اللي جاي:", "خطوة واحدة في البداية بتديكي تحكم كامل وراحة في كل اللي جاي:")}</p>
         </div>
         <div class="rounded-2xl p-3 ring-1 ring-brand-200/80 space-y-2" style="background:linear-gradient(135deg,#faf7ff 0%,#fffdf7 100%)">
           <div class="flex items-start gap-2.5">
             <span class="w-7 h-7 rounded-xl bg-brand-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🎯</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">تمييز كتب كل ابن لوحده</b><span class="text-slate-600">كل ابن بملفه واسمه — فتعرف${fem ? "ي" : ""} كتب كل واحد وتستلم${fem ? "ي" : ""}ها بسهولة بدون أي لخبطة.</span></div>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">تمييز كتب كل ابن لوحده</b><span class="text-slate-600">كل ابن بملفه واسمه — ${gTxt("فتعرف كتب كل واحد وتستلمها بسهولة بدون أي لخبطة.", "فتعرفي كتب كل واحد وتستلميها بسهولة بدون أي لخبطة.")}</span></div>
           </div>
           <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
             <span class="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">✏️</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">مرونة كاملة في الإضافة والإلغاء</b><span class="text-slate-600">حبّيت${fem ? "ي" : ""} تلغي كتاب أو تضيف${fem ? "ي" : ""} كتاب لابن معين؟ بتعدّل${fem ? "ي" : ""} طلبه لوحده في ثانية من غير ما تأثر${fem ? "ي" : ""} على باقي الأولاد.</span></div>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">مرونة كاملة في الإضافة والإلغاء</b><span class="text-slate-600">${gTxt("حبّيت تلغي كتاب أو تضيف كتاب لابن معين؟ بتعدّل طلبه لوحده في ثانية من غير ما تأثر على باقي الأولاد.", "حبّيتي تلغي كتاب أو تضيفي كتاب لابن معين؟ بتعدّلي طلبه لوحده في ثانية من غير ما تأثري على باقي الأولاد.")}</span></div>
           </div>
           <div class="flex items-start gap-2.5 pt-2 border-t border-brand-100/80">
             <span class="w-7 h-7 rounded-xl bg-emerald-600 text-white flex items-center justify-center text-[13px] shrink-0 shadow-xs">🚀</span>
-            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">استدعاء سريع في المراحل والسنين الجاية</b><span class="text-slate-600">لما الطالب يطلع سنة جديدة، تقدر${fem ? "ي" : ""} تستدعي ملفه وتجهّز${fem ? "ي" : ""} كتبه الجديدة بضغطة واحدة!</span></div>
+            <div class="text-[12px] leading-relaxed"><b class="text-brand-950 block">استدعاء سريع في المراحل والسنين الجاية</b><span class="text-slate-600">لما الطالب يطلع سنة جديدة، ${gTxt("تقدر تستدعي ملفه وتجهّز كتبه الجديدة بضغطة واحدة!", "تقدري تستدعي ملفه وتجهّزي كتبه الجديدة بضغطة واحدة!")}</span></div>
           </div>
         </div>
         <div class="grid grid-cols-2 gap-2 text-[11.5px]">
           <div class="rounded-xl bg-sky-50/80 ring-1 ring-sky-200/70 p-2.5 flex items-start gap-2">
             <span class="text-[16px] shrink-0">🤝</span>
-            <div><b class="block text-sky-950">إضافة قريب</b><span class="text-slate-600">تحجز${fem ? "ي" : ""} لحد من العيلة بملف منفصل.</span></div>
+            <div><b class="block text-sky-950">إضافة قريب</b><span class="text-slate-600">${gTxt("تحجز لحد من العيلة بملف منفصل.", "تحجزي لحد من العيلة بملف منفصل.")}</span></div>
           </div>
           <div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/80 p-2.5 flex items-start gap-2">
             <span class="text-[16px] shrink-0">⚡</span>
-            <div><b class="block text-slate-900">بدون تسجيل</b><span class="text-slate-600">تختار${fem ? "ي" : ""} الصف مباشرة وتحجز${fem ? "ي" : ""} فوراً.</span></div>
+            <div><b class="block text-slate-900">بدون تسجيل</b><span class="text-slate-600">${gTxt("تختار الصف مباشرة وتحجز فوراً.", "تختاري الصف مباشرة وتحجزي فوراً.")}</span></div>
           </div>
         </div>
         <button type="button" data-act="wzGuideStep" data-id="1" class="btn btn-primary w-full justify-center">فهمت، التالي: طرق اختيار الكتب ←</button>
@@ -962,28 +987,28 @@ function wzFamily() {
         </div>
         <div>
           <h2 class="text-[15px] font-bold text-brand-950">في الكتب، عندك 3 طرق أسهل من بعض 📚</h2>
-          <p class="text-[12px] text-slate-500 mt-0.5">${fem ? "كلها متاحة جوه الحجز وتقدري تبدّلي بينها لكل ابن براحتك:" : "كلها متاحة جوه الحجز وتقدر تبدّل بينها لكل ابن براحتك:"}</p>
+          <p class="text-[12px] text-slate-500 mt-0.5">${gTxt("كلها متاحة جوه الحجز وتقدر تبدّل بينها لكل ابن براحتك:", "كلها متاحة جوه الحجز وتقدري تبدّلي بينها لكل ابن براحتك:")}</p>
         </div>
         <div class="space-y-2 text-[12px]">
           <div class="rounded-2xl bg-amber-50/75 ring-1 ring-amber-200/80 p-3 flex items-start gap-3">
             <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-amber-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🎒</span>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2"><b class="text-amber-950 text-[13px]">شنطة الكتب الجاهزة</b><span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-950">الأسرع</span></div>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">اسم المادة شامل كل الكتب — بنجهّزلك الأشهر وتختار${fem ? "ي" : ""} أو تبدّل${fem ? "ي" : ""} منها بضغطة.</p>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("اسم المادة شامل كل الكتب — بنجهّز لك الأشهر وتختار أو تبدّل منها بضغطة.", "اسم المادة شامل كل الكتب — بنجهّز لكِ الأشهر وتختاري أو تبدّلي منها بضغطة.")}</p>
             </div>
           </div>
           <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-200/80 p-3 flex items-start gap-3">
             <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-brand-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">📚</span>
             <div class="flex-1 min-w-0">
               <b class="text-brand-950 text-[13px] block">شركة واحدة (سلسلة كاملة)</b>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لك فوراً بدون ما تدور${fem ? "ي" : ""}.</p>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لك فوراً بدون ما تدور.", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ — بنجهّزها لكِ فوراً بدون ما تدوري.")}</p>
             </div>
           </div>
           <div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200/90 p-3 flex items-start gap-3">
             <span class="w-9 h-9 rounded-xl bg-white ring-1 ring-slate-200 flex items-center justify-center text-[20px] shrink-0 shadow-xs">🔍</span>
             <div class="flex-1 min-w-0">
               <b class="text-slate-900 text-[13px] block">كتاب بكتاب</b>
-              <p class="text-slate-600 mt-0.5 leading-relaxed">تتصفح${fem ? "ي" : ""} كتب الصف وتختار${fem ? "ي" : ""} كل كتاب بنفسك واحد واحد على مزاجك.</p>
+              <p class="text-slate-600 mt-0.5 leading-relaxed">${gTxt("تتصفح كتب الصف وتختار كل كتاب بنفسك واحد واحد على مزاجك.", "تتصفحي كتب الصف وتختاري كل كتاب بنفسك واحد واحد على مزاجك.")}</p>
             </div>
           </div>
         </div>
@@ -1060,57 +1085,57 @@ function wzFamily() {
         <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
         <div class="flex-1 min-w-0">
           <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
-          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${ks.length ? (fem ? "اختاري تحبي تبدأي بحجز مين الأول، أو أضيفي فرد جديد." : "اختر تحب تبدأ بحجز مين الأول، أو أضف فرد جديد.") : (fem ? "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلك الكتب في ثواني." : "اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني.")}</p>
+          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${ks.length ? gTxt("اختر تحب تبدأ بحجز مين الأول، أو أضف فرد جديد.", "اختاري تحبي تبدأي بحجز مين الأول، أو أضيفي فرد جديد.") : gTxt("اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني.", "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلكِ الكتب في ثواني.")}</p>
           <button type="button" data-act="wzShowGuide" class="mt-2 inline-flex items-center gap-1 text-[11.5px] font-bold text-brand-700 hover:underline">📖 إزاي أحجز؟ (دليل سريع)</button>
         </div>
       </div>
     </div>
 
-    ${ks.length || WZ.temp.length ? `<div class="flex items-center justify-between mb-2"><span class="text-[13.5px] font-bold text-slate-800">${fem ? "تحبي نبدأ بحجز مين الأول؟" : "تحب نبدأ بحجز مين الأول؟"}</span><span class="text-[11.5px] text-slate-500">اضغط على أي فرد للبدء</span></div>` : ""}
+    ${ks.length || WZ.temp.length ? `<div class="flex items-center justify-between mb-2"><span class="text-[13.5px] font-bold text-slate-800">${gTxt("تحب نبدأ بحجز مين الأول؟", "تحبي نبدأ بحجز مين الأول؟")}</span><span class="text-[11.5px] text-slate-500">${gTxt("اضغط على أي فرد للبدء", "اضغطي على أي فرد للبدء")}</span></div>` : ""}
     ${kids.length ? `<div class="text-[12px] font-bold text-brand-700 mb-1.5">أبنائي</div><div class="grid sm:grid-cols-2 gap-2.5 mb-4">${kids.map(([k, i]) => pickCard(k, i)).join("")}</div>` : ""}
     ${rels.length ? `<div class="text-[12px] font-bold text-sky-700 mb-1.5">أقاربي</div><div class="grid sm:grid-cols-2 gap-2.5 mb-4">${rels.map(([k, i]) => pickCard(k, i)).join("")}</div>` : ""}
     ${WZ.temp.length ? `<div class="text-[12px] font-bold text-slate-600 mb-1.5">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => { const mIdx = ms.findIndex(x => x._temp && x.grade === t.grade); return `<span class="chip">${esc(gradeTitle(t.grade))}${mIdx >= 0 ? `<button type="button" data-act="wzStartOne" data-id="${mIdx}" class="text-brand-700 font-bold mr-1 underline">احجز</button>` : ""}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`; }).join("")}</div>` : ""}
     <div class="grid grid-cols-2 gap-2.5">
-      <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="kidsEdit">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : "أضف أبنائي (الأسهل)"}</button>
+      <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="kidsEdit">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : gTxt("أضف أبنائي (الأسهل)", "أضيفي أبنائي (الأسهل)")}</button>
       ${relOn() ? `<button class="rounded-2xl p-3.5 border-2 border-dashed border-sky-300 bg-sky-50/40 hover:bg-sky-50 text-sky-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="addRel">${ic("users")} إضافة قريب</button>` : `<span></span>`}
     </div>
-    <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : "أو كمّل بدون تسجيل — اختر الصف مباشرة"}</button>
-    <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${ms.length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز بالترتيب (${ms.length})</button>`;
+    <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : gTxt("أو كمّل بدون تسجيل — اختر الصف مباشرة", "أو كمّلي بدون تسجيل — اختاري الصف مباشرة")}</button>
+    <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${ms.length ? "" : "disabled"}>${ic("chevron-left")} ${gTxt("ابدأ الحجز بالترتيب", "ابدأي الحجز بالترتيب")} (${ms.length})</button>`;
 }
 function wzGradePick() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
-  return `<h1 class="font-display font-bold text-[20px] text-slate-900">اختر الصف</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">بدون تسجيل — تقدر تضيف أكثر من صف.</p>
+  return `<h1 class="font-display font-bold text-[20px] text-slate-900">${gTxt("اختر الصف", "اختاري الصف")}</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">${gTxt("بدون تسجيل — تقدر تضيف أكثر من صف.", "بدون تسجيل — تقدري تضيفي أكثر من صف.")}</p>
     ${stages.map(s => `<div class="text-[12.5px] font-bold text-brand-700 mb-2">${esc(s)}</div><div class="grid grid-cols-3 gap-2 mb-4">${(cat.grades || []).filter(g => g.stage === s && cnt[g.label]).map(g => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 font-bold text-[15px] active:scale-95" data-act="wzTempAdd" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>`).join("")}
     <button class="btn btn-ghost w-full" data-act="wzUnskip">${ic("arrow-right")} رجوع</button>`;
 }
 function wzMember() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
   wzFocus(m);
-  const mode = WZ.mode[WZ.i], fem = empGender() === "F";
+  const mode = WZ.mode[WZ.i];
   const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3 shadow-sm" style="background:linear-gradient(135deg,#6a3aa0,#381c62)">
     <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px] shrink-0">${m._temp ? "📚" : kidEmoji(m)}</span>
     <div class="flex-1 min-w-0">
-      <div class="text-[11.5px] font-bold text-gold-200 flex items-center gap-1.5"><span>📌 أنت تحجز الآن لـ</span>${ms.length > 1 ? `<span class="px-1.5 py-0.5 rounded-full bg-white/15 text-white text-[10.5px]">${WZ.i + 1} من ${ms.length}</span>` : ""}</div>
+      <div class="text-[11.5px] font-bold text-gold-200 flex items-center gap-1.5"><span>📌 ${gTxt("أنت تحجز الآن لـ", "أنتِ تحجزين الآن لـ")}</span>${ms.length > 1 ? `<span class="px-1.5 py-0.5 rounded-full bg-white/15 text-white text-[10.5px]">${WZ.i + 1} من ${ms.length}</span>` : ""}</div>
       <div class="font-display font-bold text-[19px] leading-tight truncate mt-0.5">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div>
       <div class="text-[12.5px] text-brand-100">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}${m.track ? " · " + esc(m.track) : ""}</div>
     </div>
     <button type="button" data-act="wzToFamily" class="text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 hover:bg-white/25 text-white shrink-0">تغيير</button>
   </div>`;
-  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-1">${fem ? `تحبي نحجز كتب ${esc(wzName(m))} إزاي؟` : `تحب نحجز كتب ${esc(wzName(m))} إزاي؟`}</h2>
-    <p class="text-[12.5px] text-slate-500 mb-3">اختر الطريقة الأريح لك، أو أجّله لبعدين لو لسه معرفتش الكتب.</p>
-    <div class="grid gap-2.5">${[["popular", "🎒", "شنطة الكتب الجاهزة", "اسم المادة شامل كل الكتب — نجهّز لك الأشهر وتبدّل منها براحتك", "bg-gold-50 ring-gold-300"],
-      ["series", "📚", "شركة واحدة (سلسلة كاملة)", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ نجهّزها لك بدون ما تدور", "bg-brand-50 ring-brand-200"],
-      ["manual", "🔍", "أختار كتاب بكتاب بنفسي", "تتصفح كتب الصف وتختار كل كتاب واحد بواحد على مزاجك", "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
+  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-1">${gTxt(`تحب نحجز كتب ${esc(wzName(m))} إزاي؟`, `تحبي نحجز كتب ${esc(wzName(m))} إزاي؟`)}</h2>
+    <p class="text-[12.5px] text-slate-500 mb-3">${gTxt("اختر الطريقة الأريح لك، أو أجّله لبعدين لو لسه معرفتش الكتب.", "اختاري الطريقة الأريح لكِ، أو أجّليه لبعدين لو لسه معرفتيش الكتب.")}</p>
+    <div class="grid gap-2.5">${[["popular", "🎒", "شنطة الكتب الجاهزة", gTxt("اسم المادة شامل كل الكتب — نجهّز لك الأشهر وتبدّل منها براحتك", "اسم المادة شامل كل الكتب — نجهّز لكِ الأشهر وتبدّلي منها براحتك"), "bg-gold-50 ring-gold-300"],
+      ["series", "📚", "شركة واحدة (سلسلة كاملة)", gTxt("لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ نجهّزها لك بدون ما تدور", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ نجهّزها لكِ بدون ما تدوري"), "bg-brand-50 ring-brand-200"],
+      ["manual", "🔍", "أختار كتاب بكتاب بنفسي", gTxt("تتصفح كتب الصف وتختار كل كتاب واحد بواحد على مزاجك", "تتصفحي كتب الصف وتختاري كل كتاب واحد بواحد على مزاجك"), "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
         <span class="text-[30px]">${o[1]}</span><span class="flex-1"><b class="block text-[15.5px] text-slate-900">${o[2]}</b><span class="block text-[12.5px] text-slate-600 mt-0.5">${o[3]}</span></span>${ic("chevron-left", "text-slate-400")}</button>`).join("")}</div>
     <div class="grid sm:grid-cols-2 gap-2 mt-3">
-      <button type="button" class="rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/70 hover:bg-amber-50 text-amber-950 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition" data-act="wzDefer">⏳ خليه بعدين (لسه معرفتش الكتب)</button>
+      <button type="button" class="rounded-2xl p-3 ring-1 ring-amber-200 bg-amber-50/70 hover:bg-amber-50 text-amber-950 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition" data-act="wzDefer">⏳ ${gTxt("خليه بعدين (لسه معرفتش الكتب)", "خليه بعدين (لسه معرفتيش الكتب)")}</button>
       <button type="button" class="rounded-2xl p-3 ring-1 ring-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold text-[12.5px] flex items-center justify-center gap-1.5 transition" data-act="wzNoBooks">🚫 مش محتاج كتب الترم ده</button>
     </div>
     <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("arrow-right")} رجوع لاختيار العائلة</button>`;
   if (mode === "series" && !WZ.pub[WZ.i]) {
     const list = gradeList().list, by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || new Set()).add(b.Subject));
     const pubs = Object.keys(by).sort((a, b) => by[b].size - by[a].size);
-    return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">اختار السلسلة لـ ${esc(wzName(m))}</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
+    return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">${gTxt("اختار السلسلة", "اختاري السلسلة")} لـ ${esc(wzName(m))}</h2>${pubs.length ? `<div class="grid grid-cols-2 gap-2">${pubs.map(p => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 text-right active:scale-[.98] flex items-center gap-2" data-act="wzPub" data-id="${esc(p)}">
       ${logoFor(APP.emp.pubLogos, p, "") ? `<span class="w-12 h-9 rounded-lg bg-white ring-1 ring-slate-100 flex items-center justify-center p-0.5 shrink-0"><img src="${esc(logoFor(APP.emp.pubLogos, p, ""))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}
       <span class="min-w-0"><b class="block text-[14px] text-slate-900 truncate">${esc(p)}</b><span class="text-[11.5px] text-slate-500">${by[p].size} مادة</span></span></button>`).join("")}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "")}
       <button class="btn btn-ghost w-full mt-3" data-act="wzModeReset">${ic("arrow-right")} تغيير الطريقة</button>`;
@@ -1121,7 +1146,7 @@ function wzMember() {
     if (mode === "series") BAG.rows.forEach(r => { const o = r.opts.find(x => x.Publisher === WZ.pub[WZ.i]); if (o) { r.pick = o.Book_ID; r.on = true; } else r.on = r.had; });
   }
   BAG.inline = true;
-  return head + (BAG.rows.length ? `<div id="wzBag">${bagHTML()}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", "تقدر تكمل لباقي الأفراد"))
+  return head + (BAG.rows.length ? `<div id="wzBag">${bagHTML()}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", gTxt("تقدر تكمل لباقي الأفراد", "تقدري تكمّلي لباقي الأفراد")))
     + `<div class="sticky bottom-[calc(4.6rem+env(safe-area-inset-bottom))] md:bottom-4 mt-4 grid grid-cols-[auto_1fr] gap-2 bg-slate-50/90 backdrop-blur py-2">
       <button class="btn btn-outline" data-act="wzModeReset">${ic("arrow-right")} طريقة أخرى</button>
       <button class="btn btn-primary btn-lg" data-act="wzNext">${ic("check")} إضافة للسلة والمتابعة ←</button></div>`;
@@ -1130,23 +1155,22 @@ function wzAfterMemberHTML() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
   const b = kidBen(m), lines = cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade));
   const rem = ms.map((x, idx) => ({ m: x, idx })).filter(x => x.idx !== WZ.i && !WZ.done[x.idx] && !WZ.later[x.idx] && !WZ.noBooks[x.idx]);
-  const fem = empGender() === "F";
   return `
     <div class="rounded-3xl p-5 bg-white ring-1 ring-emerald-200 shadow-sm space-y-4 text-center">
       <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-[30px]">✅</div>
       <div>
         <h1 class="font-display font-bold text-[20px] text-slate-900">تمت إضافة كتب ${esc(wzName(m))} في السلة!</h1>
-        <p class="text-[13px] text-slate-500 mt-1">${lines.length ? `اخترت ${booksWord(lines.reduce((s, l) => s + l.qty, 0))} جاهزة في سلتك.` : "تم حفظ اختياراتك في السلة."}</p>
+        <p class="text-[13px] text-slate-500 mt-1">${lines.length ? `${gTxt("اخترت", "اخترتي")} ${booksWord(lines.reduce((s, l) => s + l.qty, 0))} جاهزة في سلتك.` : "تم حفظ اختياراتك في السلة."}</p>
       </div>
       ${rem.length ? `
         <div class="rounded-2xl bg-brand-50/70 ring-1 ring-brand-100 p-3.5 text-right space-y-2.5">
-          <div class="font-bold text-[14px] text-brand-950">${fem ? "تحبي تعملي إيه دلوقتي؟" : "تحب تعمل إيه دلوقتي؟"}</div>
+          <div class="font-bold text-[14px] text-brand-950">${gTxt("تحب تعمل إيه دلوقتي؟", "تحبي تعملي إيه دلوقتي؟")}</div>
           <button type="button" data-act="wzNextMember" data-id="${rem[0].idx}" class="btn btn-primary btn-lg w-full justify-center">📚 نكمل مع ${esc(wzName(rem[0].m))} ←</button>
-          ${rem.length > 1 ? `<div class="flex flex-wrap gap-1.5 pt-1"><span class="text-[11.5px] text-slate-500 self-center">أو اختر:</span>${rem.slice(1).map(x => `<button type="button" data-act="wzNextMember" data-id="${x.idx}" class="chip hover:bg-brand-100 font-bold text-brand-800">${kidEmoji(x.m)} ${esc(wzName(x.m))}</button>`).join("")}</div>` : ""}
+          ${rem.length > 1 ? `<div class="flex flex-wrap gap-1.5 pt-1"><span class="text-[11.5px] text-slate-500 self-center">${gTxt("أو اختر:", "أو اختاري:")}</span>${rem.slice(1).map(x => `<button type="button" data-act="wzNextMember" data-id="${x.idx}" class="chip hover:bg-brand-100 font-bold text-brand-800">${kidEmoji(x.m)} ${esc(wzName(x.m))}</button>`).join("")}</div>` : ""}
           <button type="button" data-act="wzReview" class="btn btn-outline w-full justify-center">🛒 نشوف السلة ونكمّل الباقي وقت تاني</button>
         </div>` : `
         <div class="space-y-2.5">
-          <p class="text-[13px] font-semibold text-emerald-700">كل الأولاد تمام! جاهز نراجع الحجز ونختار طريقة السداد؟ 🎉</p>
+          <p class="text-[13px] font-semibold text-emerald-700">${gTxt("كل الأولاد تمام! جاهز نراجع الحجز ونختار طريقة السداد؟ 🎉", "كل الأولاد تمام! جاهزة نراجع الحجز ونختار طريقة السداد؟ 🎉")}</p>
           <button type="button" data-act="wzReview" class="btn btn-primary btn-lg w-full justify-center">👀 مراجعة الحجز وتأكيد السداد ←</button>
         </div>`}
       <button type="button" data-act="wzToFamily" class="text-[12.5px] font-semibold text-brand-700 hover:underline">👨‍👩‍👧‍👦 العودة لقائمة العائلة</button>
@@ -1154,21 +1178,21 @@ function wzAfterMemberHTML() {
 }
 function wzReviewHTML() {
   const lines = cartLines(), gs = resGroups(lines), t = Emp.totals();
-  return `<h1 class="font-display font-bold text-[22px] text-slate-900">راجع حجزك 👀</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">كتب كل فرد لوحده — اضغط «تعديل» لأي حد، أو تقدر تحفظ السلة وتكمّل باقي الأولاد وقت تاني.</p>
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">${gTxt("راجع حجزك 👀", "راجعي حجزك 👀")}</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">${gTxt("كتب كل فرد لوحده — اضغط «تعديل» لأي حد، أو تقدر تحفظ السلة وتكمّل باقي الأولاد وقت تاني.", "كتب كل فرد لوحده — اضغطي «تعديل» لأي حد، أو تقدري تحفظي السلة وتكمّلي باقي الأولاد وقت تاني.")}</p>
     ${gs.length ? gs.map(g => `<section class="rounded-2xl ring-1 ring-slate-200 bg-white overflow-hidden mb-3">
       <div class="flex items-center gap-2.5 px-3.5 py-2.5 bg-brand-50/60"><span class="text-[24px]">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="text-[12px] text-brand-700 font-semibold">${esc(g.sub)}</span>` : ""}</div>
         <div class="text-left"><b class="num text-brand-800">${moneyTxt(g.net)}</b><div class="text-[11px] text-slate-500">${booksWord(g.count)}</div></div></div>
       <ul class="divide-y divide-slate-100 px-3.5">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[13px]"><span class="flex-1 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold text-left whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul>
       <div class="px-3.5 pb-3"><button class="btn btn-ghost btn-sm" data-act="wzEdit" data-id="${esc(g.lines[0].ben || "")}|${esc(g.lines[0].grade || "")}">${ic("pencil")} تعديل</button></div></section>`).join("")
-      : Art.empty("cart", "لسه ما اخترتش كتب", "ارجع واختار كتب لكل فرد")}
+      : Art.empty("cart", gTxt("لسه ما اخترتش كتب", "لسه ما اخترتيش كتب"), gTxt("ارجع واختار كتب لكل فرد", "ارجعي واختاري كتب لكل فرد"))}
     <div class="rounded-2xl bg-slate-50 p-3.5 text-[13.5px] space-y-1.5"><div class="flex justify-between text-slate-500"><span>${booksWord(t.count)} قبل الخصم</span><span class="line-through num">${moneyTxt(t.cover)}</span></div>
-      <div class="flex justify-between text-emerald-600 font-semibold"><span>وفّرت 🎉</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
+      <div class="flex justify-between text-emerald-600 font-semibold"><span>${gTxt("وفّرت 🎉", "وفّرتي 🎉")}</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
       <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b>الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(t.net)}</span></div></div>
     <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة أو استكمال فرد آخر</button>
     <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("wallet")} التالي: تأكيد الحجز وطريقة السداد ←</button>`;
 }
 function wzPayHTML() {
-  return `<h1 class="font-display font-bold text-[22px] text-slate-900">هتدفع إزاي؟ 💳</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">اختار طريقة السداد، وبعدها أكّد الحجز.</p>
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">${gTxt("هتدفع إزاي؟ 💳", "هتدفعي إزاي؟ 💳")}</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">${gTxt("اختار طريقة السداد، وبعدها أكّد الحجز.", "اختاري طريقة السداد، وبعدها أكّدي الحجز.")}</p>
     <div class="wiz-pay card card-pad"></div><button class="btn btn-ghost w-full mt-2" data-act="wzReview">${ic("arrow-right")} رجوع للمراجعة</button>`;
 }
 Router.add("/e/wiz", view => {
