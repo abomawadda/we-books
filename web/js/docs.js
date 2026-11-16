@@ -240,8 +240,17 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       let prev = null;
       g.l.forEach(l => { if (left < 1) { newCol(); cols[cols.length - 1].push({ h: 1, pb, gi, g, cont: 1 }); left -= 2; prev = null; }
         cols[cols.length - 1].push({ l, n: ++i, nw: prev !== null && l.subject !== prev }); prev = l.subject; left -= 1; }); });
+    const sumU = pubs.length + 12; if (left >= sumU) cols[cols.length - 1].push({ sum: 1 }); else if (left >= 7) cols[cols.length - 1].push({ sum: 2 }); // يستغل المساحة الفاضية فقط دون صفحة جديدة
+    const sp = { name: "مكتبة الإيمان بالمنصورة", contact: "محمود العراقي", phone: "01550100025" }; // ثابت بطلب المستخدم (طلب التوريد فقط)
+    const qr = (() => { try { const Q = window.qrcode; if (!Q) return ""; if (Q.stringToBytesFuncs && Q.stringToBytesFuncs["UTF-8"]) Q.stringToBytes = Q.stringToBytesFuncs["UTF-8"];
+      const q = Q(0, "M"); q.addData(`BEGIN:VCARD\nVERSION:3.0\nFN:${sp.contact}\nORG:${d.no}\nTEL;TYPE=CELL:${sp.phone}\nNOTE:طلب توريد ${d.no} · ${d.phase || ""} · ${d.lines.length} صنف · ${qty} نسخة\nEND:VCARD`); q.make(); return q.createSvgTag({ cellSize: 3, margin: 0, scalable: true }); } catch (_) { return ""; } })();
+    const sumHTML = qrOnly => `${qrOnly ? "" : `<table class="pog pos"><colgroup><col style="width:8%"><col><col style="width:16%"><col style="width:16%"></colgroup><tbody><tr class="pub"><td colspan="4">ملخص الطلبية</td></tr><tr class="ch"><td>م</td><td>الناشر</td><td>الأصناف</td><td>النسخ</td></tr>
+      ${pubs.map((pb, k) => `<tr><td class="c num">${k + 1}</td><td>${esc(pb)}</td><td class="c num">${by[pb].l.length}</td><td class="c num q">${by[pb].q}</td></tr>`).join("")}
+      <tr class="tt"><td></td><td>الإجمالي</td><td class="c num">${d.lines.length}</td><td class="c num">${qty}</td></tr></tbody></table>`}
+      <div class="po-qr">${qr ? `<div class="qr">${qr}</div>` : ""}<div><b>للتواصل بخصوص الطلبية</b><div>${esc(sp.contact)}</div><div class="num">${esc(sp.phone)}</div><small>${qr ? "امسح الرمز لحفظ رقم المسؤول وبيانات الطلبية" : ""}</small><div class="num ref">${esc(d.no)}</div></div></div>`;
     const colHTML = items => { let html = "", open = false;
-      items.forEach(it => { if (it.h) { if (open) html += "</tbody></table>";
+      items.forEach(it => { if (it.sum) { if (open) html += "</tbody></table>"; open = false; html += sumHTML(it.sum === 2); return; }
+        if (it.h) { if (open) html += "</tbody></table>";
           html += `<table class="pog"><colgroup><col style="width:8%"><col style="width:16%"><col><col style="width:22%"><col style="width:12%"></colgroup><tbody><tr class="pub"><td colspan="5">${it.gi + 1}. ${esc(it.pb)}${it.cont ? " (تابع)" : ""}<span class="ps">${it.g.l.length} صنف · ${it.g.q} نسخة</span></td></tr><tr class="ch"><td>م</td><td>الكود</td><td>المادة</td><td>الصف</td><td>العدد</td></tr>`; open = true; return; }
         const l = it.l;
         html += `<tr${it.nw ? ' class="ns"' : ""}><td class="c num">${it.n}</td><td class="c num">${esc(l.code)}</td><td>${esc(l.subject || "")}${l.part ? ` (${esc(l.part)})` : ""}</td><td>${esc(l.grade || "")}${l.tracks ? ` - ${esc(l.tracks)}` : ""}</td><td class="c num q">${l.qty}</td></tr>`; });
@@ -259,18 +268,20 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       .pog .ch td{font-weight:700;text-align:center;background:#f3edfa;color:#4c1d95}
       .pog .q{font-weight:800;color:#3b1d63}
       .pog tr.ns td{border-top:1.6px solid #6a3aa0}
+      .pog .tt td{background:#f3edfa;font-weight:800;color:#3b1d63;border-top:1.4px solid #6a3aa0}
+      .po-qr{display:flex;gap:3mm;align-items:center;border:1.2px dashed #8b6fc0;border-radius:2.5mm;padding:2.5mm;margin-top:1mm;font-size:.92em;line-height:1.5}
+      .po-qr .qr{width:24mm;height:24mm;flex:none}.po-qr .qr svg{width:100%;height:100%}.po-qr b{color:#3b1d63}.po-qr small{color:#6b5f86;display:block;line-height:1.3}.po-qr .ref{font-size:.8em;color:#8d84a3}
       .po-pg{text-align:center;font-size:.8em;color:#6b5f86;margin-top:auto;padding-top:1.5mm}
       @media print{
         .po-top,.po-top .r b,.po-top .l b,.po-top .l span{color:#000!important;border-color:#000!important}
         .pog{border-color:#000!important}.pog td{border-color:#555!important;background:#fff!important;color:#000!important}
         .pog .pub td{background:#e6e6e6!important;color:#000!important;border-bottom-color:#000!important}
-        .pog .ch td{background:#f2f2f2!important}.pog tr.ns td{border-top:1.6px solid #000!important}
+        .pog .ch td{background:#f2f2f2!important}.pog tr.ns td{border-top:1.6px solid #000!important}.pog .tt td{background:#eee!important;border-top-color:#000!important}.po-qr{border-color:#000!important}.po-qr b,.po-qr small{color:#000!important}
       }
     </style>`;
     const pairs = []; for (let k = 0; k < cols.length; k += 2) pairs.push([cols[k], cols[k + 1] || []]);
-    const sp = { name: "مكتبة الإيمان بالمنصورة", contact: "محمود العراقي", phone: "01550100025" }; // ثابت بطلب المستخدم (طلب التوريد فقط)
     const top = `<div class="po-top"><div class="r"><b>${esc(sp.name || "")}</b>${sp.contact ? `<div>${esc(sp.contact)}</div>` : ""}${sp.phone ? `<div class="num">${esc(sp.phone)}</div>` : ""}</div>
-      <div class="l"><span>رقم الطلبية:</span><b class="num">${esc(d.no)}</b><span>المرحلة:</span><b>${esc(d.phase || "")}</b><span>تاريخ الطلبية:</span><b class="num">${esc(Doc.date(d.date))}</b></div></div>`;
+      <div class="l"><span>رقم الطلبية:</span><b class="num">${esc(d.no)}</b><span>المرحلة:</span><b>${esc(d.phase || "")}</b><span>تاريخ الطلبية:</span><b class="num">${esc(Doc.date(d.date))}</b><span>الإجمالي:</span><b><bdi class="num">${d.lines.length}</bdi> صنف · <bdi class="num">${qty}</bdi> نسخة</b></div></div>`;
     return pairs.map((pr, pi) => Doc.page(`${css}${top}
       <div class="po-grid"><div>${colHTML(pr[0])}</div><div>${colHTML(pr[1])}</div></div>
       <div class="po-pg num">${pairs.length > 1 ? `صفحة ${pi + 1} من ${pairs.length}` : ""}</div>`, "", "", "")).join("");

@@ -308,7 +308,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   await click('[data-act="printRep"]'); await sleep(800);
   check(prints.length > 0, 'print opened');
   // المستندات الاحترافية
-  const docOpen = async (act, id, re, tag) => { w.eval(`ACTIONS.${act}(${id ? JSON.stringify(id) : ''})`); await settle(); const f = [...d.querySelectorAll('iframe')].pop(); check(f && re.test(f.srcdoc || ''), 'document ' + tag); f.closest('.fixed').remove(); };
+  const docOpen = async (act, id, re, tag) => { w.eval(`ACTIONS.${act}(${id ? JSON.stringify(id) : ''})`); await settle(); if (act === 'printPO') { await new Promise(r => setTimeout(r, 1700)); await settle(); } const f = [...d.querySelectorAll('iframe')].pop(); check(f && re.test(f.srcdoc || ''), 'document ' + tag); f.closest('.fixed').remove(); };
   await go('/a/po'); await docOpen('printPO', null, /رقم الطلبية/, 'purchase order');
   const anyInv = w.eval('APP').adm.empInvoices[0]; if (anyInv) await docOpen('printInvA', anyInv.Emp_Inv_ID, /فاتورة بيع كتب/, 'invoice');
   const anyRc = w.eval('APP').adm.empPayments[0]; if (anyRc) await docOpen('printRcpt', anyRc.Receipt_No, /إيصال/, 'receipt');
