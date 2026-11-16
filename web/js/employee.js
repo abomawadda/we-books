@@ -874,10 +874,10 @@ on("submitRes", async () => {
 // ============================================================ معالج الحجز خطوة بخطوة
 // العائلة ← حجز كل فرد (الأشهر / سلسلة / بنفسي) ← المراجعة ← السداد ← الحفظ والمشاركة
 const WZ_KEY = () => "wb_wz_" + (APP.user && APP.user.empId);
-const WZ = { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {} };
+const WZ = { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, guideStep: 0 };
 const wzSave = () => { try { localStorage.setItem(WZ_KEY(), JSON.stringify({ step: WZ.step, i: WZ.i, sel: WZ.sel, temp: WZ.temp, mode: WZ.mode, pub: WZ.pub })); } catch (_) {} };
 const wzLoad = () => { try { const o = JSON.parse(localStorage.getItem(WZ_KEY())); if (o) Object.assign(WZ, o); return !!o; } catch (_) { return false; } };
-const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {} }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
+const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, guideStep: 0 }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
 /** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
 function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
 const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
@@ -893,49 +893,94 @@ const personCard = (k, i, on, act) => `<button class="min-w-0 text-right rounded
   <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span></span>
   <span class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check") : ""}</span></button>`;
 
+const empGender = () => (APP.emp && APP.emp.employee && APP.emp.employee.gender) || (APP.user && APP.user.gender) || "M";
+const wzGuideKey = () => "wb_wz_guide_off_" + ((APP.user && APP.user.empId) || "");
+const wzMarkGuideOff = () => { try { localStorage.setItem(wzGuideKey(), "1"); } catch (_) {} };
+
 function wzFamily() {
   const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i), kids = ks.map((k, i) => [k, i]).filter(x => !x[0].rel), rels = ks.map((k, i) => [k, i]).filter(x => x[0].rel);
   if (WZ.skip) return wzGradePick();
   const firstName = String((APP.user && APP.user.fullName) || "").trim().split(/\s+/)[0];
-  const greetings = [
-    `أهلاً بك يا ${firstName || "ولي الأمر"} 🌟.. ربنا يبارك في أولادك ويقوّيك على تعبك معاهم!`,
-    `تحية تقدير لجهدك مع أولادك يا ${firstName || "بطل"} 💛.. إحنا هنا نسهّل عليك مشوار الكتب!`,
-    `بداية موسم دراسي سعيد يا ${firstName || "غالي"} 🎓.. سيب لنا ترتيب الكتب وركّز في نجاح أولادك!`
+  const fem = empGender() === "F";
+  const greetings = fem ? [
+    `أهلاً بكِ يا ${firstName || "أستاذة"} 🌸.. ربنا يبارك في أولادك ويقوّيكي على تعبك ومجهودك معاهم!`,
+    `تحية تقدير لتعبك واهتمامك بأولادك يا ${firstName || "غالية"} 💛.. إحنا هنا نسهّل عليكي مشوار الكتب!`,
+    `موسم دراسي سعيد عليكي وعلى أولادك يا ${firstName || "ست الكل"} 🎓.. سيبيلنا ترتيب الكتب وركّزي في تفوقهم!`
+  ] : [
+    `أهلاً بك يا ${firstName || "بطل"} 🌟.. ربنا يبارك في أولادك ويقوّيك على تعبك معاهم!`,
+    `تحية تقدير لجهدك وتعبك مع أولادك يا ${firstName || "غالي"} 💛.. إحنا هنا نسهّل عليك مشوار الكتب!`,
+    `موسم دراسي موفق يا ${firstName || "ولي الأمر"} 🎓.. سيب لنا ترتيب الكتب وركّز في نجاح أولادك!`
   ];
   const greet = greetings[(firstName.length + ks.length) % greetings.length];
   let guideHidden = false;
-  try { guideHidden = !!localStorage.getItem("wb_wz_guide_off"); } catch (_) {}
+  try { guideHidden = !!localStorage.getItem(wzGuideKey()); } catch (_) {}
   const showGuide = !ks.length && !WZ.temp.length && !guideHidden;
+  const gs = Math.max(0, Math.min(2, WZ.guideStep || 0));
+
+  if (showGuide) {
+    const dots = [0, 1, 2].map(d => `<span class="h-1.5 rounded-full transition-all ${d === gs ? "w-6 bg-brand-600" : d < gs ? "w-2.5 bg-brand-400" : "w-2.5 bg-brand-200"}"></span>`).join("");
+    const stepBody = gs === 0 ? `
+      <div class="rounded-2xl bg-white/95 ring-1 ring-brand-100 p-3.5 shadow-sm space-y-2.5">
+        <div class="text-[13.5px] font-bold text-brand-950">الخطوة 1 من 3 — مين محتاج كتب السنة دي؟ 👨‍👩‍👧‍👦</div>
+        <p class="text-[12.5px] text-slate-600 leading-relaxed">${fem ? "عرّفينا على أولادك أو قرايبك الأول، وعندك 3 اختيارات مرنة:" : "عرّفنا على أولادك أو قرايبك الأول، وعندك 3 اختيارات مرنة:"}</p>
+        <div class="space-y-1.5 text-[12.5px]">
+          <div class="flex items-start gap-2 rounded-xl bg-brand-50/70 p-2.5 ring-1 ring-brand-100"><span>⭐</span><span><b>${fem ? "تضيفي أولادك الأول (الأسهل):" : "تضيف أولادك الأول (الأسهل):"}</b> بنحفظهم عندك ونجهّز كتبهم كل سنة بضغطة واحدة.</span></div>
+          <div class="flex items-start gap-2 rounded-xl bg-sky-50/70 p-2.5 ring-1 ring-sky-100"><span>🤝</span><span><b>${fem ? "أو تضيفي قريب:" : "أو تضيف قريب:"}</b> لو بتحجز${fem ? "ي" : ""} لابن أخ، أخت، أو حد من العيلة.</span></div>
+          <div class="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-200/70"><span>⚡</span><span><b>${fem ? "أو تكمّلي بدون تسجيلهم:" : "أو تكمّل بدون تسجيلهم:"}</b> تختار${fem ? "ي" : ""} الصف الدراسي مباشرة وتحجز${fem ? "ي" : ""} فوراً.</span></div>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <button type="button" data-act="wzHideGuide" class="text-[12px] font-semibold text-slate-400 hover:text-slate-600">تخطي الشرح</button>
+          <button type="button" data-act="wzGuideStep" data-id="1" class="btn btn-primary btn-sm">فهمت، التالي: طرق الكتب ←</button>
+        </div>
+      </div>` : gs === 1 ? `
+      <div class="rounded-2xl bg-white/95 ring-1 ring-brand-100 p-3.5 shadow-sm space-y-2.5">
+        <div class="text-[13.5px] font-bold text-brand-950">الخطوة 2 من 3 — في الكتب، عندك 3 طرق أسهل من بعض 📚</div>
+        <p class="text-[12.5px] text-slate-600 leading-relaxed">${fem ? "لما تدخلي مرحلة الكتب هتلاقي 3 طرق جاهزة عشانك:" : "لما تدخل مرحلة الكتب هتلاقي 3 طرق جاهزة عشانك:"}</p>
+        <div class="space-y-1.5 text-[12.5px]">
+          <div class="flex items-start gap-2 rounded-xl bg-amber-50/80 p-2.5 ring-1 ring-amber-200/70"><span>🎒</span><span><b>شنطة الكتب الجاهزة:</b> اسم المادة شامل كل الكتب، بنجهّزلك الأشهر وتختار${fem ? "ي" : ""} أو تبدّل${fem ? "ي" : ""} منها براحتك.</span></div>
+          <div class="flex items-start gap-2 rounded-xl bg-brand-50/80 p-2.5 ring-1 ring-brand-200/70"><span>📚</span><span><b>شركة واحدة (سلسلة كاملة):</b> لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ بنجهّزها لك فوراً بدون ما تدور${fem ? "ي" : ""}.</span></div>
+          <div class="flex items-start gap-2 rounded-xl bg-slate-50 p-2.5 ring-1 ring-slate-200"><span>🔍</span><span><b>كتاب بكتاب:</b> تتصفح${fem ? "ي" : ""} الكتب وتختار${fem ? "ي" : ""} كل كتاب بنفسك واحد واحد.</span></div>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <button type="button" data-act="wzGuideStep" data-id="0" class="btn btn-ghost btn-sm">→ السابق</button>
+          <button type="button" data-act="wzGuideStep" data-id="2" class="btn btn-primary btn-sm">فهمت، الخطوة الأخيرة ←</button>
+        </div>
+      </div>` : `
+      <div class="rounded-2xl bg-white/95 ring-1 ring-emerald-200 p-4 shadow-sm space-y-3">
+        <div class="flex items-center gap-2 text-emerald-700 font-bold text-[14px]"><span>✅</span> <span>خلاص تمام فهمت! يلا نبدأ الحجز 🎉</span></div>
+        <p class="text-[13px] font-semibold text-slate-800">${fem ? "تحبي نبدأ نضيف الأولاد الأول ولا نحجز بدون تسجيلهم؟" : "تحب نبدأ نضيف الأولاد الأول ولا نحجز بدون تسجيلهم؟"}</p>
+        <div class="grid sm:grid-cols-2 gap-2">
+          <button type="button" data-act="wzGuidePick" data-id="kids" class="btn btn-primary w-full justify-center py-3 text-[13.5px]">👨‍👩‍👧‍👦 يلا نبدأ نضيف الأولاد</button>
+          <button type="button" data-act="wzGuidePick" data-id="skip" class="btn btn-outline w-full justify-center py-3 text-[13.5px]">⚡ نحجز بدون تسجيلهم</button>
+        </div>
+        <div class="flex items-center justify-between pt-0.5">
+          <button type="button" data-act="wzGuideStep" data-id="1" class="text-[12px] font-semibold text-slate-400 hover:text-slate-600">→ مراجعة الشرح</button>
+          <button type="button" data-act="wzGuidePick" data-id="stay" class="text-[12px] font-semibold text-brand-700 hover:underline">أو أضيف قريب / أختار بنفسي</button>
+        </div>
+      </div>`;
+
+    return `
+      <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm space-y-3.5" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
+        <div class="flex items-start gap-3">
+          <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
+          <div class="flex-1 min-w-0">
+            <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
+            <div class="flex items-center gap-2 mt-2">${dots}<span class="text-[11px] font-bold text-brand-700 mr-1">دليل البداية (${gs + 1}/3)</span></div>
+          </div>
+        </div>
+        ${stepBody}
+      </div>`;
+  }
 
   return `
     <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
       <div class="flex items-start gap-3">
-        <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">👋</span>
+        <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">${fem ? "🌸" : "👋"}</span>
         <div class="flex-1 min-w-0">
           <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
-          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">عرّفنا على أولادك أو قرايبك عشان نسهّل عليك، وإحنا جاهزين نساعدك خطوة بخطوة.</p>
+          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${fem ? "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلك الكتب في ثواني." : "اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني."}</p>
         </div>
       </div>
-
-      ${showGuide ? `
-        <div id="wzGuide" class="mt-3.5 pt-3.5 border-t border-brand-200/70 space-y-2.5 text-[12.5px]">
-          <div class="flex items-center justify-between gap-2">
-            <span class="font-bold text-brand-900 flex items-center gap-1.5">${ic("sparkles", "!w-4 !h-4 text-gold-500")} إزاي بتحجز في ثواني؟</span>
-            <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-brand-600 hover:underline">فهمت، إخفاء</button>
-          </div>
-          <div class="rounded-2xl bg-white/85 ring-1 ring-brand-100 p-3 space-y-2 text-slate-700">
-            <div><b class="text-brand-900">1️⃣ أولاً — مين محتاج كتب؟ (3 اختيارات):</b>
-              <span class="block text-[12px] text-slate-600 mt-0.5">• أضف <b>أولادك</b> الأول (الأسهل — بنحفظهم ونجهز كتبهم) · أو أضف <b>قريب</b> · أو كمّل <b>بدون تسجيل</b> بالصف مباشرة.</span>
-            </div>
-            <div class="pt-1.5 border-t border-slate-100"><b class="text-brand-900">2️⃣ ثانياً — في الكتب، عندك 3 طرق أسهل من بعض:</b>
-              <div class="grid sm:grid-cols-3 gap-1.5 mt-1.5 text-[11.5px]">
-                <div class="rounded-xl bg-amber-50/80 ring-1 ring-amber-200/70 p-2"><b class="block text-amber-900">🎒 شنطة الكتب</b><span class="text-slate-600">كل المواد في شنطة واحدة وتختار وتبدّل منها.</span></div>
-                <div class="rounded-xl bg-brand-50/80 ring-1 ring-brand-200/70 p-2"><b class="block text-brand-900">📚 شركة واحدة</b><span class="text-slate-600">زي الأضواء مثلاً — نجهّزها لك بدون ما تدور.</span></div>
-                <div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/80 p-2"><b class="block text-slate-900">🔍 كتاب بكتاب</b><span class="text-slate-600">تختار الكتب بنفسك واحد واحد.</span></div>
-              </div>
-            </div>
-          </div>
-        </div>` : ""}
     </div>
 
     ${kids.length ? `<div class="text-[12.5px] font-bold text-brand-700 mb-2">أبنائي</div><div class="grid grid-cols-2 gap-2 mb-4">${kids.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
@@ -1014,7 +1059,9 @@ Router.add("/e/wiz", view => {
 });
 const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
 on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
-on("wzHideGuide", () => { try { localStorage.setItem("wb_wz_guide_off", "1"); } catch (_) {} const el = $("#wzGuide"); if (el) el.remove(); });
+on("wzHideGuide", () => { wzMarkGuideOff(); Shell.rerender(); });
+on("wzGuideStep", v => { WZ.guideStep = +v || 0; Shell.rerender(); });
+on("wzGuidePick", v => { wzMarkGuideOff(); if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { WZ.skip = true; Shell.rerender(); } else { Shell.rerender(); } });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
 on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });

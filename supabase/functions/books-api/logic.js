@@ -419,10 +419,13 @@ const AuthEngine = {
       };
     }
     this.clearFails_("EMP", empId);
+    const nat4s = Util.str(emp.National_ID_Last4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).padStart(4, "0");
+    const gDigit = /^\d{4}$/.test(nat4s) ? parseInt(nat4s.charAt(2), 10) : NaN;
+    const gender = isNaN(gDigit) ? "" : (gDigit % 2 === 0 ? "F" : "M");
     const user = {
       userType: "EMPLOYEE", empId: empId, fullName: emp.Full_Name, department: emp.Department,
       jobTitle: emp.Job_Title, mobile: this.normalizeMobile(emp.Mobile),
-      category: actualCat, memberState: Util.str(emp.Member_State),
+      category: actualCat, memberState: Util.str(emp.Member_State), gender: gender,
       installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed),
       maxCreditLimit: Util.num(emp.Max_Credit_Limit), role: "Employee"
     };
@@ -1016,7 +1019,7 @@ const OperationsEngine = {
         EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || "", PAY_INSTAPAY_LINK: settings.PAY_INSTAPAY_LINK || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
-      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department), cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })() },
+      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department), gender: (() => { const s = Util.str(emp.National_ID_Last4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).padStart(4, "0"); const d = /^\d{4}$/.test(s) ? parseInt(s.charAt(2), 10) : NaN; return isNaN(d) ? "" : (d % 2 === 0 ? "F" : "M"); })(), cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })() },
       books: this.sortBooks_(books),
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
