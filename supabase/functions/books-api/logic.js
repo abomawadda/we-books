@@ -630,6 +630,7 @@ const ACTION_ACL = {
   GET_ADMIN_DASHBOARD_DATA: ADMIN_ROLES,
   GET_SETTLEMENT_REPORT: ADMIN_ROLES,
   SAVE_SETTING: ["Admin"],
+  SAVE_PO_TRACKING: ["Coordinator", "Store", "Finance"],
   SAVE_SUPPLIER: ["Coordinator"],
   DELETE_SUPPLIER: ["Coordinator"],
   RESET_OPERATIONAL_DATA: ["Admin"],
@@ -724,6 +725,7 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_ADMIN_DASHBOARD_DATA": return E.getAdminDashboardFullData();
       case "GET_SETTLEMENT_REPORT": return E.getSettlementReport();
       case "SAVE_SETTING": return E.saveSetting(session, payload);
+      case "SAVE_PO_TRACKING": return E.savePoTracking(session, payload);
       case "SAVE_ROLE_PERMISSIONS": return E.saveRolePermissions(session, payload);
       case "GET_AUDIT_LOG": return E.getAuditLog(payload);
       case "POST_ANNOUNCEMENT": return E.postAnnouncement(session, payload);
@@ -1358,6 +1360,30 @@ const OperationsEngine = {
     });
   },
 
+/** متابعة طلب التوريد لكل مرحلة ومكتبة: الإرسال، الحالة، الاستلام وطريقته — يُحفظ في إعداد PO_TRACKING مع سجل لكل تغيير */
+  savePoTracking: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), phaseId = Util.str(payload.phaseId), supId = Util.str(payload.supplierId), key = phaseId + "|" + supId;
+      Util.require(phaseId && supId, "حدد المرحلة والمكتبة.");
+      const STATUSES = ["draft", "sent", "confirmed", "preparing", "shipped", "partial", "received"];
+      const status = Util.str(payload.status);
+      Util.require(STATUSES.indexOf(status) !== -1, "حالة غير معروفة.");
+      let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PO_TRACKING");
+      if (!row) { row = { Setting_Key: "PO_TRACKING", Setting_Value: "{}", Data_Type: "JSON", Description: "متابعة طلبات التوريد (الإرسال/الحالة/الاستلام)" }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
+      let all = {}; try { all = JSON.parse(row.Setting_Value || "{}") || {}; } catch (e) { all = {}; }
+      const cur = all[key] || { log: [] }, clip = (v, n) => Util.str(v).slice(0, n);
+      const next = Object.assign({}, cur, {
+        status: status, sentAt: clip(payload.sentAt, 10) || cur.sentAt || "", sentVia: clip(payload.sentVia, 40) || cur.sentVia || "",
+        expectedAt: clip(payload.expectedAt, 10), receivedAt: clip(payload.receivedAt, 10), method: clip(payload.method, 40), carrier: clip(payload.carrier, 80),
+        cost: Util.num(payload.cost) || 0, receivedBy: clip(payload.receivedBy, 60), notes: clip(payload.notes, 300), updatedAt: Util.now(), updatedBy: Util.actor(session)
+      });
+      next.log = [{ at: Util.now(), by: Util.actor(session), status: status, note: clip(payload.note || payload.notes, 200) }].concat(cur.log || []).slice(0, 30);
+      all[key] = next;
+      DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PO_TRACKING", { Setting_Value: JSON.stringify(all) });
+      DB_Engine.logAudit(session.userId, session.role, "PO", "PO_TRACKING", key, { status: cur.status }, { status: status });
+      return { success: true, message: "اتحدّثت متابعة طلب التوريد." };
+    });
+  },
   saveSetting: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();

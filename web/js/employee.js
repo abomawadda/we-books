@@ -525,11 +525,44 @@ on("kdType", v => { const k = KD.list[KD.i]; k.type = v; k._typeOk = true; kdRen
 on("kdEditAgain", () => { const k = KD.list[KD.i]; if (!k) return; k._nameOk = false; k._trackOk = false; k._typeOk = false; kdRender(); });
 on("kdPick", v => { KD.i = +v; kdRender(); });
 on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast(gTxt("اختر الصف أولاً 👆", "اختاري الصف أولاً 👆"), "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
+/** حذف فرد من العيلة: يُحفظ فوراً على الخادم، ويوضح أثره على حجز المرحلة الحالية، ولا يمس السجل التاريخي للمراحل السابقة */
 on("kdDel", async () => {
   const k = KD.list[KD.i]; if (!k) return;
-  const nm = k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك"), c = k.grade ? kidCartCount(k) : 0;
-  const ok = await UI.confirm({ title: "حذف " + nm + "؟", message: c ? `${nm} ليه ${c} ${c === 1 ? "كتاب" : "كتب"} في حجزك/سلتك. الحذف بيشيله من العيلة بس — كتبه فاضلة في الحجز، ولو عايز تلغيها شيلها من السلة وأكّد.` : `هيتشال ${nm} من قائمة العيلة. تقدر تضيفه تاني في أي وقت.`, ok: "احذف", tone: "danger", icon: "trash-2" });
-  if (!ok) return; KD.list.splice(KD.i, 1); if (!KD.list.length) KD.list.push(kdBlank()); KD.i = Math.max(0, KD.i - 1); kdRender(); });
+  const nm = k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك"), r = APP.emp, bm = Emp.bookMap(), ben = kidBen(k);
+  const same = x => (x.name || "") === (k.name || "") && (x.rel || "") === (k.rel || "") && x.grade === k.grade && (x.gender || "b") === (k.gender || "b");
+  const saved = (r.employee.kids || []).some(same);
+  // كتب الابن تُعرف بالصف (أبناؤك) أو بالاسم (القريب) — لو فاضل ابن تاني بنفس الصف تفضل كتب الصف له
+  const sharedGrade = !ben && KD.list.some((x, ix) => ix !== KD.i && !x.rel && x.grade === k.grade);
+  const mine = (bid, b2) => ben ? b2 === ben : (!b2 && (bm[bid] || {}).Grade === k.grade);
+  const its = (r.myReservationItems || []).filter(i => mine(i.Book_ID, i.Beneficiary) && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > 0);
+  const cur = its.filter(i => i.Phase_ID === APP.phaseId), old = its.filter(i => i.Phase_ID !== APP.phaseId);
+  const keys = k.grade && !sharedGrade ? Object.keys(APP.cart || {}).filter(key => mine(bk(key), bn(key))) : [];
+  const cnt = keys.reduce((s2, key) => s2 + n(APP.cart[key]), 0), val = keys.reduce((s2, key) => s2 + n(APP.cart[key]) * n((bm[bk(key)] || {}).Emp_Selling_Price), 0);
+  const open = Emp.open(), delivered = cur.some(i => n(i.Delivered_Qty) > 0), invoiced = (r.myInvoices || []).some(i => i.Phase_ID === APP.phaseId);
+  const msg = [];
+  if (open && cnt) msg.push(`• حجز ${nm} في المرحلة دي (${booksWord(cnt)} · ${moneyTxt(val)}) هيتلغي، وحجزك هيتحدث تلقائياً — باقي أفراد العيلة زي ما هم.`);
+  else if (!open && cur.length && !sharedGrade) msg.push(delivered ? `• ${nm} استلم كتب في المرحلة دي — مش هيتلغي حاجة منها. لو عايز ترجّع كتاب استخدم «مرتجعاتي».`
+    : `• الحجز في المرحلة دي اتقفل${invoiced ? " واتوزّع واتعملت الفاتورة" : " وطلب التوريد بيتجهز للمكتبة"} — كتب ${nm} هتفضل محجوزة وفاتورتك زي ما هي. لإلغائها كلّم المسؤول من «طلب إلغاء».`);
+  if (sharedGrade && (cnt || cur.length)) msg.push(`• كتب ${gradeTitle(k.grade)} هتفضل لأن عندك فرد تاني في نفس الصف.`);
+  if (old.length) msg.push(`• سجله في المراحل اللي فاتت (${booksWord(old.reduce((s2, i) => s2 + n(i.Requested_Qty), 0))}) محفوظ زي ما هو ومش هيتمسح.`);
+  if (!msg.length) msg.push(`• هيتشال ${nm} من قائمة العيلة، وتقدر تضيفه تاني في أي وقت.`);
+  if (!(await UI.confirm({ title: "حذف " + nm + "؟", message: msg.join("\n"), ok: open && cnt ? "احذف وألغِ حجزه" : "احذف", tone: "danger", icon: "trash-2" }))) return;
+  KD.list.splice(KD.i, 1); KD.i = Math.max(0, KD.i - 1);
+  if (saved) {
+    const kids = (r.employee.kids || []).filter(x => !same(x)).map(x => ({ name: x.name || "", gender: x.gender || "b", grade: x.grade, type: x.type || "", track: x.track || "", rel: x.rel || "" }));
+    const res = await call("SAVE_MY_KIDS", { kids }, { block: true });
+    if (!res.success) { toast(res.message, "danger"); KD.list.splice(KD.i, 0, k); return kdRender(); }
+    r.employee.kids = kids.map(x => Object.assign({ promoted: 0 }, x));
+  }
+  if (!KD.list.length) KD.list.push(kdBlank());
+  if (open && keys.length) {
+    keys.forEach(key => delete APP.cart[key]); Emp.dirty = true;
+    if (KD.m) { KD.m.close(); KD.m = null; }
+    if (Emp.activeItems().length) { toast(`اتحذف ${nm} — بنحدّث حجزك…`, "info"); return ACTIONS.submitRes(); }
+    refreshCartViews(); Shell.rerender(); return toast(`اتحذف ${nm} واتشالت كتبه من السلة`, "success");
+  }
+  kdRender(); Shell.rerender(); toast(`اتحذف ${nm} من العيلة`, "success");
+});
 on("kdSave", async () => {
   const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "", track: gradeTracks(k.grade).includes(k.track) ? k.track : "", rel: k.rel || "" }));
   if (!kids.length) return toast("اختر الصف لفرد واحد على الأقل", "warning");
@@ -932,6 +965,7 @@ function wzFamily() {
   const firstName = String((APP.user && APP.user.fullName) || "").trim().split(/\s+/)[0];
   const fem = empGender() === "F";
   const greet = `${fem ? "أهلاً بكِ" : "أهلاً بك"}${firstName ? " يا " + firstName : ""} — نجهّز كتب أولادك في دقائق`;
+  const cheer = fem ? "تعبك مع أولادك مقدَّر — وإحنا هنا نشيل عنكِ هَمّ الكتب، وربنا يكتب لهم التفوق 🤍" : "تعبك مع أولادك مقدَّر — وإحنا هنا نشيل عنك هَمّ الكتب، وربنا يكتب لهم التفوق 🤍";
   let guideHidden = false;
   try { guideHidden = !!localStorage.getItem(wzGuideKey()); } catch (_) {}
   const showGuide = (!ks.length && !WZ.temp.length && !guideHidden) || !!WZ.forceGuide;
@@ -943,7 +977,7 @@ function wzFamily() {
       <section class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-sm overflow-hidden mb-4">
         <div class="p-5 text-white" style="background:linear-gradient(135deg,#552c83,#2e1650)">
           <h1 class="font-display font-bold text-[19px] leading-snug">${esc(greet)}</h1>
-          <p class="text-[12.5px] text-brand-100 mt-1">${gTxt("اختار طريقة البداية — تقدر تغيّرها في أي وقت.", "اختاري طريقة البداية — تقدري تغيّريها في أي وقت.")}</p>
+          <p class="text-[13px] text-gold-200 mt-1.5 leading-relaxed">${esc(cheer)}</p><p class="text-[12px] text-brand-100 mt-1">${gTxt("اختار طريقة البداية — تقدر تغيّرها في أي وقت.", "اختاري طريقة البداية — تقدري تغيّريها في أي وقت.")}</p>
         </div>
         <div class="p-4 space-y-3">
           <button type="button" data-act="wzGuidePick" data-id="kids" class="w-full text-right rounded-2xl p-4 ring-2 ring-brand-500 bg-brand-50/60 active:scale-[.99] transition">
@@ -990,6 +1024,7 @@ function wzFamily() {
         <span class="w-11 h-11 rounded-2xl bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("users")}</span>
         <div class="flex-1 min-w-0">
           <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
+          <p class="text-[12.5px] text-brand-700 mt-1 leading-relaxed">${esc(cheer)}</p>
           <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">${ks.length ? gTxt("اختر تحب تبدأ بحجز مين الأول، أو أضف فرد جديد.", "اختاري تحبي تبدأي بحجز مين الأول، أو أضيفي فرد جديد.") : gTxt("اختر من أولادك أو قرايبك، أو أضف فرد جديد ونجهّزلك الكتب في ثواني.", "اختاري من أولادك أو قرايبك، أو أضيفي فرد جديد ونجهّزلكِ الكتب في ثواني.")}</p>
           
         </div>
