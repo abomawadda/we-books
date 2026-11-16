@@ -453,7 +453,7 @@ function kdHTML() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), k = KD.list[KD.i] || kdBlank();
   const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
   const tracks = k.grade ? gradeTracks(k.grade) : [];
-  const nameDone = !!(k._nameOk || k.grade || st);
+  const nameDone = !!(k._nameOk || k.grade || st || !k.rel); // اسم الابن اختياري: لا خطوة تأكيد إلا للقريب (اسمه إجباري)
   const trackDone = !tracks.length || !!(k._trackOk || k.track || k.type);
   const typeDone = !!(k.grade && trackDone && (k._typeOk || k.type));
   const done = KD.list.filter(x => x.grade).length;
@@ -906,6 +906,10 @@ const wzLoad = () => { try { const o = JSON.parse(localStorage.getItem(WZ_KEY())
 const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, temp: [], mode: {}, pub: {}, later: {}, noBooks: {}, done: {}, guideStep: 0, forceGuide: false }); try { localStorage.removeItem(WZ_KEY()); } catch (_) {} };
 /** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
 function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
+/** حالة كل فرد (اتحجز/مؤجل/مش محتاج) بمفتاح ثابت للفرد نفسه — لا تتلخبط لو اتغير ترتيب الأفراد أو اتضاف/اتشال حد */
+const wzKey = m => !m ? "" : m._temp ? "g:" + m.grade : (kidBen(m) || "k:" + m.grade + "|" + (m.name || "") + "|" + (m.gender || ""));
+const wzSt = (kind, idx) => !!(WZ[kind] || {})[wzKey(wzMembers()[+idx])];
+const wzSet = (kind, idx, on) => { const k = wzKey(wzMembers()[+idx]); if (!k) return; WZ[kind] = WZ[kind] || {}; if (on) WZ[kind][k] = true; else delete WZ[kind][k]; };
 const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
 function wzFocus(m) { Emp.filter.grade = m.grade; Emp.filter.type = m.type || ""; Emp.filter.track = m.track || ""; Emp.filter.q = ""; Emp.ben = kidBen(m); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); }
 const wzGo = (step, i) => { WZ.step = step; if (i !== undefined) WZ.i = i; wzSave(); if (Router.current !== "/e/wiz") Router.go("/e/wiz"); else Shell.rerender(); scrollTo({ top: 0 }); };
@@ -1060,8 +1064,8 @@ function wzFamily() {
     const mIdx = ms.findIndex(x => !x._temp && x._ix === i);
     const lines = wzMemberLines(k);
     const status = lines.length ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200">في السلة (${lines.length}) ✓</span>`
-      : WZ.later[mIdx] ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200">متأجل لبعدين ⏳</span>`
-      : WZ.noBooks[mIdx] ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">مش محتاج كتب</span>`
+      : wzSt("later", mIdx) ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200">متأجل لبعدين ⏳</span>`
+      : wzSt("noBooks", mIdx) ? `<span class="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">مش محتاج كتب</span>`
       : `<span class="text-[11px] font-semibold text-brand-600">جاهز للحجز</span>`;
     return `<div class="rounded-2xl p-3 ring-2 ${sel.includes(i) ? "ring-brand-300 bg-white" : "ring-slate-200 bg-slate-50/70 opacity-75"} shadow-xs flex flex-col gap-2.5">
       <div class="flex items-center gap-2.5">
@@ -1154,12 +1158,12 @@ function wzMember() {
 function wzAfterMemberHTML() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
   const b = kidBen(m), lines = cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade));
-  const rem = ms.map((x, idx) => ({ m: x, idx })).filter(x => x.idx !== WZ.i && !WZ.done[x.idx] && !WZ.later[x.idx] && !WZ.noBooks[x.idx]);
+  const rem = ms.map((x, idx) => ({ m: x, idx })).filter(x => x.idx !== WZ.i && !wzSt("done", x.idx) && !wzSt("later", x.idx) && !wzSt("noBooks", x.idx));
   return `
     <div class="rounded-3xl p-5 bg-white ring-1 ring-emerald-200 shadow-sm space-y-4 text-center">
       <div class="w-14 h-14 mx-auto rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center text-[30px]">✅</div>
       <div>
-        <h1 class="font-display font-bold text-[20px] text-slate-900">تمت إضافة كتب ${esc(wzName(m))} في السلة!</h1>
+        <h1 class="font-display font-bold text-[20px] text-slate-900">${lines.length ? `تمت إضافة كتب ${esc(wzName(m))} في السلة!` : `${gTxt("ما اخترتش", "ما اخترتيش")} كتب لـ ${esc(wzName(m))} لسه`}</h1>
         <p class="text-[13px] text-slate-500 mt-1">${lines.length ? `${gTxt("اخترت", "اخترتي")} ${booksWord(lines.reduce((s, l) => s + l.qty, 0))} جاهزة في سلتك.` : "تم حفظ اختياراتك في السلة."}</p>
       </div>
       ${rem.length ? `
@@ -1212,35 +1216,35 @@ on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
 on("wzTempAdd", g => { WZ.temp.push({ name: "", grade: g, type: "" }); WZ.skip = false; wzSave(); Shell.rerender(); });
 on("wzTempDel", j => { WZ.temp.splice(+j, 1); wzSave(); Shell.rerender(); });
-on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; const ms = wzMembers(); const nxt = ms.findIndex((_, idx) => !WZ.done[idx] && !WZ.later[idx] && !WZ.noBooks[idx]); wzGo("member", nxt >= 0 ? nxt : 0); });
-on("wzStartOne", idx => { const i = +idx || 0; delete WZ.later[i]; delete WZ.noBooks[i]; delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
+on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; const ms = wzMembers(); const nxt = ms.findIndex((_, idx) => !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); wzGo("member", nxt >= 0 ? nxt : 0); });
+on("wzStartOne", idx => { const i = +idx || 0; wzSet("later", i, false); wzSet("noBooks", i, false); delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
 on("wzToFamily", () => wzGo("family"));
 on("wzMode", v => { WZ.mode[WZ.i] = v; wzSave(); if (v === "manual") { wzFocus(wzMembers()[WZ.i]); Emp.wzManual = true; Router.go("/e/books"); scrollTo({ top: 0 }); return; } Shell.rerender(); });
 on("wzModeReset", () => { delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = ""; wzSave(); Shell.rerender(); });
 on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); });
 const wzAdvance = () => { const ms = wzMembers(); BAG._for = ""; BAG.inline = false; if (WZ.i + 1 < ms.length) wzGo("member", WZ.i + 1); else wzGo("review"); };
-const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !WZ.done[idx] && !WZ.later[idx] && !WZ.noBooks[idx]); };
+const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); };
 on("wzNext", () => {
   BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) APP.cart[k] = 1; });
   BAG.rows.filter(r => !r.on).forEach(r => r.opts.forEach(o => { delete APP.cart[ck(o.Book_ID, Emp.ben)]; }));
-  WZ.done[WZ.i] = true; delete WZ.later[WZ.i]; delete WZ.noBooks[WZ.i];
+  wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false);
   Emp.dirty = true; refreshCartViews(); BAG._for = ""; BAG.inline = false; wzGo("afterMember", WZ.i);
 });
 on("wzNextMember", idx => { const i = +idx; delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
 on("wzDefer", () => {
   const m = wzMembers()[WZ.i];
-  WZ.later[WZ.i] = true; delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
+  wzSet("later", WZ.i, true); delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
   if (m) toast(`تم تأجيل ${wzName(m)} لبعدين — تقدر ترجع له في أي وقت`, "info");
   const nxt = wzNextUnbooked();
   if (nxt >= 0) wzGo("member", nxt); else wzGo("review");
 });
 on("wzNoBooks", () => {
-  WZ.noBooks[WZ.i] = true; delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
+  wzSet("noBooks", WZ.i, true); delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = "";
   const nxt = wzNextUnbooked();
   if (nxt >= 0) wzGo("member", nxt); else wzGo("review");
 });
 on("wzPrev", () => { BAG._for = ""; wzGo("member", Math.max(0, WZ.i - 1)); });
-on("wzBack", () => { Emp.wzManual = false; WZ.done[WZ.i] = true; delete WZ.later[WZ.i]; delete WZ.noBooks[WZ.i]; BAG._for = ""; wzGo("afterMember", WZ.i); });
+on("wzBack", () => { Emp.wzManual = false; wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false); BAG._for = ""; wzGo("afterMember", WZ.i); });
 on("wzReview", () => wzGo("review"));
 on("wzBackReview", () => { Emp.wzManual = false; wzGo("review"); });
 on("wzPay", () => wzGo("pay"));

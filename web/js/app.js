@@ -329,7 +329,15 @@ if ("serviceWorker" in navigator && location.protocol === "https:") {
   window.addEventListener("load", () => {
     const hadCtrl = !!navigator.serviceWorker.controller;
     let reloaded = false;
-    if (hadCtrl) navigator.serviceWorker.addEventListener("controllerchange", () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    // نسخة جديدة: تحديث تلقائي فقط لو مفيش شغل مفتوح (سلة لم تُحفظ أو نافذة مفتوحة)، وإلا شريط «تحديث» يضغطه المستخدم وقت ما يحب
+    const busy = () => (typeof Emp !== "undefined" && Emp.dirty) || (UI._stack && UI._stack.length);
+    const doReload = () => { if (!reloaded) { reloaded = true; location.reload(); } };
+    if (hadCtrl) navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (!busy()) return doReload();
+      if (document.getElementById("swUpd")) return;
+      document.body.insertAdjacentHTML("beforeend", `<div id="swUpd" class="fixed inset-x-3 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-[80] rounded-2xl bg-brand-900 text-white px-4 py-3 shadow-lg flex items-center gap-3 text-[13px]"><span class="flex-1">✨ فيه نسخة أحدث من التطبيق</span><button class="btn btn-sm bg-white text-brand-900" id="swUpdBtn">تحديث</button></div>`);
+      document.getElementById("swUpdBtn").onclick = () => { if (typeof Emp !== "undefined" && Emp.dirty && !confirm("عندك تعديلات في السلة ما اتأكدتش — اتحفظت كمسودة وهترجعلك بعد التحديث. نحدّث؟")) return; doReload(); };
+    });
     navigator.serviceWorker.register("sw.js").then(r => r.update()).catch(() => { /* اختياري */ });
   });
 }
