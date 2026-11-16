@@ -309,7 +309,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(prints.length > 0, 'print opened');
   // المستندات الاحترافية
   const docOpen = async (act, id, re, tag) => { w.eval(`ACTIONS.${act}(${id ? JSON.stringify(id) : ''})`); await settle(); const f = [...d.querySelectorAll('iframe')].pop(); check(f && re.test(f.srcdoc || ''), 'document ' + tag); f.closest('.fixed').remove(); };
-  await go('/a/po'); await docOpen('printPO', null, /طلب توريد/, 'purchase order');
+  await go('/a/po'); await docOpen('printPO', null, /رقم الطلبية/, 'purchase order');
   const anyInv = w.eval('APP').adm.empInvoices[0]; if (anyInv) await docOpen('printInvA', anyInv.Emp_Inv_ID, /فاتورة بيع كتب/, 'invoice');
   const anyRc = w.eval('APP').adm.empPayments[0]; if (anyRc) await docOpen('printRcpt', anyRc.Receipt_No, /إيصال/, 'receipt');
   const anyRes = w.eval('APP').adm.resHeaders.find(h => h.Phase_ID === w.eval('APP').phaseId); if (anyRes) await docOpen('printResA', anyRes.Emp_ID, /طلب حجز كتب/, 'reservation request');
