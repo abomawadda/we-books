@@ -441,7 +441,7 @@ function kidsStrip(compact) {
   return `<div class="space-y-2 ${compact ? "" : "mt-1"}">
     ${kids.length ? `<div class="grid grid-cols-2 gap-2">${kids.map(x => chip(x[0], x[1])).join("")}</div>` : ""}
     ${rels.length ? `<div class="grid grid-cols-2 gap-2">${rels.map(x => chip(x[0], x[1])).join("")}</div>` : ""}
-    <div class="grid grid-cols-2 gap-2"><button class="justify-center flex items-center gap-1.5 rounded-2xl px-3 py-2 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "تعديل" : "أضف أبنائي"}</button>${relOn() ? `<button class="justify-center flex items-center gap-1.5 rounded-2xl px-3 py-2 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50/50 text-[13px] font-bold" data-act="addRel">${ic("users")} قريب</button>` : ""}</div></div>`;
+    <div class="grid grid-cols-2 gap-2"><button class="justify-center flex items-center gap-1.5 rounded-2xl px-3 py-2 border-2 border-dashed border-brand-300 text-brand-700 bg-brand-50/50 text-[13px] font-bold" data-act="kidsEdit">${ic(ks.length ? "pencil" : "plus")} ${ks.length ? "إضافة وتعديل" : "أضف أبنائي"}</button>${relOn() ? `<button class="justify-center flex items-center gap-1.5 rounded-2xl px-3 py-2 border-2 border-dashed border-sky-300 text-sky-700 bg-sky-50/50 text-[13px] font-bold" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></div>`;
 }
 
 // ---------------- محرّر الأبناء: خطوات قصيرة لكل ابن ----------------
