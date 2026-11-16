@@ -441,3 +441,51 @@ _wrapA("/a/books", view => {
   const head = view.querySelector(".flex.flex-wrap.gap-2, [data-act=bulkPrice]"); const btn = `<button class="btn btn-outline btn-sm" data-act="tracksMgr">${ic("graduation-cap")} الشُّعب (علمي/أدبي/بكالوريا)</button>`;
   const bp = view.querySelector("[data-act=bulkPrice]"); if (bp) bp.insertAdjacentHTML("afterend", btn);
 });
+
+// ================================================================ حساب العضو: له / عليه + تسوية الرصيد + طلب بالمتبقي
+const acctOf = invs => { const lah = invs.reduce((s, i) => s + n(i.Credit_Balance), 0), alayh = invs.reduce((s, i) => s + n(i.Remaining_Balance), 0); return { lah, alayh, net: alayh - lah }; };
+/** بنود لم تُخصَّص بعد التوزيع (المتبقي للمرحلة التالية) — لا تشمل ما اختار العضو إنهاءه */
+const leftoverOf = (items, invPhases) => items.filter(i => invPhases.has(i.Phase_ID) && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward"
+  && i.Waitlist_Choice !== "cancel" && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+function acctCardHTML(a, opts) {
+  const tone = a.net > 0.004 ? ["عليه", "rose"] : a.net < -0.004 ? ["له", "emerald"] : ["متزن", "slate"];
+  return `<section class="rounded-2xl ring-1 ring-slate-200 bg-white p-3 mb-3"><div class="flex items-center justify-between gap-2 mb-2"><b class="text-[14px] text-slate-900">${ic("scale", "inline -mt-0.5")} ${opts.title || "حساب العضو"}</b><span class="pill pill-${tone[1] === "slate" ? "brand" : tone[1] === "rose" ? "red" : "green"}">${tone[0]}${tone[0] !== "متزن" ? " " + fmt(Math.abs(a.net)) + " ج.م" : ""}</span></div>
+    <div class="grid grid-cols-3 gap-2 text-center"><div class="rounded-xl bg-rose-50 p-2"><div class="text-[11.5px] text-rose-700">${opts.due || "عليه (متبقي)"}</div><b class="num text-rose-700 text-[16px]">${fmt(a.alayh)}</b></div>
+      <div class="rounded-xl bg-emerald-50 p-2"><div class="text-[11.5px] text-emerald-700">${opts.cr || "له (رصيد)"}</div><b class="num text-emerald-700 text-[16px]">${fmt(a.lah)}</b></div>
+      <div class="rounded-xl bg-slate-50 p-2"><div class="text-[11.5px] text-slate-600">الصافي</div><b class="num text-[16px] ${a.net > 0 ? "text-rose-700" : a.net < 0 ? "text-emerald-700" : "text-slate-700"}">${fmt(Math.abs(a.net))}</b></div></div>
+    ${opts.extra || ""}</section>`;
+}
+if (typeof epBody === "function") {
+  const _epBody0 = epBody;
+  epBody = function (id) {
+    const d = A(), invs = d.empInvoices.filter(i => i.Emp_ID === id), a = acctOf(invs);
+    const lo = leftoverOf(d.resItems.filter(i => i.Emp_ID === id), new Set(invs.map(i => i.Phase_ID)));
+    const btns = [a.lah > 0 && a.alayh > 0 && can("TRANSFER_EMPLOYEE_CREDIT") ? `<button class="btn btn-primary btn-sm" data-act="settleCredit" data-id="${esc(id)}">${ic("arrow-left-right")} خصم الرصيد من المتبقي (${fmt(Math.min(a.lah, a.alayh))})</button>` : "",
+      a.lah > 0 && !(a.alayh > 0) && can("REFUND_EMPLOYEE_CREDIT") ? `<span class="text-[12px] text-emerald-700">العضو له رصيد ومفيش عليه متبقي — ممكن «رد الرصيد» من الفواتير أو يُخصم من فاتورته الجاية.</span>` : "",
+      lo.length ? `<button class="btn btn-outline btn-sm" data-act="printLeftover" data-id="${esc(id)}">${ic("printer")} طلب بالمتبقي (${lo.length})</button>` : ""].filter(Boolean).join("");
+    return ((invs.length || lo.length) ? acctCardHTML(a, { extra: btns ? `<div class="flex flex-wrap items-center gap-2 mt-2.5">${btns}</div>` : "" }) : "") + _epBody0(id);
+  };
+}
+on("settleCredit", async id => {
+  const invs = A().empInvoices.filter(i => i.Emp_ID === id), from = invs.filter(i => n(i.Credit_Balance) > 0), to = invs.filter(i => n(i.Remaining_Balance) > 0).sort((x, y) => String(x.Issue_Date).localeCompare(String(y.Issue_Date)));
+  const a = acctOf(invs), amt = Math.min(a.lah, a.alayh);
+  if (!(await UI.confirm({ title: "تسوية رصيد العضو", message: `يُخصم ${fmt(amt)} ج.م من رصيده (له) ويُضاف سداداً على فواتيره المتبقية (عليه) — قيد داخلي بدون نقدية، ويظهر في كشف الحساب.`, ok: "سوّي الرصيد" }))) return;
+  let done = 0; const cr = from.map(i => ({ id: i.Emp_Inv_ID, v: n(i.Credit_Balance) })), du = to.map(i => ({ id: i.Emp_Inv_ID, v: n(i.Remaining_Balance) }));
+  for (const f of cr) for (const t of du) { const x = Math.min(f.v, t.v); if (x <= 0.004) continue;
+    const r = await call("TRANSFER_EMPLOYEE_CREDIT", { fromInvId: f.id, toInvId: t.id, amount: Math.round(x * 100) / 100 }, { block: true });
+    if (!r.success) { toast(r.message, "danger"); break; } f.v -= x; t.v -= x; done += x; }
+  if (done) toast(`تمت تسوية ${fmt(done)} ج.م`, "success");
+  await Admin.load(); const el = $("#epBody"); if (el) el.innerHTML = epBody(id);
+});
+/** طلب حجز بالمتبقي (الكتب التي لم تُخصَّص في مرحلتها) — جاهز للطباعة للمرحلة التالية */
+on("printLeftover", id => {
+  const d = A(), { e, b } = maps(), emp = e[id] || {}, invs = d.empInvoices.filter(i => i.Emp_ID === id);
+  const lo = leftoverOf(d.resItems.filter(i => i.Emp_ID === id), new Set(invs.map(i => i.Phase_ID))); if (!lo.length) return toast("لا يوجد متبقي", "info");
+  const ph = by(d.phases, "Phase_ID"), from = [...new Set(lo.map(i => (ph[i.Phase_ID] || {}).Phase_Name || i.Phase_ID))].join(" + ");
+  const next = (d.phases.find(p => p.Phase_Status === "Open") || {}).Phase_Name || "المرحلة التالية";
+  Doc.show("طلب بالمتبقي " + id, Doc.reservation({ title: "طلب حجز بالمتبقي", no: id + "-REM", date: new Date().toISOString(), phase: next, status: "متبقي",
+    emp: { name: emp.Full_Name || id, id, dept: emp.Department, mobile: emp.Mobile },
+    lines: lo.map(i => { const bk = b[i.Book_ID] || {}; return { code: i.Book_ID, name: bk.Book_Name, grade: bk.Grade, ben: i.Beneficiary, qty: n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)), cover: bk.Cover_Price, price: bk.Emp_Selling_Price }; }),
+    note: `• كتب حُجزت في «${esc(from)}» ولم تُسلَّم لعدم وصولها، وتُرحَّل إلى «${esc(next)}» بأسبقية الحجز الأصلية.<br>• الأسعار تقديرية وتُثبَّت عند التوزيع، ولا تدخل أي فاتورة سابقة.`,
+    plan: { method: "", down: 0, count: 0, per: 0 } }), { file: "متبقي-" + id });
+});

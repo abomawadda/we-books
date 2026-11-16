@@ -78,6 +78,7 @@ function waitBox() {
     <p class="text-[12.5px] text-slate-600 mt-1">مش داخلة في فاتورتك ومش هتدفع تمنها دلوقتي.</p>
     <ul class="mt-2 text-[13.5px] divide-y divide-slate-100">${list}</ul>
     ${decided ? `<div class="mt-3 rounded-xl bg-emerald-50 text-emerald-800 p-3 text-[13px] font-semibold">${ic("circle-check")} هتترحّل للمرحلة الجاية بأسبقيتك.</div>
+      <button class="btn btn-outline btn-sm w-full mt-2" data-act="printLeftoverE">${ic("printer")} اطبع طلب الحجز بالمتبقي</button>
       <button class="btn btn-ghost btn-sm w-full mt-2 !text-rose-600" data-act="waitDecide" data-id="cancel">لا، أنهي حجزي على اللي وصل بس</button>`
     : `<div class="grid gap-2 mt-3"><button class="btn btn-primary !h-12" data-act="waitDecide" data-id="carry">${ic("check")} رحّلها للمرحلة الجاية</button>
       <button class="btn btn-outline !h-11" data-act="waitDecide" data-id="cancel">أنهي حجزي على اللي وصل بس</button></div>`}
@@ -631,3 +632,26 @@ function trackAskCard() {
 }
 _wrap("/e/home", view => afterHead(view, trackAskCard()));
 _wrap("/e/wiz", view => { if (WZ.step === "family") afterHead(view, trackAskCard()); });
+
+// ================================================================ حسابي: ليك / عليك + طلب الحجز بالمتبقي
+_wrap("/e/pay", view => {
+  const r = APP.emp || {}, invs = r.myInvoices || []; if (!invs.length) return;
+  const lah = invs.reduce((x, i) => x + n(i.Credit_Balance), 0), alayh = invs.reduce((x, i) => x + n(i.Remaining_Balance), 0), net = alayh - lah;
+  const st = net > 0.004 ? ["عليك", "rose", `باقي عليك <b class="num">${fmt(net)}</b> ج.م`] : net < -0.004 ? ["ليك", "emerald", `ليك رصيد <b class="num">${fmt(-net)}</b> ج.م`] : ["متزن", "slate", "حسابك متزن — مفيش عليك ولا ليك 👌"];
+  const hint = lah > 0 && alayh > 0 ? `<p class="text-[12px] text-slate-600 mt-2">${ic("info", "inline -mt-0.5")} رصيدك هيتخصم من المتبقي عليك — المسؤول بيسوّيه من غير ما تدفع حاجة.</p>`
+    : lah > 0 ? `<p class="text-[12px] text-slate-600 mt-2">${ic("info", "inline -mt-0.5")} رصيدك محفوظ: يتخصم من فاتورتك الجاية، أو تطلب استرداده.</p>` : "";
+  view.insertAdjacentHTML("afterbegin", `<section class="card p-4 mb-4 ring-1 ring-${st[1]}-200"><div class="flex items-center justify-between gap-2"><b class="text-[15px] text-slate-900">${ic("scale", "inline -mt-0.5")} حسابك</b><span class="text-[13px] text-${st[1]}-700">${st[2]}</span></div>
+    <div class="grid grid-cols-2 gap-2 mt-3 text-center"><div class="rounded-xl bg-rose-50 p-2.5"><div class="text-[12px] text-rose-700">عليك</div><b class="num text-[17px] text-rose-700">${fmt(alayh)}</b></div><div class="rounded-xl bg-emerald-50 p-2.5"><div class="text-[12px] text-emerald-700">ليك</div><b class="num text-[17px] text-emerald-700">${fmt(lah)}</b></div></div>${hint}</section>`);
+});
+on("printLeftoverE", () => {
+  const r = APP.emp || {}, bm = Emp.bookMap(), invPh = new Set((r.myInvoices || []).map(i => i.Phase_ID));
+  const lo = (r.myReservationItems || []).filter(i => invPh.has(i.Phase_ID) && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && i.Waitlist_Choice !== "cancel" && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
+  if (!lo.length) return toast("مفيش كتب متبقية", "info");
+  const ph = id => ((r.phases || []).find(p => p.Phase_ID === id) || {}).Phase_Name || id, from = [...new Set(lo.map(i => ph(i.Phase_ID)))].join(" + ");
+  const next = ((r.phases || []).find(p => p.Phase_Status === "Open") || {}).Phase_Name || "المرحلة التالية";
+  Doc.show("طلب الحجز بالمتبقي", Doc.reservation({ title: "طلب حجز بالمتبقي", no: (APP.user.empId || "") + "-REM", date: new Date().toISOString(), phase: next, status: "متبقي",
+    emp: { name: APP.user.fullName, id: APP.user.empId, dept: APP.user.department || "", mobile: APP.user.mobile || "" },
+    lines: lo.map(i => { const b = bm[i.Book_ID] || {}; return { code: i.Book_ID, name: b.Book_Name, grade: b.Grade, ben: i.Beneficiary, qty: n(i.Requested_Qty) - Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)), cover: b.Cover_Price, price: b.Emp_Selling_Price }; }),
+    note: `• كتب حُجزت في «${esc(from)}» ولم تُسلَّم لعدم وصولها، وتُرحَّل إلى «${esc(next)}» بأسبقية الحجز الأصلية.<br>• الأسعار تقديرية وتُثبَّت عند التوزيع، ولا تدخل أي فاتورة سابقة.`,
+    plan: { method: "", down: 0, count: 0, per: 0 } }), { file: "طلب-المتبقي-" + (APP.user.empId || "") });
+});

@@ -654,6 +654,7 @@ const ACTION_ACL = {
   RECORD_EMPLOYEE_PAYMENT: ["Finance"],
   VOID_EMPLOYEE_PAYMENT: [],          // المدير فقط
   REFUND_EMPLOYEE_CREDIT: ["Finance"],
+  TRANSFER_EMPLOYEE_CREDIT: ["Finance"],
   CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"],
   ADJUST_EMP_INVOICE: ["Finance"],
   DELETE_EMP_INVOICE: [],             // المدير فقط
@@ -751,6 +752,7 @@ function callServerApi(action, payload, sessionToken) {
       case "RECORD_EMPLOYEE_PAYMENT": return E.recordEmployeePayment(session, payload);
       case "VOID_EMPLOYEE_PAYMENT": return E.voidEmployeePayment(session, payload);
       case "REFUND_EMPLOYEE_CREDIT": return E.refundEmployeeCredit(session, payload);
+      case "TRANSFER_EMPLOYEE_CREDIT": return E.transferEmployeeCredit(session, payload);
       case "CUSTOMIZE_EMP_INSTALLMENTS": return E.customizeEmployeeInstallments(session, payload);
       case "RECORD_SUPPLIER_PAYMENT": return E.recordSupplierPayment(session, payload);
       case "RECORD_INITIATIVE_EXPENSE": return E.recordInitiativeExpense(session, payload);
@@ -2990,6 +2992,31 @@ const OperationsEngine = {
     });
   },
 
+  /** تسوية رصيد العضو: نقل رصيده الدائن (له) من فاتورة إلى فاتورة عليها متبقي (عليه) — قيدان متقابلان بلا نقدية */
+  transferEmployeeCredit: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const invs = DB_Engine.getAllRecords(S.EMP_INVOICES);
+      const from = invs.find(i => i.Emp_Inv_ID === Util.str(payload.fromInvId)), to = invs.find(i => i.Emp_Inv_ID === Util.str(payload.toInvId));
+      Util.require(from && to, "الفاتورة غير موجودة.");
+      Util.require(from.Emp_Inv_ID !== to.Emp_Inv_ID, "اختر فاتورتين مختلفتين.");
+      Util.require(Util.str(from.Emp_ID) === Util.str(to.Emp_ID), "الفاتورتان ليستا لنفس العضو.");
+      const credit = Util.num(from.Credit_Balance), due = Util.num(to.Remaining_Balance);
+      const amount = FinancialEngine.roundCurrency(Math.min(Util.num(payload.amount) || Math.min(credit, due), credit, due));
+      Util.require(credit > 0, "لا يوجد رصيد للعضو في الفاتورة " + from.Emp_Inv_ID + ".");
+      Util.require(due > 0, "لا يوجد متبقي على الفاتورة " + to.Emp_Inv_ID + ".");
+      Util.require(amount > 0, "المبلغ غير صالح.");
+      const no = Counter.next("CREDIT", "CRT"), now = Util.now(), by = Util.actor(session), t = new Date().getTime();
+      const row = (inv, amt, type, ref) => ({ Payment_ID: type + "-" + t, Receipt_No: no + (amt < 0 ? "-OUT" : "-IN"), Emp_ID: inv.Emp_ID, Emp_Inv_ID: inv.Emp_Inv_ID, Payment_Date: now,
+        Amount: amt, Payment_Method: "CREDIT", Transaction_Ref: ref, Collected_By: by, Is_Voided: false, Void_Reason: "", Voided_By: "", Payment_Type: type });
+      DB_Engine.insertRecordsBatch(S.EMP_PAYMENTS, [row(from, -amount, "CREDIT_OUT", "تسوية رصيد إلى " + to.Emp_Inv_ID), row(to, amount, "CREDIT_IN", "تسوية رصيد من " + from.Emp_Inv_ID)]);
+      this.syncEmployeeInvoicesForPhase_(from.Phase_ID);
+      if (to.Phase_ID !== from.Phase_ID) this.syncEmployeeInvoicesForPhase_(to.Phase_ID);
+      DB_Engine.logAudit(session.userId, session.role, "Payments", "CREDIT_TRANSFER", no, null, { from: from.Emp_Inv_ID, to: to.Emp_Inv_ID, amount: amount });
+      return { success: true, message: "تمت تسوية " + amount + " ج.م من رصيد العضو على الفاتورة " + to.Emp_Inv_ID + " (" + no + ")." };
+    });
+  },
+
   /** تعديل فاتورة موظف: خصم (قيمة سالبة) أو إضافة (موجبة) بسبب موثق؛ تُعاد جدولة الأقساط تلقائياً */
   adjustEmployeeInvoice: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
@@ -3166,8 +3193,9 @@ const OperationsEngine = {
     const supPaid = R(supLed.filter(l => l.Trans_Type === "PAYMENT_DEBIT").reduce((s, l) => s + Util.num(l.Debit_Amount), 0));
     const supBalance = R(purchasesNet - claims - supReturns - supPaid);
     const totalExp = R(expenses.reduce((s, e) => s + Util.num(e.Amount), 0));
-    const collected = R(pays.filter(p => Util.num(p.Amount) > 0).reduce((s, p) => s + Util.num(p.Amount), 0));
-    const refunds = R(-pays.filter(p => Util.num(p.Amount) < 0).reduce((s, p) => s + Util.num(p.Amount), 0));
+    const cashPays = pays.filter(p => p.Payment_Method !== "CREDIT"); // تسويات الرصيد قيود داخلية لا نقدية
+    const collected = R(cashPays.filter(p => Util.num(p.Amount) > 0).reduce((s, p) => s + Util.num(p.Amount), 0));
+    const refunds = R(-cashPays.filter(p => Util.num(p.Amount) < 0).reduce((s, p) => s + Util.num(p.Amount), 0));
     const byMethod = {};
     pays.forEach(p => byMethod[p.Payment_Method] = R((byMethod[p.Payment_Method] || 0) + Util.num(p.Amount)));
     const receivables = R(invoices.reduce((s, i) => s + Math.max(0, Util.num(i.Remaining_Balance)), 0));

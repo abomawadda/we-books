@@ -141,6 +141,9 @@ const inv2b = rows(S.EMP_INVOICES).find(i => i.Emp_ID === '1002');
 assert.strictEqual(inv2b.Net_Final_Invoice_Amount, 111);
 assert.strictEqual(inv2b.Credit_Balance, 111);
 assert.strictEqual(inv2b.Invoice_Status, 'Refund_Due');
+fail(api('TRANSFER_EMPLOYEE_CREDIT', { fromInvId: inv2b.Emp_Inv_ID, toInvId: inv1.Emp_Inv_ID }, fin), 'credit transfer other member', /نفس العضو/);
+fail(api('TRANSFER_EMPLOYEE_CREDIT', { fromInvId: inv2b.Emp_Inv_ID, toInvId: inv2b.Emp_Inv_ID }, fin), 'credit transfer same invoice', /مختلفتين/);
+fail(api('TRANSFER_EMPLOYEE_CREDIT', { fromInvId: inv2b.Emp_Inv_ID, toInvId: inv1.Emp_Inv_ID }, coord), 'credit transfer acl', /صلاحي|غير مصرح|ليست/);
 ok(api('REFUND_EMPLOYEE_CREDIT', { empInvId: inv2b.Emp_Inv_ID }, fin), 'refund');
 assert.strictEqual(rows(S.EMP_INVOICES).find(i => i.Emp_ID === '1002').Invoice_Status, 'Paid_In_Full');
 // النسخة المرتجعة تذهب للمنتظر التالي (e1 الشريحة 2)
