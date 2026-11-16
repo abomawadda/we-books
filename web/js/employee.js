@@ -896,17 +896,57 @@ const personCard = (k, i, on, act) => `<button class="min-w-0 text-right rounded
 function wzFamily() {
   const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i), kids = ks.map((k, i) => [k, i]).filter(x => !x[0].rel), rels = ks.map((k, i) => [k, i]).filter(x => x[0].rel);
   if (WZ.skip) return wzGradePick();
-  return `<h1 class="font-display font-bold text-[22px] text-slate-900">لمين هتحجز السنة دي؟ 👨‍👩‍👧‍👦</h1>
-    <p class="text-[13.5px] text-slate-500 mt-1 mb-4">اختار الأبناء والأقارب اللي محتاجين كتب، وهنجهّز لكل واحد كتب صفه.</p>
+  const firstName = String((APP.user && APP.user.fullName) || "").trim().split(/\s+/)[0];
+  const greetings = [
+    `أهلاً بك يا ${firstName || "ولي الأمر"} 🌟.. ربنا يبارك في أولادك ويقوّيك على تعبك معاهم!`,
+    `تحية تقدير لجهدك مع أولادك يا ${firstName || "بطل"} 💛.. إحنا هنا نسهّل عليك مشوار الكتب!`,
+    `بداية موسم دراسي سعيد يا ${firstName || "غالي"} 🎓.. سيب لنا ترتيب الكتب وركّز في نجاح أولادك!`
+  ];
+  const greet = greetings[(firstName.length + ks.length) % greetings.length];
+  let guideHidden = false;
+  try { guideHidden = !!localStorage.getItem("wb_wz_guide_off"); } catch (_) {}
+  const showGuide = !ks.length && !WZ.temp.length && !guideHidden;
+
+  return `
+    <div class="rounded-3xl p-4 sm:p-5 mb-4 ring-1 ring-brand-200/80 shadow-sm" style="background:linear-gradient(135deg,#faf7ff 0%,#f3ecfc 100%)">
+      <div class="flex items-start gap-3">
+        <span class="w-11 h-11 rounded-2xl bg-white shadow-sm ring-1 ring-brand-100 flex items-center justify-center text-[24px] shrink-0">👋</span>
+        <div class="flex-1 min-w-0">
+          <h1 class="font-display font-bold text-[18px] sm:text-[20px] text-brand-950 leading-snug">${esc(greet)}</h1>
+          <p class="text-[13px] text-brand-800/80 mt-1 leading-relaxed">عرّفنا على أولادك أو قرايبك عشان نسهّل عليك، وإحنا جاهزين نساعدك خطوة بخطوة.</p>
+        </div>
+      </div>
+
+      ${showGuide ? `
+        <div id="wzGuide" class="mt-3.5 pt-3.5 border-t border-brand-200/70 space-y-2.5 text-[12.5px]">
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-bold text-brand-900 flex items-center gap-1.5">${ic("sparkles", "!w-4 !h-4 text-gold-500")} إزاي بتحجز في ثواني؟</span>
+            <button type="button" data-act="wzHideGuide" class="text-[11.5px] font-semibold text-brand-600 hover:underline">فهمت، إخفاء</button>
+          </div>
+          <div class="rounded-2xl bg-white/85 ring-1 ring-brand-100 p-3 space-y-2 text-slate-700">
+            <div><b class="text-brand-900">1️⃣ أولاً — مين محتاج كتب؟ (3 اختيارات):</b>
+              <span class="block text-[12px] text-slate-600 mt-0.5">• أضف <b>أولادك</b> الأول (الأسهل — بنحفظهم ونجهز كتبهم) · أو أضف <b>قريب</b> · أو كمّل <b>بدون تسجيل</b> بالصف مباشرة.</span>
+            </div>
+            <div class="pt-1.5 border-t border-slate-100"><b class="text-brand-900">2️⃣ ثانياً — في الكتب، عندك 3 طرق أسهل من بعض:</b>
+              <div class="grid sm:grid-cols-3 gap-1.5 mt-1.5 text-[11.5px]">
+                <div class="rounded-xl bg-amber-50/80 ring-1 ring-amber-200/70 p-2"><b class="block text-amber-900">🎒 شنطة الكتب</b><span class="text-slate-600">كل المواد في شنطة واحدة وتختار وتبدّل منها.</span></div>
+                <div class="rounded-xl bg-brand-50/80 ring-1 ring-brand-200/70 p-2"><b class="block text-brand-900">📚 شركة واحدة</b><span class="text-slate-600">زي الأضواء مثلاً — نجهّزها لك بدون ما تدور.</span></div>
+                <div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/80 p-2"><b class="block text-slate-900">🔍 كتاب بكتاب</b><span class="text-slate-600">تختار الكتب بنفسك واحد واحد.</span></div>
+              </div>
+            </div>
+          </div>
+        </div>` : ""}
+    </div>
+
     ${kids.length ? `<div class="text-[12.5px] font-bold text-brand-700 mb-2">أبنائي</div><div class="grid grid-cols-2 gap-2 mb-4">${kids.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
     ${rels.length ? `<div class="text-[12.5px] font-bold text-sky-700 mb-2">أقاربي</div><div class="grid grid-cols-2 gap-2 mb-4">${rels.map(([k, i]) => personCard(k, i, sel.includes(i), "wzSel")).join("")}</div>` : ""}
     ${WZ.temp.length ? `<div class="text-[12.5px] font-bold text-slate-600 mb-2">صفوف بدون تسجيل</div><div class="flex flex-wrap gap-2 mb-4">${WZ.temp.map((t, j) => `<span class="chip">${esc(gradeTitle(t.grade))}<button data-act="wzTempDel" data-id="${j}" class="text-rose-500" aria-label="حذف">${ic("x")}</button></span>`).join("")}</div>` : ""}
-    <div class="grid grid-cols-2 gap-2">
-      <button class="rounded-2xl p-3 border-2 border-dashed border-brand-300 text-brand-700 font-bold text-[13.5px] flex items-center justify-center gap-1.5" data-act="kidsEdit">${ic("plus")} ${kids.length ? "ابن / بنت" : "أضف أبنائي"}</button>
-      ${relOn() ? `<button class="rounded-2xl p-3 border-2 border-dashed border-sky-300 text-sky-700 font-bold text-[13.5px] flex items-center justify-center gap-1.5" data-act="addRel">${ic("users")} قريب</button>` : `<span></span>`}
+    <div class="grid grid-cols-2 gap-2.5">
+      <button class="rounded-2xl p-3.5 border-2 border-dashed border-brand-300 bg-brand-50/40 hover:bg-brand-50 text-brand-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="kidsEdit">${ic("plus")} ${kids.length ? "إضافة ابن / بنت" : "أضف أبنائي (الأسهل)"}</button>
+      ${relOn() ? `<button class="rounded-2xl p-3.5 border-2 border-dashed border-sky-300 bg-sky-50/40 hover:bg-sky-50 text-sky-800 font-bold text-[13.5px] flex items-center justify-center gap-1.5 transition" data-act="addRel">${ic("users")} إضافة قريب</button>` : `<span></span>`}
     </div>
-    <button class="w-full mt-2 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzSkip">${ks.length ? "أحجز لصف آخر بدون تسجيل" : "تخطّي — أحجز بالصف مباشرة"}</button>
-    <button class="btn btn-primary btn-lg w-full mt-3" data-act="wzStart" ${wzMembers().length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز (${wzMembers().length})</button>`;
+    <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : "أو كمّل بدون تسجيل — اختر الصف مباشرة"}</button>
+    <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${wzMembers().length ? "" : "disabled"}>${ic("chevron-left")} ابدأ الحجز (${wzMembers().length})</button>`;
 }
 function wzGradePick() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
@@ -918,13 +958,13 @@ function wzMember() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
   wzFocus(m);
   const mode = WZ.mode[WZ.i], last = WZ.i === ms.length - 1;
-  const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#552c83,#2e1650)">
+  const head = `<div class="rounded-3xl p-4 mb-4 text-white flex items-center gap-3" style="background:linear-gradient(135deg,#6a3aa0,#381c62)">
     <span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center text-[28px]">${m._temp ? "📚" : kidEmoji(m)}</span>
     <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${ms.length > 1 ? `الفرد ${WZ.i + 1} من ${ms.length}` : "الحجز"}</div><div class="font-display font-bold text-[19px] leading-tight truncate">${esc(wzName(m))}${m.rel ? ` <span class="text-[13px] text-brand-200">(${esc(m.rel)})</span>` : ""}</div><div class="text-[12.5px] text-gold-300">${m._temp ? "" : esc(gradeTitle(m.grade))}${m.type ? " · مدارس " + esc(m.type) : ""}${m.track ? " · " + esc(m.track) : ""}</div></div></div>`;
-  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">إزاي تحب نختار الكتب؟</h2>
-    <div class="grid gap-2.5">${[["popular", "🎒", "جهّز لي الأشهر", "كتاب لكل مادة: الأكثر حجزاً والأشهر — وتعدّل براحتك", "bg-gold-50 ring-gold-300"],
-      ["series", "📚", "سلسلة واحدة", "تختار الناشر (الأضواء، سلاح التلميذ…) ونجيب كتبه كلها", "bg-brand-50 ring-brand-200"],
-      ["manual", "🔍", "أختار بنفسي", "تتصفح كتب الصف وتختار كتاب كتاب", "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
+  if (!mode) return head + `<h2 class="font-bold text-slate-900 text-[16px] mb-3">تحب نجهّز الكتب إزاي؟</h2>
+    <div class="grid gap-2.5">${[["popular", "🎒", "شنطة الكتب الجاهزة", "اسم المادة شامل كل الكتب — نجهّز لك الأشهر وتبدّل منها براحتك", "bg-gold-50 ring-gold-300"],
+      ["series", "📚", "شركة واحدة (سلسلة كاملة)", "لو كتبك كلها من شركة واحدة زي الأضواء أو سلاح التلميذ نجهّزها لك بدون ما تدور", "bg-brand-50 ring-brand-200"],
+      ["manual", "🔍", "أختار كتاب بكتاب بنفسي", "تتصفح كتب الصف وتختار كل كتاب واحد بواحد على مزاجك", "bg-white ring-slate-200"]].map(o => `<button class="text-right rounded-2xl p-4 ring-2 ${o[4]} flex items-center gap-3 active:scale-[.98] transition" data-act="wzMode" data-id="${o[0]}">
         <span class="text-[30px]">${o[1]}</span><span class="flex-1"><b class="block text-[15.5px] text-slate-900">${o[2]}</b><span class="block text-[12.5px] text-slate-600 mt-0.5">${o[3]}</span></span>${ic("chevron-left", "text-slate-400")}</button>`).join("")}</div>
     <button class="w-full mt-3 text-[13px] font-semibold text-slate-500 underline underline-offset-4 py-2" data-act="wzNoBooks">${esc(wzName(m))} مش محتاج كتب ← ${last ? "المراجعة" : "التالي"}</button>
     ${WZ.i ? `<button class="btn btn-ghost w-full" data-act="wzPrev">${ic("arrow-right")} رجوع</button>` : `<button class="btn btn-ghost w-full" data-act="wzToFamily">${ic("arrow-right")} العائلة</button>`}`;
@@ -974,6 +1014,7 @@ Router.add("/e/wiz", view => {
 });
 const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
 on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
+on("wzHideGuide", () => { try { localStorage.setItem("wb_wz_guide_off", "1"); } catch (_) {} const el = $("#wzGuide"); if (el) el.remove(); });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
 on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });

@@ -106,7 +106,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(/تكلفة كل فرد/.test(view()) && /مدفوعات كل مرحلة/.test(view()), 'pay breakdown cards');
   await go('/e/me'); await click('[data-act="bigText"]'); check(d.documentElement.style.zoom === '1.15', 'big text on');
   await click('[data-act="bigText"]'); check(!d.documentElement.style.zoom, 'big text off');
-  w.eval('wzClear')(); await go('/e/wiz'); check(/لمين هتحجز/.test(view()) || /الحجز مغلق/.test(view()), 'booking wizard renders');
+  w.eval('wzClear')(); await go('/e/wiz'); check(/أولادك/.test(view()) || /الحجز مغلق/.test(view()), 'booking wizard renders');
   await click('[data-act="userMenu"]'); await click('[data-act="logout"]', dialog()); await settle();
   check(d.getElementById('fEmp'), 'logged out');
 
