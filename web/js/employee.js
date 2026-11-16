@@ -228,7 +228,7 @@ Router.add("/e/home", view => {
   if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
   else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ — ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
   else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم` + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
-  else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتبك 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
+  else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتب " + (ph.Phase_Name || "المرحلة دي") + " 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: carry ? carry.text : "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
   else msg = { icon: psi.icon, title: psi.title, sub: carry ? carry.text : psi.sub, cta: "", href: "" };
 
@@ -1355,12 +1355,13 @@ on("shareWa", () => { window.open("https://wa.me/?text=" + encodeURIComponent(re
 
 // ============================================================ حجوزاتي
 Router.add("/e/orders", view => {
-  const r = APP.emp, items = Emp.phaseItems(), inv = Emp.invoice(), bm = Emp.bookMap();
+  const r = APP.emp, all = Emp.phaseItems(), inv = Emp.invoice(), bm = Emp.bookMap();
+  const isCan = i => String(i.Allocation_Status).startsWith("Cancelled"), items = all.filter(i => !isCan(i)), cancelled = all.filter(isCan);
   if (!r.activePhase) { view.innerHTML = Art.empty("books", "لا توجد حجوزات"); return; }
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   view.innerHTML = `
   ${UI.pageHead("حجوزاتي", esc(r.activePhase.Phase_Name), (items.length ? `<button class="btn btn-outline btn-sm" data-act="printRes">${ic("download")} طلب الحجز</button>` : "") + (inv ? `<button class="btn btn-outline btn-sm" data-act="printInv">${ic("printer")} الفاتورة</button>` : ""))}
-  ${items.length ? `<section class="card card-pad mb-4">${tracker(items)}</section>` : ""}
+  ${items.length ? `<section class="card card-pad mb-4"><div class="flex items-center gap-2 mb-3"><span class="w-8 h-8 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center">${ic("truck", "!w-4 !h-4")}</span><b class="text-[14px] text-slate-900">تتبّع حجز ${esc(r.activePhase.Phase_Name)}</b>${(r.myReservations || []).some(h => h.Phase_ID !== APP.phaseId) ? `<span class="mr-auto text-[11px] text-slate-500">لمرحلة تانية غيّرها من فوق</span>` : ""}</div>${tracker(items)}</section>` : ""}
   <div class="grid gap-4 lg:gap-6 lg:grid-cols-[1fr_360px] items-start">
     <div class="space-y-3">
       ${items.length ? resGroups(items.map(i => ({ item: i, ben: i.Beneficiary || "", grade: (bm[i.Book_ID] || {}).Grade, qty: n(i.Requested_Qty), price: i.Unit_Emp_Price, cover: (bm[i.Book_ID] || {}).Cover_Price }))).map(g => `
@@ -1382,7 +1383,7 @@ Router.add("/e/orders", view => {
           ${i.Unallocated_Reason ? `<div class="mt-2.5 text-[12px] text-amber-700 bg-amber-50 rounded-lg px-2.5 py-1.5 flex gap-1.5">${ic("info", "mt-0.5")}${esc(i.Unallocated_Reason)}</div>` : ""}
         ${typeof retLine === "function" ? retLine(i) : ""}
         </article>`;
-      }).join("")}`).join("") : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
+      }).join("")}`).join("") + cancelledBox(cancelled, bm) : cancelled.length ? cancelledBox(cancelled, bm, true) : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>
     <aside class="space-y-4 lg:sticky lg:top-24">
       ${inv ? `<section class="card overflow-hidden">
@@ -1395,6 +1396,16 @@ Router.add("/e/orders", view => {
     </aside>
   </div>`;
 });
+/** الطلبات الملغية: مطوية تحت أيقونة «طلباتي الملغية» */
+function cancelledBox(list, bm, open) {
+  if (!list.length) return "";
+  const q = list.reduce((a, i) => a + n(i.Requested_Qty), 0);
+  return `<details class="card overflow-hidden mt-2" ${open ? "open" : ""}><summary class="list-none cursor-pointer flex items-center gap-3 p-3.5">
+      <span class="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">${ic("ban")}</span>
+      <span class="flex-1"><b class="block text-[14px] text-slate-800">طلباتي الملغية</b><span class="block text-[11.5px] text-slate-500">${booksWord(q)} — اضغط للعرض</span></span>${ic("chevron-down", "text-slate-400")}</summary>
+    <ul class="divide-y divide-slate-100 border-t border-slate-100">${list.map(i => { const b = bm[i.Book_ID] || {};
+      return `<li class="flex items-center gap-2.5 px-3.5 py-2.5 text-[13px]"><span class="flex-1 min-w-0"><span class="block font-semibold text-slate-700 line-through decoration-rose-300 truncate">${esc(b.Book_Name || i.Book_ID)}</span><span class="block text-[11px] text-slate-500">${esc(b.Grade || "")}${i.Beneficiary ? " · " + esc(i.Beneficiary) : ""}</span></span><span class="num text-slate-500">×${fmt(i.Requested_Qty)}</span><span class="text-[11px] font-bold text-rose-600 bg-rose-50 rounded-full px-2 py-0.5">ملغي</span></li>`; }).join("")}</ul></details>`;
+}
 /** بيانات العضو للمستندات */
 const docEmp = () => { const u = APP.user; return { name: u.fullName, id: u.empId, dept: u.department, mobile: u.mobile }; };
 on("printInv", () => {
