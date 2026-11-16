@@ -856,12 +856,15 @@ function renderBookGrid() {
     const { list, sorted } = gradeList(); count = list.length;
     const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
     el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? "جرّب «كل المدارس»." : "")
-      : bookModeTabs() + (Emp.bookMode === "series" ? bundles(list) : "") + groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="flex items-center gap-2 mb-2">
-          <span class="w-1.5 h-5 rounded-full" style="background:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}"></span><h3 class="font-display font-bold text-slate-900 text-[16px]">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}</h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
+      : bookModeTabs() + (Emp.bookMode === "series" ? bundles(list) : "") + groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-10 -mx-1 mb-2 flex items-center gap-2 rounded-2xl px-3 py-2 bg-white/95 backdrop-blur ring-1 ring-slate-200 shadow-xs" style="top:var(--subjTop,8.5rem);border-inline-start:4px solid ${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}">
+          <span class="w-7 h-7 rounded-lg flex items-center justify-center text-white shrink-0" style="background:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]}">${ic("book-open", "!w-4 !h-4")}</span><h3 class="font-display font-bold text-slate-900 text-[15.5px] flex-1 truncate">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}</h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
           ${g.k !== "__p" && subjRank(g.k) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
         <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="cartDiv">${cartDivider()}</div>`;
   }
   const bc = $("#bookCount"); if (bc) bc.textContent = count ? count + " كتاب" : "";
+  // اسم المادة يثبت تحت شريط البحث اللاصق مباشرة
+  const fixTop = () => { const st = $("#bkSticky"); if (st) el.style.setProperty("--subjTop", (64 + st.offsetHeight) + "px"); };
+  fixTop(); requestAnimationFrame(fixTop);
 }
 Router.add("/e/books", view => {
   const r = APP.emp, f = Emp.filter;
@@ -880,7 +883,7 @@ Router.add("/e/books", view => {
           <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${(() => { const i = myKids().findIndex(k => k.grade === f.grade && (k.type || "") === (f.type || "") && kidBen(k) === Emp.ben); return i >= 0 ? "كتب " + esc(kidName(myKids()[i], i)) + " " + kidEmoji(myKids()[i]) : "كتب"; })()}</div><div class="font-display font-bold text-[15px] leading-tight">${esc(gradeTitle(f.grade))}</div></div>
           <button class="btn btn-sm !bg-white/15 !text-white !ring-white/20" data-act="fGrade" data-id="">${ic("arrow-left-right")} تغيير</button></div>
         <div class="seg grid-cols-${types.length + 1} mt-3 !bg-white/10">${[["", "كل المدارس"], ...types.map(t => [t, t])].map(t => `<button data-act="fType" data-id="${esc(t[0])}" aria-pressed="${f.type === t[0]}" class="!text-[13px] ${f.type === t[0] ? "" : "!text-white/85"}">${esc(t[1])}</button>`).join("")}</div>${gradeTracks(f.grade).length ? `<div class="flex gap-1.5 overflow-x-auto mt-2 pb-0.5">${[["", "كل الشعب"], ...gradeTracks(f.grade).map(t => [t, t])].map(t => `<button data-act="fTrack" data-id="${esc(t[0])}" class="shrink-0 rounded-full px-3 h-8 text-[12px] font-bold ring-1 ${(f.track || "") === t[0] ? "bg-gold-400 text-brand-950 ring-gold-400" : "bg-white/10 text-white ring-white/25"}">${esc(t[1])}</button>`).join("")}</div>` : ""}</div>` : ""}
-      <div class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-2 bg-slate-50/90 backdrop-blur-xl">
+      <div id="bkSticky" class="sticky top-16 z-20 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:mx-0 lg:px-0 pt-1 pb-2 bg-slate-50/90 backdrop-blur-xl">
         ${ctxBar()}
         <div class="input-icon">${ic("search")}<input class="input !h-12 !rounded-2xl shadow-soft !ring-slate-200/80" placeholder="${f.grade ? "ابحث في كتب " + esc(gradeShort(f.grade)) : "ابحث باسم الكتاب أو الناشر أو المادة"}" value="${esc(f.q)}" data-input="bookSearch" type="search"></div>
         ${relOn() && Emp.open() && Emp.ben && !myKids().some(k => kidBen(k) === Emp.ben) ? `<div class="mt-2 rounded-xl bg-sky-50 ring-1 ring-sky-200 text-sky-800 text-[12.5px] px-3 py-2 flex items-center gap-2">${ic("users")} تحجز الآن لـ <b>${esc(Emp.ben)}</b><button class="mr-auto text-sky-700 underline" data-act="pickBen" data-id="">رجوع لأبنائي</button></div>` : ""}
