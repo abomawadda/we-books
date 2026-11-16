@@ -3318,7 +3318,8 @@ on("printResA", empId => {
     plan: { method: h.Payment_Method_Selected, down: h.Calculated_Down_Payment, count: n(h.Installment_Count), per: h.Installment_Value } }), { file: h.Res_ID });
 });
 /** أوامر التوريد للمكتبات (A4، صفحة لكل مكتبة) */
-on("printPO", () => {
+on("printPO", async () => {
+  try { if (typeof qrLib === "function" && !window.qrcode) await Promise.race([qrLib(), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
   const d = A(), { b, s } = maps(), snaps = d.poSnapshots.filter(p => p.Phase_ID === APP.phaseId && n(p.Net_Order_To_Supplier_Qty) > 0);
   if (!snaps.length) return toast("لا يوجد مطلوب من المكتبات في هذه المرحلة", "info");
   const sm = d.settingsMap || {}, br = Brand.get(), gl = (d.catalog.grades || []).map(g => g.label);

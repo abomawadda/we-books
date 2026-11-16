@@ -9,6 +9,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.';
     const fp = path.join(WEB, f); if (!fs.existsSync(fp)) return r.fulfill({ status: 404, body: '' });
     r.fulfill({ body: fs.readFileSync(fp), contentType: f.endsWith('.js') ? 'text/javascript' : f.endsWith('.css') ? 'text/css' : f.endsWith('.html') ? 'text/html' : 'font/woff2' }); });
   await p.goto('https://app.test/'); await p.waitForTimeout(500); await p.evaluate(() => { const s = document.getElementById('splash'); if (s) s.remove(); });
+  await p.evaluate(() => typeof qrLib === 'function' && qrLib()).catch(() => {});
   const emp = { name: 'أحمد محمد عبد الرحمن', id: '1001', dept: 'تكنولوجيا المعلومات', mobile: '01012345678' };
   const docs = {
     invoice: `Doc.invoice(${JSON.stringify({ no: 'EINV-PH-01-1001', date: '2027-01-10', phase: 'المرحلة الأولى', status: 'Partially_Paid', method: 'INSTALLMENT', emp,
