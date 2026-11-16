@@ -699,23 +699,35 @@ function bagBuild() {
   return Object.keys(bySub).sort((a, b) => subjRank(a) - subjRank(b) || a.localeCompare(b, "ar")).map(s => {
     const opts = bySub[s].slice().sort((a, b) => (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
     const inCart = opts.find(b => APP.cart[ck(b.Book_ID, Emp.ben)]);
-    return { s, opts, pick: inCart ? inCart.Book_ID : "", on: !!inCart, had: !!inCart }; // لا اختيار مسبق: الموظف يختار بنفسه من كل كتب المادة
+    return { s, opts, pick: inCart ? inCart.Book_ID : "", on: !!inCart, had: !!inCart, qty: inCart ? APP.cart[ck(inCart.Book_ID, Emp.ben)] : 1 }; // لا اختيار مسبق: الموظف يختار بنفسه من كل كتب المادة
   });
 }
 function bagHTML() {
-  const m = Emp.bookMap(), sel = BAG.rows.filter(r => r.on && m[r.pick]), tot = sel.reduce((a, r) => a + n(m[r.pick].Emp_Selling_Price), 0), cov = sel.reduce((a, r) => a + n(m[r.pick].Cover_Price), 0);
+  const m = Emp.bookMap(), sel = BAG.rows.filter(r => r.on && m[r.pick]), tot = sel.reduce((a, r) => a + n(m[r.pick].Emp_Selling_Price) * (r.qty || 1), 0), cov = sel.reduce((a, r) => a + n(m[r.pick].Cover_Price) * (r.qty || 1), 0);
   const opt = (r, i, o) => { const on = r.on && o.Book_ID === r.pick, lg = pubLogo(o.Publisher);
     return `<button class="w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-right ring-1 transition active:scale-[.99] ${on ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${on}">
       <span class="w-5 h-5 rounded-full shrink-0 flex items-center justify-center ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check", "!w-3 !h-3") : ""}</span>
       ${lg ? `<span class="w-9 h-7 rounded-md bg-white ring-1 ring-slate-100 p-0.5 shrink-0 flex items-center justify-center"><img src="${esc(lg)}" alt="" class="max-w-full max-h-full object-contain" loading="lazy"></span>` : ""}
       <span class="flex-1 min-w-0 leading-tight"><b class="block text-[13.5px] text-slate-900 truncate">${esc(o.Publisher)}</b>${o.Book_Part ? `<span class="block text-[11px] text-slate-500 truncate">${esc(o.Book_Part)}</span>` : ""}</span>
       <span class="text-left shrink-0">${o.Book_Status === "Pricing" ? `<span class="text-[11px] font-bold text-amber-700">🚚 يتسعّر مع الشحنة</span>` : `<b class="block num text-brand-800 text-[13.5px]">${fmt(o.Emp_Selling_Price)}</b><span class="block text-[10.5px] text-slate-400 line-through num">${fmt(o.Cover_Price)}</span>`}</span></button>`; };
-  return `<div class="rounded-2xl bg-gold-50 ring-1 ring-gold-200 p-3 mb-3 flex items-center gap-3"><span class="text-[28px]">🎒</span><div class="text-[13px] text-brand-900 leading-relaxed">كتب ${esc(gradeTitle(Emp.filter.grade))} <b>مادة مادة</b> — تحت كل مادة كل الكتب المتاحة منها. ${gTxt("اختار", "اختاري")} كتاب لكل مادة ${gTxt("تحتاجها", "تحتاجيها")}، والضغط تاني على الكتاب يلغي اختياره.</div></div>
+  const nSub = BAG.rows.length, nOn = BAG.rows.filter(r => r.on).length, copies = sel.reduce((a, r) => a + (r.qty || 1), 0);
+  return `<div class="relative overflow-hidden rounded-3xl p-4 mb-4 text-white shadow-soft" style="background:linear-gradient(135deg,#0f3d63 0%,#1d5f8f 60%,#2f7fb5 100%)">
+    <span class="absolute -left-6 -top-6 w-28 h-28 rounded-full bg-white/10"></span><span class="absolute left-10 -bottom-10 w-24 h-24 rounded-full bg-gold-400/20"></span>
+    <div class="relative flex items-start gap-3"><span class="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center text-[26px] shrink-0">🎒</span>
+      <div class="flex-1 min-w-0"><div class="text-[11px] font-semibold tracking-wide text-gold-200">شنطة ${esc(gradeTitle(Emp.filter.grade))}</div>
+        <div class="font-display font-bold text-[17px] leading-snug mt-0.5">${gTxt("اختار كتاب لكل مادة", "اختاري كتاب لكل مادة")}</div>
+        <div class="text-[12px] text-brand-100 mt-1 leading-relaxed">تحت كل مادة كل الكتب المتاحة منها · ${gTxt("حدد", "حددي")} عدد النسخ بـ − و + · الضغط مرة تانية يلغي الاختيار</div></div></div>
+    <div class="relative mt-3.5"><div class="flex justify-between text-[11.5px] text-brand-100 mb-1.5"><span>تم اختيار <b class="num text-white">${nOn}</b> من <span class="num">${nSub}</span> مادة</span><span>${copies ? `<b class="num text-white">${copies}</b> نسخة` : ""}</span></div>
+      <div class="h-2 rounded-full bg-white/15 overflow-hidden"><span class="block h-full rounded-full bg-gold-400 transition-all" style="width:${nSub ? Math.round(nOn / nSub * 100) : 0}%"></span></div></div></div>
   <div class="space-y-3">${BAG.rows.map((r, i) => { const [c1] = toneOf(r.s); return `<section class="rounded-2xl ring-1 ring-slate-200 bg-slate-50/60 p-3">
     <div class="flex items-center gap-2 mb-2"><span class="w-1.5 h-6 rounded-full" style="background:${c1}"></span><b class="text-[15px] text-slate-900 flex-1">${esc(r.s)}</b><span class="text-[11.5px] ${r.on ? "font-bold text-emerald-700" : "text-slate-400"}">${r.on ? "✓ تم الاختيار" : r.opts.length + (r.opts.length > 2 ? " كتب" : r.opts.length === 2 ? " كتابين" : " كتاب")}</span></div>
-    <div class="grid sm:grid-cols-2 gap-1.5">${r.opts.map(o => opt(r, i, o)).join("")}</div></section>`; }).join("")}</div>
+    <div class="grid sm:grid-cols-2 gap-1.5">${r.opts.map(o => opt(r, i, o)).join("")}</div>
+    ${r.on ? `<div class="mt-2.5 flex items-center justify-between gap-2 rounded-xl bg-white ring-1 ring-brand-100 px-3 py-2"><span class="text-[12.5px] font-semibold text-slate-700">${ic("copy", "inline -mt-0.5 text-brand-600")} عدد النسخ</span>
+      <span class="flex items-center gap-1.5"><button type="button" class="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|-1" aria-label="أقل" ${(r.qty || 1) <= 1 ? "disabled" : ""}>−</button>
+        <b class="w-8 text-center num text-[16px] text-brand-800">${r.qty || 1}</b>
+        <button type="button" class="w-9 h-9 rounded-xl bg-brand-600 text-white text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|1" aria-label="أكثر" ${(r.qty || 1) >= 10 ? "disabled" : ""}>+</button></span></div>` : ""}</section>`; }).join("")}</div>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
-    <div class="flex justify-between text-slate-500"><span>${booksWord(sel.length)} قبل الخصم</span><span class="line-through num">${moneyTxt(cov)}</span></div>
+    <div class="flex justify-between text-slate-500"><span>${booksWord(copies)} قبل الخصم</span><span class="line-through num">${moneyTxt(cov)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
     <div class="flex justify-between items-baseline pt-1 border-t border-slate-200"><b>إجمالي الشنطة</b><span class="text-xl font-bold text-brand-800 num">${money(tot)}</span></div></div>`;
 }
@@ -730,11 +742,12 @@ on("bagOpen", () => { BAG.inline = false; BAG._for = "";
     footer: `<button class="btn btn-primary btn-lg w-full" data-act="bagAdd">${ic("shopping-cart")} أضف للسلة</button>` });
   bagRender();
 });
+on("bagQty", v => { const [i, d] = String(v).split("|"), r = BAG.rows[+i]; r.qty = Math.min(10, Math.max(1, (r.qty || 1) + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
 on("bagTog", v => { const r = BAG.rows[+v]; r.on = !r.on; bagRender(); });
 on("bagPick", v => { const [i, id] = String(v).split("|"), r = BAG.rows[+i]; if (r.on && r.pick === id) r.on = false; else { r.pick = id; r.on = true; } bagRender(); });
 on("bagAdd", () => {
   const sel = BAG.rows.filter(r => r.on); let added = 0;
-  sel.forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k] && r.had) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) { APP.cart[k] = 1; added++; } });
+  sel.forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k] && r.had) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (APP.cart[k] !== (r.qty || 1)) { added += (r.qty || 1) - (APP.cart[k] || 0) > 0 ? (r.qty || 1) - (APP.cart[k] || 0) : 0; APP.cart[k] = r.qty || 1; } });
   Emp.dirty = true; if (BAG.m) BAG.m.close(); BAG.m = null;
   renderBookGrid(); refreshCartViews();
   toast(added ? `🎒 الشنطة جاهزة! اتضاف ${booksWord(added)} للسلة` : "الشنطة في السلة بالفعل ✅", "success");
@@ -1175,7 +1188,7 @@ on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); 
 const wzAdvance = () => { const ms = wzMembers(); BAG._for = ""; BAG.inline = false; if (WZ.i + 1 < ms.length) wzGo("member", WZ.i + 1); else wzGo("review"); };
 const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); };
 on("wzNext", () => {
-  BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (!APP.cart[k]) APP.cart[k] = 1; });
+  BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); APP.cart[ck(r.pick, Emp.ben)] = r.qty || 1; });
   BAG.rows.filter(r => !r.on).forEach(r => r.opts.forEach(o => { delete APP.cart[ck(o.Book_ID, Emp.ben)]; }));
   wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false);
   Emp.dirty = true; refreshCartViews(); BAG._for = ""; BAG.inline = false; wzGo("afterMember", WZ.i);
