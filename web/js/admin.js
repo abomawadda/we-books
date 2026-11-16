@@ -3114,7 +3114,7 @@ Router.add("/a/delivery", view => {
     <div id="delList">${deliveryList()}</div><div class="h-5"></div>`
     + UI.section(`${ic("file-text", "text-brand-600")} مستندات التسليم والمرتجعات`, "آخر 80 مستند في المرحلة", UI.table([
       { t: "المستند", v: x => `<b class="num">${esc(x.Printed_Receipt_No)}</b>` },
-      { t: "النوع", v: x => x.Doc_Type === "EMP_DELIVERY" ? pill("", "تسليم", "green") : x.Doc_Type === "EMP_RETURN" ? pill("", "مرتجع موظف", "amber") : pill("", "مرتجع للمكتبة", "blue") },
+      { t: "النوع", v: x => x.Doc_Type === "EMP_DELIVERY" ? pill("", "تسليم", "green") : x.Doc_Type === "EMP_RETURN" ? pill("", "مرتجع موظف", "amber") : x.Doc_Type === "EMP_EXCHANGE" ? pill("", "استبدال", "blue") : pill("", "مرتجع للمكتبة", "blue") },
       { t: "الطرف", v: "Party_ID" }, { t: "الكتاب", v: x => esc(bookName(b, x.Book_ID)) }, { t: "العدد", cls: "num", v: x => fmt(x.Qty) }, { t: "القيمة", cls: "num", v: x => fmt(x.Total_Amount_Impact) },
       { t: "التاريخ", cls: "num", v: x => esc(dt(x.Trans_Date)) }, { t: "المستلم / السبب", v: x => esc(x.Received_By || x.Return_Reason) },
       { t: "", actions: true, v: x => `<button class="act-ic act-ic-edit" data-act="printDoc" data-id="${esc(x.Printed_Receipt_No)}" title="طباعة المستند" aria-label="طباعة المستند">${ic("printer")}</button>` }
@@ -3155,7 +3155,7 @@ on("empReturn", async id => {
 });
 function printDoc(no) {
   const d = A(), { e, b } = maps(), lines = d.deliveryReturns.filter(x => x.Printed_Receipt_No === no); if (!lines.length) return;
-  const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : "إذن ارتجاع كتب";
+  const f = lines[0], title = f.Doc_Type === "EMP_DELIVERY" ? "إذن تسليم كتب" : f.Doc_Type === "EMP_EXCHANGE" ? "إذن استبدال كتب" : "إذن ارتجاع كتب";
   Doc.show(title + " " + no, Doc.delivery({ title, no, date: f.Trans_Date, emp: { name: empName(e, f.Party_ID), id: f.Party_ID }, lines: lines.map(l => ({ code: l.Book_ID, name: bookName(b, l.Book_ID), qty: n(l.Qty) })), note: f.Received_By ? "المستلم: " + f.Received_By + " · المسلِّم: " + (f.Handled_By || "") : "" }), { file: no, ref: no });
 }
 on("printDoc", id => printDoc(id));

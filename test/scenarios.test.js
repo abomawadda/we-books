@@ -596,6 +596,29 @@ fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad c
   }
   fail(api('EMP_RETURN_REQUEST', { resItemId: 'nope', qty: 1 }, e1), 'return on missing item');
 }
+// استبدال نسخة معيبة: الفاتورة لا تتغير، سبب الرفض إجباري، وسجل الطلبات محفوظ
+{
+  const it = rows(S.RES_ITEMS).find(i => Number(i.Delivered_Qty) - Number(i.Returned_Qty) > 0 && ['1001', '1002', '1003'].includes(i.Emp_ID));
+  if (it) {
+    const tok = it.Emp_ID === '1001' ? e1 : it.Emp_ID === '1002' ? e2 : e3, cd = new Date(clock.now), p2 = x => String(x).padStart(2, '0');
+    const nowTxt = cd.getFullYear() + '-' + p2(cd.getMonth() + 1) + '-' + p2(cd.getDate()) + ' ' + p2(cd.getHours()) + ':' + p2(cd.getMinutes()) + ':00';
+    rows(S.DELIVERY_RETURNS).filter(d => d.Doc_Type === 'EMP_DELIVERY' && d.Res_Item_ID === it.Res_Item_ID).forEach(d => ctx.__DB.updateRecordByPK(S.DELIVERY_RETURNS, 'Doc_ID', d.Doc_ID, { Trans_Date: nowTxt }));
+    fail(api('EMP_RETURN_REQUEST', { resItemId: it.Res_Item_ID, qty: 1, kind: 'EXCHANGE' }, tok), 'exchange needs defect', /العيب/);
+    const r = api('EMP_RETURN_REQUEST', { resItemId: it.Res_Item_ID, qty: 1, kind: 'EXCHANGE', reason: 'صفحات ناقصة' }, tok);
+    if (r.success) {
+      fail(api('RESOLVE_RETURN_REQUEST', { resItemId: it.Res_Item_ID, approve: false }, coord), 'reject needs reason', /سبب الرفض/);
+      const invBefore = rows(S.EMP_INVOICES).find(i => i.Emp_ID === it.Emp_ID && i.Phase_ID === it.Phase_ID).Net_Final_Invoice_Amount, retBefore = Number(it.Returned_Qty);
+      const x = api('RESOLVE_RETURN_REQUEST', { resItemId: it.Res_Item_ID, approve: true }, coord);
+      if (x.success) {
+        assert.ok(/^EXC-/.test(x.receiptNo)); passed++;
+        assert.strictEqual(rows(S.EMP_INVOICES).find(i => i.Emp_ID === it.Emp_ID && i.Phase_ID === it.Phase_ID).Net_Final_Invoice_Amount, invBefore); passed++;
+        assert.strictEqual(Number(rows(S.RES_ITEMS).find(i => i.Res_Item_ID === it.Res_Item_ID).Returned_Qty), retBefore); passed++;
+        const rr = JSON.parse(rows(S.RES_ITEMS).find(i => i.Res_Item_ID === it.Res_Item_ID).Return_Request);
+        assert.strictEqual(rr.kind, 'EXCHANGE'); assert.strictEqual(rr.status, 'Approved'); assert.ok(Array.isArray(rr.history)); passed++;
+      } else { assert.ok(/مفيش نسخة سليمة/.test(x.message), x.message); passed++; console.log('  (exchange: no free stock — expected guard)'); }
+    } else console.log('  (exchange window:', r.message, ')');
+  }
+}
 console.log('\nALL PASSED:', passed, 'checks');
 
 
