@@ -419,7 +419,9 @@ const kidEmoji = k => k.rel ? "🧒" : k.gender === "g" ? "👧" : "👦";
 const kidName = (k, i) => k.name || (k.gender === "g" ? "ابنتي" : "ابني") + (i ? " " + (i + 1) : "");
 /** اسم المستفيد في الحجز: فارغ لأبناء الموظف، و«الاسم — الصلة» للقريب */
 const kidBen = k => k && k.rel ? String(k.name).trim() + " — " + k.rel : "";
-const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت", "حفيد", "حفيدة", "أخ", "أخت", "ابن عم", "ابن خال", "أخرى"];
+const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت", "حفيد", "حفيدة", "أخ", "أخت", "ابن عم", "ابنة عم", "ابن خال", "ابنة خال", "أخرى"];
+/** النوع من صلة القرابة تلقائياً (ابن/أخ/حفيد ← ولد، ابنة/أخت/حفيدة ← بنت)؛ «أخرى» يختارها الموظف */
+const relGender = r => /^(ابنة|بنت|أخت|حفيدة)/.test(String(r || "")) ? "g" : r && r !== "أخرى" ? "b" : null;
 const kidTypeTxt = t => t ? "مدارس " + t : "كل المدارس";
 /** كم كتاب في السلة لصف هذا الابن */
 const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && (k.rel ? bn(id) === kidBen(k) : b.Grade === k.grade && !bn(id)); }).reduce((s, id) => s + APP.cart[id], 0);
@@ -457,12 +459,12 @@ function kdHTML() {
     ${KD.list.length < 12 ? `<button class="shrink-0 flex flex-col items-center gap-1 w-16" data-act="kdAdd"><span class="w-14 h-14 rounded-2xl border-2 border-dashed border-brand-300 text-brand-600 flex items-center justify-center text-2xl">${ic("plus")}</span><span class="text-[11px] font-semibold text-brand-700">إضافة</span></button>` : ""}</div>
 
   <div class="rounded-3xl bg-slate-50 p-4 mt-2 space-y-4">
-    ${relOn() ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["", "👦👧 ابني / بنتي"], ["rel", "🧒 قريب"]].map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${!!k.rel === !!o[0]}">${o[1]}</button>`).join("")}</div>` : ""}
+    <div class="seg ${relOn() ? "grid-cols-3" : "grid-cols-2"} !bg-white ring-1 ring-slate-200">${[["b", "👦 ابني"], ["g", "👧 بنتي"]].concat(relOn() ? [["rel", "🧒 قريب"]] : []).map(o => `<button data-act="kdKind" data-id="${o[0]}" aria-pressed="${o[0] === "rel" ? !!k.rel : !k.rel && k.gender === o[0]}">${o[1]}</button>`).join("")}</div>
     ${k.rel ? `<div><div class="label">صلة القرابة</div><div class="flex flex-wrap gap-1.5">${RELS.map(r => `<button class="chip !h-8 !text-xs" data-act="kdRel" data-id="${esc(r)}" aria-pressed="${k.rel === r}">${esc(r)}</button>`).join("")}</div>
       <p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5")} كتب القريب تُحسب على حسابك (المقدم والأقساط) وتظهر باسمه في الطلب.</p></div>` : ""}
     <div class="grid grid-cols-[1fr_auto] gap-2 items-end">
-      <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="مثلاً: محمد" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
-      <div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>
+      <div><label class="label" for="kdName">الاسم ${k.rel ? `<span class="text-rose-500">*</span>` : `<span class="text-slate-400 font-normal">(اختياري)</span>`}</label><input id="kdName" class="input" maxlength="30" placeholder="${k.gender === "g" ? "مثلاً: مريم" : "مثلاً: محمد"}" value="${esc(k.name)}" data-input="kdName" autocomplete="off"></div>
+      ${k.rel && !relGender(k.rel) ? `<div class="seg grid-cols-2 !bg-white ring-1 ring-slate-200">${[["b", "👦 ولد"], ["g", "👧 بنت"]].map(g => `<button data-act="kdGender" data-id="${g[0]}" aria-pressed="${k.gender === g[0]}" class="!px-3">${g[1]}</button>`).join("")}</div>` : `<span class="h-11 px-3 rounded-xl bg-white ring-1 ring-slate-200 flex items-center text-[13px] font-semibold text-slate-600">${k.gender === "g" ? "👧 بنت" : "👦 ولد"}</span>`}
     </div>
     <div><div class="label">في أي مرحلة؟</div>
       <div class="grid grid-cols-2 gap-2">${stages.map(s => `<button class="rounded-2xl px-3 py-2.5 text-[13.5px] font-bold ring-1 transition ${st === s ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdStage" data-id="${esc(s)}">${esc(s.replace("المرحلة ", ""))}</button>`).join("")}</div></div>
@@ -470,9 +472,9 @@ function kdHTML() {
     ${k.grade ? `<div class="animate-pop-in"><div class="label">نوع المدرسة</div><div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 transition flex items-center gap-2 ${(k.type || "") === t[0] ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="kdType" data-id="${esc(t[0])}">
         <span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"} ring-0">${ic(t[1])}</span><span class="leading-tight"><span class="block font-bold text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</span><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div></div>` : ""}
     ${k.grade && gradeTracks(k.grade).length ? `<div class="animate-pop-in"><div class="label">الشعبة <span class="text-slate-400 font-normal">(لكتب الشعبة + الكتب المشتركة)</span></div><div class="grid grid-cols-2 gap-2">${gradeTracks(k.grade).concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 transition text-right ${(k.track || "") === t ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-700 ring-slate-200"}" data-act="kdTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div></div>` : ""}
-    ${k.grade ? `<div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-3 flex items-center gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500")} <span>${esc(kidName(k, KD.i))} في <b>${esc(gradeTitle(k.grade))}</b> — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>` : ""}
+    ${k.grade ? `<div class="rounded-2xl bg-white ring-1 ring-emerald-200 p-3 flex items-center gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500")} <span>${k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك "}${esc(k.name || "")} في <b>${esc(gradeTitle(k.grade))}</b> — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>` : ""}
   </div>
-  ${KD.list.length > 1 ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${k.rel ? "هذا القريب" : "هذا الابن"}</button>` : ""}
+  ${(KD.list.length > 1 || k.grade) ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic("trash-2")} حذف ${esc(k.name || (k.rel ? "هذا القريب" : k.gender === "g" ? "هذه البنت" : "هذا الابن"))}</button>` : ""}
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
 const kdRender = () => { if (KD.m && KD.m.body) { KD.m.body.innerHTML = kdHTML(); const b = KD.m.root.querySelector("[data-act=kdSave]"); if (b) { const n2 = KD.list.filter(x => x.grade).length; b.disabled = !n2; b.innerHTML = `${ic("check-check")} حفظ ${n2 > 1 ? "(" + n2 + ")" : ""}`; } } };
@@ -487,8 +489,8 @@ function kidsEditor(addRel) {
 }
 on("kidsEdit", () => { KD._addRel = false; kidsEditor(false); });
 on("addRel", () => { KD._addRel = true; kidsEditor(true); });
-on("kdKind", v => { const k = KD.list[KD.i]; k.rel = v ? (k.rel || "ابن أخ") : ""; kdRender(); });
-on("kdRel", v => { KD.list[KD.i].rel = v; kdRender(); });
+on("kdKind", v => { const k = KD.list[KD.i]; if (v === "rel") { k.rel = k.rel || (k.gender === "g" ? "ابنة أخ" : "ابن أخ"); k.gender = relGender(k.rel) || k.gender; } else { k.rel = ""; k.gender = v; } kdRender(); });
+on("kdRel", v => { const k = KD.list[KD.i]; k.rel = v; const g = relGender(v); if (g) k.gender = g; kdRender(); });
 on("kdName", v => { (KD.list[KD.i] || {}).name = v; });
 on("kdGender", v => { KD.list[KD.i].gender = v; kdRender(); });
 on("kdStage", v => { const k = KD.list[KD.i]; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) k.grade = ""; kdRender(); });
@@ -497,16 +499,31 @@ on("kdTrack", v => { KD.list[KD.i].track = v; kdRender(); if (navigator.vibrate)
 on("kdType", v => { KD.list[KD.i].type = v; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdPick", v => { KD.i = +v; kdRender(); });
 on("kdAdd", () => { if (KD.list[KD.i] && !KD.list[KD.i].grade) return toast("اختر الصف أولاً 👆", "warning"); KD.list.push(kdBlank()); KD.i = KD.list.length - 1; kdRender(); });
-on("kdDel", () => { KD.list.splice(KD.i, 1); KD.i = Math.max(0, KD.i - 1); kdRender(); });
+on("kdDel", async () => {
+  const k = KD.list[KD.i]; if (!k) return;
+  const nm = k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك"), c = k.grade ? kidCartCount(k) : 0;
+  const ok = await UI.confirm({ title: "حذف " + nm + "؟", message: c ? `${nm} ليه ${c} ${c === 1 ? "كتاب" : "كتب"} في حجزك/سلتك. الحذف بيشيله من العيلة بس — كتبه فاضلة في الحجز، ولو عايز تلغيها شيلها من السلة وأكّد.` : `هيتشال ${nm} من قائمة العيلة. تقدر تضيفه تاني في أي وقت.`, ok: "احذف", tone: "danger", icon: "trash-2" });
+  if (!ok) return; KD.list.splice(KD.i, 1); if (!KD.list.length) KD.list.push(kdBlank()); KD.i = Math.max(0, KD.i - 1); kdRender(); });
 on("kdSave", async () => {
   const kids = KD.list.filter(k => k.grade).map(k => ({ name: (k.name || "").trim(), gender: k.gender, grade: k.grade, type: k.type || "", track: gradeTracks(k.grade).includes(k.track) ? k.track : "", rel: k.rel || "" }));
   if (!kids.length) return toast("اختر الصف لفرد واحد على الأقل", "warning");
   const noName = kids.findIndex(k => k.rel && !k.name); if (noName >= 0) { KD.i = KD.list.indexOf(KD.list.filter(k => k.grade)[noName]); kdRender(); return toast("اكتب اسم القريب", "warning"); }
+  const seen = {}, dup = kids.find(k => { const key = (k.name + "|" + k.rel).trim(); if (k.name && seen[key]) return true; seen[key] = 1; return false; });
+  if (dup) return toast(`الاسم «${dup.name}» متكرر — غيّر واحد منهم`, "warning");
+  const before = (APP.emp.employee.kids || []).map(k => Object.assign({}, k));
   const r = await call("SAVE_MY_KIDS", { kids }, { block: true });
   if (!r.success) return toast(r.message, "danger");
+  // قريب اتغير اسمه أو صلته وكتبه في السلة: ننقل كتبه للاسم الجديد عشان الحجز يفضل مربوط بيه
+  let moved = 0;
+  before.filter(o => o.rel).forEach(o => { const oldBen = kidBen(o), nk = kids.find(k => k.rel && k.grade === o.grade && kidBen(k) !== oldBen && !before.some(b => kidBen(b) === kidBen(k)));
+    if (!nk) return; Object.keys(APP.cart || {}).filter(key => bn(key) === oldBen).forEach(key => { const nkey = ck(bk(key), kidBen(nk)); APP.cart[nkey] = (APP.cart[nkey] || 0) + APP.cart[key]; delete APP.cart[key]; moved++; }); });
+  if (moved) { Emp.dirty = true; Emp.bens = [...new Set(Object.keys(APP.cart).map(bn).filter(Boolean))]; }
   APP.emp.employee.kids = kids.map(k => Object.assign({ promoted: 0 }, k));
   if (KD.m) KD.m.close(); KD.m = null;
-  toast(kids.length > 1 ? `رائع! جهّزنا كتب ${kids.length} أفراد 🎉` : "رائع! جهّزنا الكتب 🎉", "success");
+  const lbl = k => (k.name || (k.rel ? "قريب" : k.gender === "g" ? "بنتك" : "ابنك")), key = k => (k.name || "") + "|" + (k.rel || "") + "|" + k.grade;
+  const added = kids.filter(k => !before.some(b => key(b) === key(k) || (b.name && b.name === k.name && b.rel === k.rel))), removed = before.filter(b => !kids.some(k => key(b) === key(k) || (b.name && b.name === k.name && b.rel === k.rel)));
+  const msg = [added.length ? "اتضاف " + added.map(lbl).join(" و") : "", removed.length ? "اتشال " + removed.map(lbl).join(" و") : ""].filter(Boolean).join(" · ");
+  toast((msg || (kids.length > 1 ? `اتحفظت عيلتك (${kids.length} أفراد)` : "اتحفظ")) + " 🎉" + (moved ? " — ونقلنا كتب القريب لاسمه الجديد، أكّد الحجز عشان يتحدث" : ""), "success");
   const last = KD._addRel ? kids.length - 1 : 0;
   if (Router.current === "/e/wiz") { WZ.sel = null; wzSave(); setTimeout(() => Shell.rerender(), 350); return; }
   setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
