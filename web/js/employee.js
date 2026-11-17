@@ -700,6 +700,8 @@ on("kdSave", async () => {
   toast((msg || (kids.length > 1 ? `اتحفظت عيلتك (${kids.length} أفراد)` : "اتحفظ")) + " 🎉" + (moved ? " — ونقلنا كتب القريب لاسمه الجديد، أكّد الحجز عشان يتحدث" : "") + (dropKeys.length ? " — واتشالت كتب الصف القديم" : ""), "success");
   const last = KD._addRel ? kids.length - 1 : 0;
   if (Router.current === "/e/wiz") { WZ.sel = null; wzSave(); setTimeout(() => Shell.rerender(), 350); return; }
+  // تعديل بيانات العيلة مش سيناريو حجز: نفتح كتب الابن بس لو الحجز مفتوح وإحنا أصلاً في صفحة احجز
+  if (!Emp.open() || !["/e/books", "/e/home"].includes(Router.current)) { setTimeout(() => Shell.rerender(), 350); return; }
   setTimeout(() => openKid(last), 350); // بعد اكتمال رجوع السجل الخاص بإغلاق النافذة
 });
 

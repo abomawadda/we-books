@@ -327,7 +327,7 @@ on("wizStart", async (...a) => {
 // ---------------------------------------------------------------- «محجوز بالفعل» أعلى الدليل للابن المختار
 function bookedForKidHTML() {
   const f = Emp.filter, ben = Emp.ben || "", bm = Emp.bookMap();
-  if (!f.grade || f.q) return "";
+  if (!f.grade || f.q || !Emp.open()) return ""; // الحجز مقفول: التصفّح للعلم بس، والحجز في «حجوزاتي»
   const saved = {}; Emp.activeItems().filter(i => (i.Beneficiary || "") === ben).forEach(i => { (saved[i.Book_ID] = saved[i.Book_ID] || { qty: 0, carried: null }).qty += n(i.Requested_Qty); if (i.Carried_From_Item_ID) saved[i.Book_ID].carried = i; });
   const ids = Object.keys(saved).filter(id => (bm[id] || {}).Grade === f.grade || !bm[id]);
   if (!ids.length) return "";
