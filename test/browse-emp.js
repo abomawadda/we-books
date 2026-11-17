@@ -58,6 +58,11 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.evaluate(() => kidsEditor(false, { kid: myKids()[0] })); await p.waitForTimeout(500); await shot('fam-kidedit');
     await p.keyboard.press('Escape'); await p.waitForTimeout(400);
     await p.evaluate(() => ACTIONS.kidsAddNew()); await p.waitForTimeout(500); await shot('fam-kidnew');
+    await p.evaluate(() => { ACTIONS.kdConfirmName(); }); await p.waitForTimeout(200);
+    await p.evaluate(() => document.querySelector('[data-act="kdStage"]').click()); await p.waitForTimeout(200);
+    await p.evaluate(() => document.querySelector('[data-act="kdGrade"]').click()); await p.waitForTimeout(200);
+    await p.evaluate(() => { const t = document.querySelector('[data-act="kdTrack"]'); if (t) t.click(); }); await p.waitForTimeout(200);
+    await p.evaluate(() => document.querySelector('[data-act="kdType"]').click()); await p.waitForTimeout(900); await shot('fam-kidask');
     await p.keyboard.press('Escape'); await p.waitForTimeout(400);
     await p.evaluate(() => Router.go('/e/wiz')); await p.waitForTimeout(600); await shot('fam-wiz');
     await p.evaluate(() => { Emp.cartStep = 'list'; Router.go('/e/cart'); }); await p.waitForTimeout(600); await shot('cart-1');
