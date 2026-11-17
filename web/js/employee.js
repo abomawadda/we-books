@@ -780,7 +780,7 @@ function gradePicker() {
   const go = gradeOrder(), grades = Object.keys(cnt).sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99) || a.localeCompare(b, "ar"));
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
-  return `${Emp.open() ? "" : ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
+  const body = `${Emp.open() ? "" : ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
       <div class="grid grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-2.5 min-w-0 text-right flex items-center gap-2 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[11.5px] text-slate-500 leading-snug">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span><span class="block text-[11px] font-bold mt-0.5 ${c ? "text-emerald-600" : "text-brand-600"}">${c ? c + " في السلة" : kidAvail(k) + " كتاب"}</span></span></button>`; }).join("")}</div>
       <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
     : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
@@ -792,6 +792,9 @@ function gradePicker() {
         <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>
 </div>`; }).join("")}</div></section>`).join("")}
 `;
+  // الحجز مقفول: الصفوف للتصفح والأسعار فقط — مطوية عشان ما تبانش كأن الحجز شغال
+  return Emp.open() ? body : `<details class="card mb-4 overflow-hidden"><summary class="list-none cursor-pointer p-4 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">${ic("library")}</span>
+    <span class="flex-1"><b class="block text-[14px] text-slate-800">تصفّح الكتب والأسعار</b><span class="block text-[12px] text-slate-500">للعلم بس — الحجز هيتفتح مع المرحلة الجديدة</span></span>${ic("chevron-down", "text-slate-400")}</summary><div class="px-4 pb-4">${body}</div></details>`;
 }
 // ============================================================ جهّز الشنطة: كتاب لكل مادة بضغطة
 const BAG = { rows: [], m: null };
