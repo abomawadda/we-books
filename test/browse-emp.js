@@ -55,6 +55,13 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.evaluate(() => ACTIONS.kidsAddNew()); await p.waitForTimeout(500); await shot('fam-kidnew');
     await p.keyboard.press('Escape'); await p.waitForTimeout(400);
     await p.evaluate(() => Router.go('/e/wiz')); await p.waitForTimeout(600); await shot('fam-wiz');
+    await p.evaluate(() => { Emp.cartStep = 'list'; Router.go('/e/cart'); }); await p.waitForTimeout(600); await shot('cart-1');
+    await p.evaluate(() => ACTIONS.cartStep('pay')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-2');
+    await p.evaluate(() => ACTIONS.cartStep('confirm')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-3');
+    await p.evaluate(() => { APP.emp.employee.kids = []; Emp.filter.grade = ''; Emp.ben = ''; Emp.gsel = []; Router.go('/e/books'); }); await p.waitForTimeout(600);
+    await p.evaluate(() => { const gs = [...document.querySelectorAll('[data-act="gpSel"]')].slice(0, 2); gs[0].click(); }); await p.waitForTimeout(300); await p.evaluate(() => { const g = [...document.querySelectorAll('[data-act="gpSel"]')][1]; if (g) g.click(); }); await p.waitForTimeout(400);
+    await p.evaluate(() => scrollTo(0, 400)); await p.waitForTimeout(300); await shot('grades-multi');
+    await p.evaluate(() => ACTIONS.gpStart()); await p.waitForTimeout(700); await shot('grades-start');
     await b.close(); return;
   }
   for (const id of ['BK-101', 'BK-201']) { const el = await p.$(`[data-act="cartInc"][data-id="${id}"]`); if (el) { await el.click(); await p.waitForTimeout(150); } }

@@ -773,7 +773,7 @@ if (typeof cartHTML === "function") { const _cartHTML1 = cartHTML; cartHTML = fu
   const html = _cartHTML1(); if (cartPostDelivery() || Emp._noList || !Emp.open()) return html;
   const al = cartAlerts(), box = al.length ? `<div class="space-y-1.5 mb-3">${al.map(a => `<div class="rounded-xl bg-${a[0]}-50 ring-1 ring-${a[0]}-100 text-${a[0]}-800 px-3 py-2 text-[12.5px] flex gap-2">${ic(a[1], "shrink-0 mt-0.5")}<span>${a[2]}</span></div>`).join("")}</div>` : "";
   const sum = cartPaySummary(), btn = '<button data-act="submitRes"';
-  return box + (sum && html.includes(btn) ? html.replace(btn, sum + btn) : html + sum);
+  return box + (sum && html.includes(btn) ? html.replace(btn, sum + btn) : html); // ملخص الدفع في خطوة التأكيد فقط
 }; }
 
 // مسودة السلة على الخادم: تُحفظ بعد كل تعديل (بعد 5 ثوانٍ من آخر تغيير) وتُستعاد من أي جهاز
@@ -868,7 +868,7 @@ function budgetBar(g, label, emoji, spent) {
     <div class="mt-2 h-2 rounded-full bg-white overflow-hidden"><div class="h-full rounded-full ${over ? "bg-rose-500" : pct > 85 ? "bg-amber-500" : "bg-emerald-500"}" style="width:${pct}%"></div></div><div class="text-[11px] text-slate-500 mt-1 num">${fmt(spent)} من ${fmt(bud)} ج.م</div></div>`;
 }
 if (typeof cartHTML === "function") { const _cartHTML2 = cartHTML; cartHTML = function () {
-  const html = _cartHTML2(); if (cartPostDelivery() || Emp._noList || !Emp.open()) return html;
+  const html = _cartHTML2(); if (cartPostDelivery() || Emp._noList || !Emp.open() || (Emp.cartStep && Emp.cartStep !== "list")) return html;
   const sp = budgetSpent(), bars = budgetBar("fam", "ميزانية الأسرة", "👨‍👩‍👧", sp.fam) + budgetBar("rel", "ميزانية الأقارب", "🧒", sp.rel);
   const missing = !budgetGet("fam") || (relOn() && !budgetGet("rel"));
   return (bars ? `<div class="mb-1">${bars}</div>` : "") + html + (missing ? `<button class="w-full text-center text-[12.5px] text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} ${bars ? "حدد الميزانية التانية" : "حدد ميزانية للأسرة" + (relOn() ? " وللأقارب" : "")}</button>` : "");
