@@ -319,8 +319,11 @@ function cartHTML() {
   const ids = Object.keys(APP.cart);
   // السلة بنفس السلوك في كل طرق الحجز: ١ الكتب (مراجعة) ← ٢ طريقة السداد ← ٣ التأكيد
   let step = Emp.cartStep || "list"; if (Emp._noList && step === "list") step = "pay"; if (!ids.length || !open) step = "list";
-  const stepBar = open && ids.length ? `<ol class="flex items-center gap-1.5 mb-3">${[["list", "الكتب"], ["pay", "السداد"], ["confirm", "التأكيد"]].map((x, i, a) => { const k = a.findIndex(y => y[0] === step), done = i < k, cur = i === k;
-      return `<li class="flex items-center gap-1.5 ${i < a.length - 1 ? "flex-1" : ""}"><span class="w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0 ${done ? "bg-emerald-500 text-white" : cur ? "bg-brand-700 text-white ring-4 ring-brand-100" : "bg-slate-100 text-slate-400"}">${done ? ic("check", "!w-3 !h-3") : i + 1}</span><span class="text-[11.5px] font-bold ${cur ? "text-brand-800" : done ? "text-emerald-700" : "text-slate-400"}">${x[1]}</span>${i < a.length - 1 ? `<span class="h-0.5 flex-1 rounded-full ${done ? "bg-emerald-300" : "bg-slate-200"}"></span>` : ""}</li>`; }).join("")}</ol>` : "";
+  const stepBar = open && ids.length ? (() => { const st = [["list", "book-open", "الكتب"], ["pay", "wallet", "السداد"], ["confirm", "check-check", "التأكيد"]], k = st.findIndex(y => y[0] === step);
+    return `<ol class="flex items-start mb-4 rounded-2xl p-3 ring-1 ring-brand-100" style="background:linear-gradient(135deg,#faf7ff,#f1e9fc)">${st.map((x, i) => { const done = i < k, cur = i === k;
+      return `<li class="flex-1 flex flex-col items-center text-center relative">${i < st.length - 1 ? `<span class="absolute top-[19px] h-1 rounded-full ${done ? "bg-emerald-400" : "bg-brand-100"}" style="inset-inline-start:calc(50% + 22px);inset-inline-end:calc(-50% + 22px)"></span>` : ""}
+        <span class="relative z-[1] w-10 h-10 rounded-2xl flex items-center justify-center transition ${done ? "bg-emerald-500 text-white" : cur ? "bg-brand-700 text-white ring-4 ring-gold-300 shadow-glow" : "bg-white text-slate-400 ring-1 ring-slate-200"}">${ic(done ? "check" : x[1], "!w-5 !h-5")}</span>
+        <span class="mt-1.5 text-[11.5px] font-bold ${cur ? "text-brand-800" : done ? "text-emerald-700" : "text-slate-400"}"><span class="num">${i + 1}</span> ${x[2]}</span></li>`; }).join("")}</ol>`; })() : "";
   const mini = `<div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-brand-700 shrink-0">${ic("shopping-cart")}</span>
       <span class="flex-1 min-w-0 leading-tight"><b class="block text-[13.5px] text-slate-900">${booksWord(t.count)} · <span class="num">${money(t.net)}</span></b><span class="block text-[11.5px] text-emerald-600 font-semibold">${gTxt("وفّرت", "وفّرتي")} ${moneyTxt(t.cover - t.net)}</span></span>
       <button type="button" class="text-[12px] font-bold text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50" data-act="cartStep" data-id="list">${ic("pencil", "inline !w-3.5 !h-3.5")} الكتب</button></div>`;
@@ -881,7 +884,10 @@ function familyPanel() {
         <div class="min-w-0 leading-tight"><b class="block text-[15px] text-slate-900">أبنائي</b><span class="block text-[11px] text-slate-500">${nk ? nk + (nk === 1 ? " فرد" : " أفراد") : ""}${nk && nr ? " · " : ""}${nr ? nr + " قريب" : ""}</span></div></div>
       <div class="flex items-center gap-1.5 shrink-0">${act("kidsAddNew", "plus", "إضافة", "bg-brand-700 text-white ring-brand-700")}${act("kidsEdit", "pencil", "تعديل", "bg-white text-slate-700 ring-slate-200")}${ro ? act("addRel", "users", "قريب", "bg-sky-50 text-sky-700 ring-sky-200") : ""}</div>
     </div>
-    <div class="flex items-center gap-2 mt-3 mb-2"><span class="h-px flex-1 bg-slate-100"></span><span class="text-[11.5px] font-bold text-slate-500">${gTxt("اختار لمين تحجز", "اختاري لمين تحجزي")}</span><span class="h-px flex-1 bg-slate-100"></span></div>
+    ${(() => { const picked = ks.some(sel); return `<div class="mt-3 mb-2.5 rounded-2xl px-3 py-2 flex items-center gap-2 text-white shadow-soft ${picked ? "" : "animate-pulse"}" style="background:linear-gradient(90deg,#c99a2e,#e0b84a 45%,#552c83)">
+      <span class="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center shrink-0">${ic("users", "!w-4 !h-4")}</span>
+      <b class="text-[13.5px] flex-1">${picked ? gTxt("بتحجز لمين؟ تقدر تبدّل من هنا", "بتحجزي لمين؟ تقدري تبدّلي من هنا") : gTxt("👇 اختار الأول بتحجز لمين", "👇 اختاري الأول بتحجزي لمين")}</b>
+      <span class="text-[11px] font-semibold bg-white/20 rounded-full px-2 py-0.5 shrink-0">${ks.length} ${ks.length > 2 ? "أفراد" : ks.length === 2 ? "فردين" : "فرد"}</span></div>`; })()}
     <div class="flex gap-2 overflow-x-auto snap-x pb-1 -mx-1 px-1" style="scrollbar-width:none">${ks.map(card).join("")}</div>
   </section>`;
 }
