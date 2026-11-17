@@ -951,7 +951,7 @@ const OperationsEngine = {
     const order = {}; heads.forEach((h, k) => order[Util.str(h.Sup_Inv_ID)] = k);
     const line = {};
     DB_Engine.getAllRecords(S.SUP_INV_ITEMS).forEach(l => { const k = order[Util.str(l.Sup_Inv_ID)]; if (k === undefined) return;
-      const b = Util.str(l.Book_ID); if (!line[b] || line[b].k <= k) line[b] = { k: k, cover: Util.num(l.Cover_Price_Invoiced), disc: Util.num(l.Item_Discount_Pct_Invoiced), inv: Util.str(heads[k].Supplier_Invoice_No) }; });
+      const b = Util.str(l.Book_ID); if (!line[b] || line[b].k <= k) line[b] = { k: k, cover: Util.num(l.Cover_Price_Invoiced), disc: Util.num(l.Item_Discount_Pct_Invoiced), inv: Util.str(heads[k].Supplier_Invoice_No), vol: Util.num(heads[k].Volume_Discount_Pct) }; });
     const last = heads[heads.length - 1];
     return { line: line, volPct: last ? Util.num(last.Volume_Discount_Pct) : 0, volFrom: last ? Util.str(last.Supplier_Invoice_No) : "" };
   },
@@ -973,6 +973,7 @@ const OperationsEngine = {
       volPct = Util.num(payload.volumePct);
     }
     Util.require(volPct >= 0 && volPct < 100, "نسبة خصم الكمية غير صحيحة.");
+    const overridden = volPct !== terms.volPct;
     const lines = ids.map(b => {
       const bk = books[b]; Util.require(bk, "الكتاب " + b + " غير موجود.");
       const pl = pool[b] || { returnable: 0, free: 0, demand: 0 };
@@ -980,15 +981,19 @@ const OperationsEngine = {
       const t = terms.line[b], cover = t ? t.cover : Util.num(bk.Cover_Price), disc = t ? t.disc : Util.num(bk.Supplier_Discount_Pct);
       Util.require(cover > 0, "«" + bk.Book_Name + "» ملوش سعر غلاف — سعّره الأول.");
       const unit = R(cover * (1 - disc / 100));
-      return { bookId: b, name: bk.Book_Name, qty: qty[b], cover: cover, disc: disc, unit: unit, gross: R(cover * qty[b]), afterItem: R(unit * qty[b]), src: t ? "فاتورة " + t.inv : "الكتالوج" };
+      return { bookId: b, name: bk.Book_Name, qty: qty[b], cover: cover, disc: disc, unit: unit, gross: R(cover * qty[b]), afterItem: R(unit * qty[b]), src: t ? "فاتورة " + t.inv : "الكتالوج", vol: overridden ? volPct : (t ? t.vol : terms.volPct) };
     });
     const grossCover = R(lines.reduce((s, l) => s + l.gross, 0));
     const afterItem = R(lines.reduce((s, l) => s + l.afterItem, 0));
-    const volAmt = R(afterItem * volPct / 100), net = R(afterItem - volAmt);
-    // توزيع خصم الكمية على السطور بالتناسب، والفرق (قروش التقريب) على آخر سطر — فمجموع السطور = صافي الإذن بالظبط
-    let acc = 0;
-    lines.forEach((l, k) => { l.net = k === lines.length - 1 ? R(net - acc) : R(l.afterItem * (1 - volPct / 100)); acc = R(acc + l.net); l.netUnit = R(l.net / l.qty); });
-    const res = { success: true, preview: true, lines: lines, grossCover: grossCover, afterItem: afterItem, volPct: volPct, volFrom: terms.volFrom, volAmt: volAmt, net: net, qty: lines.reduce((s, l) => s + l.qty, 0) };
+    // خصم الكمية بنسبة فاتورة الطلبية اللي ورد فيها الكتاب، على إجمالي كتب كل نسبة (مش لكل صنف)
+    const groups = {}; lines.forEach(l => (groups[l.vol] = groups[l.vol] || []).push(l));
+    let volAmt = 0;
+    Object.keys(groups).forEach(v => { const g = groups[v], pct = Util.num(v), tot = R(g.reduce((s, l) => s + l.afterItem, 0)), amt = R(tot * pct / 100), gNet = R(tot - amt);
+      volAmt = R(volAmt + amt);
+      let acc = 0; g.forEach((l, k) => { l.net = k === g.length - 1 ? R(gNet - acc) : R(l.afterItem * (1 - pct / 100)); acc = R(acc + l.net); l.netUnit = R(l.net / l.qty); }); });
+    const net = R(afterItem - volAmt), vols = Object.keys(groups).map(Util.num);
+    volPct = vols.length === 1 ? vols[0] : volPct;
+    const res = { success: true, preview: true, lines: lines, grossCover: grossCover, afterItem: afterItem, volPct: volPct, volMixed: vols.length > 1 ? vols : null, volFrom: terms.volFrom, volAmt: volAmt, net: net, qty: lines.reduce((s, l) => s + l.qty, 0) };
     if (payload.preview) return res;
 
     const docNo = Counter.next("SUP_RETURN", "SRT"), phaseId = Util.str(payload.phaseId), now = Util.now(), stamp = new Date().getTime();
@@ -997,11 +1002,11 @@ const OperationsEngine = {
     DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
       Sup_Trans_ID: "SLED-" + docNo, Supplier_ID: supplierId, Phase_ID: phaseId, Trans_Date: Util.today(), Trans_Type: "RETURN_DEBIT_NOTE",
       Reference_ID: docNo, Debit_Amount: net, Credit_Amount: 0, Payment_Channel: "مرتجع نهائي", Document_Ref: docNo, Recorded_By: Util.actor(session),
-      Notes: "مرتجع نهائي " + res.qty + " نسخة (" + lines.length + " صنف): غلاف " + grossCover + " − خصم الأصناف = " + afterItem + " − خصم كمية " + volPct + "% (" + volAmt + ")" + (volPct !== terms.volPct ? " [معدّل: " + Util.str(payload.volumeReason) + "]" : "")
+      Notes: "مرتجع نهائي " + res.qty + " نسخة (" + lines.length + " صنف): غلاف " + grossCover + " − خصم الأصناف = " + afterItem + " − خصم كمية " + (vols.length > 1 ? vols.join("/") : volPct) + "% (" + volAmt + ")" + (overridden ? " [معدّل: " + Util.str(payload.volumeReason) + "]" : "")
     }]);
     DB_Engine.insertRecordsBatch(S.DELIVERY_RETURNS, lines.map((l, k) => ({
       Doc_ID: "DOC-" + docNo + "-" + (k + 1), Doc_Type: "SUPPLIER_RETURN", Phase_ID: phaseId, Party_ID: supplierId, Trans_Date: now, Book_ID: l.bookId,
-      Qty: l.qty, Unit_Price_Applied: l.netUnit, Total_Amount_Impact: -l.net, Return_Reason: reason + " · غلاف " + l.cover + " خصم " + l.disc + "% + كمية " + volPct + "%",
+      Qty: l.qty, Unit_Price_Applied: l.netUnit, Total_Amount_Impact: -l.net, Return_Reason: reason + " · غلاف " + l.cover + " خصم " + l.disc + "% + كمية " + l.vol + "%",
       Handled_By: Util.actor(session), Printed_Receipt_No: docNo, Received_By: "", Res_Item_ID: ""
     })));
     DB_Engine.logAudit(session.userId, session.role, "Returns", "SUPPLIER_FINAL_RETURN", docNo, null, { lines: lines.map(l => [l.bookId, l.qty, l.net]), afterItem: afterItem, volPct: volPct, net: net });
