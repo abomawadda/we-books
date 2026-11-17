@@ -64,7 +64,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.evaluate(() => { const b = document.querySelector('[data-act="gbStage"]'); b && b.click(); }); await p.waitForTimeout(300);
     await p.evaluate(() => { const b = document.querySelector('[data-act="gbGrade"]'); b && b.click(); }); await p.waitForTimeout(300); await shot('gb-2');
     await p.evaluate(() => { const b = document.querySelector('[data-act="gbType"]'); b && b.click(); }); await p.waitForTimeout(400); await shot('gb-3');
-    await p.evaluate(() => ACTIONS.gbDone()); await p.waitForTimeout(900); await shot('gb-start');
+    await p.evaluate(() => ACTIONS.gbDone()); await p.waitForTimeout(900); await shot('gb-start'); await p.evaluate(() => ACTIONS.wzMode('manual')); await p.waitForTimeout(700); await shot('gb-books'); await p.evaluate(() => scrollTo(0, 700)); await p.waitForTimeout(300); await shot('gb-books2');
     await b.close(); return;
   }
   for (const id of ['BK-101', 'BK-201']) { const el = await p.$(`[data-act="cartInc"][data-id="${id}"]`); if (el) { await el.click(); await p.waitForTimeout(150); } }

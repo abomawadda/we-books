@@ -72,8 +72,9 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(w.eval('APP').emp.employee.kids.length === 1 && w.eval('Emp').filter.grade === '4 ابتدائي', 'kids saved and opened');
   expectNoErrorToasts('save kids');
   w.eval('Emp').filter.grade = ''; w.eval('Emp').filter.type = ''; await go('/e/books'); w.eval('Shell').rerender(); await settle();
-  check(d.querySelectorAll('#bookGrid [data-act="fGrade"]').length >= 2, 'grade picker shown first');
-  { const g = w.eval('APP').emp.books.find(b => b.Book_ID === 'BK-101').Grade; await click(`#bookGrid [data-act="fGrade"][data-id="${g}"]`); } await click('[data-act="bookMode"][data-id="manual"]');
+  check(d.querySelector('#bookGrid [data-act="gbOpen"]') && !d.querySelector('#bookGrid [data-act="fGrade"]'), 'booking by grade via questions (no fixed grade cards)');
+  { const g = w.eval('APP').emp.books.find(b => b.Book_ID === 'BK-101').Grade; w.eval('ACTIONS').fGrade(g); await settle(); }
+  check(/تحجز الآن لـ/.test(view()), 'pinned «booking now for» bar for grade booking'); await click('[data-act="bookMode"][data-id="manual"]');
   check(d.querySelectorAll('#bookGrid article').length >= 1 && /الصف|رياض|تأسيس/.test(view()), 'grade books with clear title');
   await click('[data-act="bagOpen"]'); check(dialog() && /الشنطة/.test(dialog().textContent), 'bag sheet opened');
   { const before = Object.keys(w.eval('APP').cart).length; await click('[data-act="bagPick"]', dialog()); await click('[data-act="bagAdd"]', dialog()); await settle(); check(Object.keys(w.eval('APP').cart).length > before, 'bag added to cart'); w.eval('APP').cart = {}; w.eval('refreshCartViews')(); }
