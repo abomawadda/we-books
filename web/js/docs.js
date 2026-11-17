@@ -304,6 +304,25 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="sig"><div>أمين المخزن</div><div>المدير المالي</div><div>مسؤول المبادرة</div></div>${Doc.foot(d.ref)}`, d.status === "Voided" ? "ملغاة" : "", "red", Doc.density(d.lines.length, "A4"));
   },
 
+  /** كشف مرتجع نهائي للمكتبة: d = {no,date,phase,by,supplier,phone,lines:[{code,name,meta,qty,cover,disc,unit,after,vol,net}],groups:[{vol,after,amt,net}],cover,after,volAmt,net,balBefore,balAfter} */
+  supplierReturn(d) {
+    let i = 0;
+    const rows = d.lines.map(l => `<tr><td class="c num">${++i}</td><td class="code num">${esc(l.code)}</td><td><b>${esc(l.name)}</b>${l.meta ? `<div class="sub">${esc(l.meta)}</div>` : ""}</td>
+      <td class="c num"><b>${l.qty}</b></td><td class="l num">${Doc.money(l.cover)}</td><td class="c num">${Doc.money(l.disc)}%</td><td class="l num">${Doc.money(l.unit)}</td><td class="l num">${Doc.money(l.after)}</td><td class="c num">${Doc.money(l.vol)}%</td><td class="l num"><b>${Doc.money(l.net)}</b></td></tr>`).join("");
+    const qty = d.lines.reduce((a, l) => a + l.qty, 0);
+    const bal = v => Math.abs(v) < 0.005 ? "متصفّي" : (v > 0 ? "للمكتبة " : "على المكتبة ") + Doc.money(Math.abs(v));
+    return Doc.page(`${Doc.head("إذن مرتجع نهائي للمكتبة", d.no, `<div style="margin-top:1mm"><span class="badge g">تصفية حساب</span></div>`)}
+      <div class="meta"><div class="box"><h4>المكتبة (المستلِم)</h4>${Doc.kv("الاسم", esc(d.supplier))}${d.phone ? Doc.kv("الهاتف", `<span class="num">${esc(d.phone)}</span>`) : ""}${Doc.kv("عدد الأصناف / النسخ", `<span class="num">${d.lines.length} / ${qty}</span>`)}</div>
+        <div class="box"><h4>بيانات الإذن</h4>${Doc.kv("التاريخ", `<span class="num">${esc(Doc.date(d.date))}</span>`)}${d.phase ? Doc.kv("المرحلة", esc(d.phase)) : ""}${d.by ? Doc.kv("حُرِّر بمعرفة", esc(d.by)) : ""}</div></div>
+      <table><thead><tr><th class="c" style="width:4%">#</th><th class="c" style="width:9%">الكود</th><th>الكتاب</th><th class="c" style="width:5%">عدد</th><th class="l" style="width:8%">الغلاف</th><th class="c" style="width:6%">خصم الصنف</th><th class="l" style="width:8%">صافي النسخة</th><th class="l" style="width:9%">بعد خصم الصنف</th><th class="c" style="width:6%">خصم الكمية</th><th class="l" style="width:10%">الصافي</th></tr></thead>
+        <tbody>${rows}</tbody></table>
+      <div class="tot"><div><div class="note">• طريقة الحساب: سعر الغلاف − خصم المكتبة لكل صنف (من فاتورة التوريد الأصلية)، ثم خصم الكمية بنسبة فاتورة الطلبية على <b>إجمالي</b> كتب الإذن وليس لكل صنف.</div>
+          ${d.groups.length > 1 ? d.groups.map(g => `<div class="note">• خصم كمية <span class="num">${Doc.money(g.vol)}%</span> على <span class="num">${Doc.money(g.after)}</span> = <span class="num">${Doc.money(g.amt)}</span></div>`).join("") : ""}
+          ${d.balBefore !== undefined ? `<div class="note">• حساب المكتبة قبل الإذن: <b class="num">${bal(d.balBefore)}</b> — وبعده: <b class="num">${bal(d.balAfter)}</b> ج.م</div>` : ""}</div>
+        <div class="sum">${Doc.kv("إجمالي الغلاف", `<span class="num sub">${Doc.money(d.cover)}</span>`)}${Doc.kv("بعد خصم الأصناف", `<span class="num">${Doc.money(d.after)}</span>`)}${Doc.kv(d.groups.length > 1 ? "خصم الكمية" : `خصم الكمية (${Doc.money((d.groups[0] || {}).vol)}%)`, `<span class="num">− ${Doc.money(d.volAmt)}</span>`)}<div class="kv big"><span>صافي المرتجع — يُخصم من حساب المكتبة (ج.م)</span><b class="num">${Doc.money(d.net)}</b></div></div></div>
+      <div class="words">${esc(Doc.words(d.net))}</div>
+      <div class="sig"><div>أمين المخزن (المُسلِّم)</div><div>مندوب المكتبة (المستلِم)</div><div>المدير المالي</div></div>${Doc.foot(d.no)}`, "", "", Doc.density(d.lines.length, "A4"));
+  },
 
   // ---------------------------------------------------------------- المعاينة والحفظ
   fontsCss(base) {
