@@ -104,7 +104,7 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   expectNoErrorToasts('reservation');
   await closeAll();
   for (const r of ['/e/orders', '/e/pay', '/e/me', '/e/home']) { await go(r); check(view().length > 50, 'employee page ' + r); }
-  await go('/e/orders'); check(/وفّرت السنة دي/.test(view()), 'savings card');
+  await go('/e/orders'); check(/التوفير المتوقع|وفّرت/.test(view()), 'savings card');
   check(/إدارة طلبي/.test(view()) && d.querySelector('[data-act="empCancel"]'), 'manage order on orders');
   await go('/e/home'); check(/إدارة طلبي/.test(view()), 'manage order on home');
   await go('/e/pay'); check(/حسابك في كل المراحل/.test(view()) && /إيصالات السداد/.test(view()), 'pay page all phases');

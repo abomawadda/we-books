@@ -18,25 +18,39 @@ Notif.list = function () {
 };
 
 // ---------------------------------------------------------------- «وفّرت هذا العام»
-function mySavings() {
-  const bm = Emp.bookMap(); let cover = 0, paid = 0, books = 0;
-  Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled")).forEach(i => {
-    const b = bm[i.Book_ID] || {}, q = n(i.Requested_Qty), ep = n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price), cp = n(i.Unit_Cover_Price) || n(b.Cover_Price);
-    if (!ep || !cp) return; cover += q * cp; paid += q * ep; books += q;
+/** التوفير: الفعلي (مراحل صدرت فاتورتها — بالكميات المفوترة) والمتوقع (مراحل لسه — بالمحجوز المسعّر) + الكتب اللي لسه ما اتسعّرتش */
+function saveCalc(items) {
+  const r = APP.emp, bm = Emp.bookMap(), invOf = pid => (r.myInvoices || []).find(x => x.Phase_ID === pid);
+  const o = { aCover: 0, aNet: 0, aBooks: 0, eCover: 0, eNet: 0, eBooks: 0, unpriced: 0, delivered: 0, phases: {} };
+  items.filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward").forEach(i => {
+    const b = bm[i.Book_ID] || {}, ep = n(i.Unit_Emp_Price) || n(b.Emp_Selling_Price), cp = n(i.Unit_Cover_Price) || n(b.Cover_Price);
+    o.delivered += n(i.Delivered_Qty); o.phases[i.Phase_ID] = 1;
+    if (invOf(i.Phase_ID)) { const q = Math.max(0, Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)) - n(i.Returned_Qty)); if (!q || !ep || !cp) return; o.aCover += q * cp; o.aNet += q * ep; o.aBooks += q; }
+    else { const q = n(i.Requested_Qty); if (!ep || !cp) { o.unpriced += q; return; } o.eCover += q * cp; o.eNet += q * ep; o.eBooks += q; }
   });
-  return { cover, paid, save: Math.max(0, cover - paid), books };
+  o.aSave = Math.max(0, o.aCover - o.aNet); o.eSave = Math.max(0, o.eCover - o.eNet);
+  return o;
 }
+function mySavings() { const c = saveCalc(Emp.phaseItems()), act = c.aBooks > 0;
+  return act ? { cover: c.aCover, paid: c.aNet, save: c.aSave, books: c.aBooks, actual: true, unpriced: 0, delivered: c.delivered } : { cover: c.eCover, paid: c.eNet, save: c.eSave, books: c.eBooks, actual: false, unpriced: c.unpriced, delivered: 0 }; }
 function savingsCard() {
   const s = mySavings(); if (s.save < 1) return "";
+  const pct = Math.round(s.save / s.cover * 100), got = s.actual && s.delivered > 0;
+  if (got) return `<section class="card overflow-hidden mb-4 text-white" style="background:linear-gradient(135deg,#059669,#065f46)"><div class="p-4 sm:p-5 flex items-center gap-4">
+    <span class="text-[42px] leading-none">🎉</span>
+    <div class="flex-1 min-w-0"><div class="text-[13px] font-bold text-emerald-100">${gTxt("مبروك! كتب ولادك وصلتك… ووفّرت", "مبروك! كتب ولادك وصلتك… ووفّرتي")}</div><div class="font-display font-bold text-[28px] num leading-tight">${fmt(Math.round(s.save))} <span class="text-[14px]">ج.م</span></div>
+      <div class="text-[12px] text-emerald-100">على ${booksWord(s.books)} · ${pct}% أقل من سعر الغلاف — فلوس رجعت لجيبك 💚</div></div>
+    <button class="btn btn-sm shrink-0 bg-white text-emerald-800" data-act="shareSave">${ic("send")} شارك</button></div></section>`;
   return `<section class="card overflow-hidden mb-4" style="background:linear-gradient(135deg,#f0fdf4,#fefce8)"><div class="p-4 sm:p-5 flex items-center gap-4">
     <span class="text-[40px] leading-none">💰</span>
-    <div class="flex-1 min-w-0"><div class="text-[12.5px] font-bold text-emerald-700">وفّرت السنة دي</div><div class="font-display font-bold text-[26px] text-emerald-800 num leading-tight">${fmt(Math.round(s.save))} <span class="text-[14px]">ج.م</span></div>
-      <div class="text-[12px] text-slate-500">على ${booksWord(s.books)} · ${Math.round(s.save / s.cover * 100)}% أقل من السعر قبل الخصم</div></div>
-    <button class="btn btn-success btn-sm shrink-0" data-act="shareSave">${ic("send")} شارك</button></div></section>`;
+    <div class="flex-1 min-w-0"><div class="text-[12.5px] font-bold text-emerald-700">${s.actual ? gTxt("وفّرت في الفاتورة", "وفّرتي في الفاتورة") : "التوفير المتوقع"}</div><div class="font-display font-bold text-[26px] text-emerald-800 num leading-tight">${s.actual ? "" : "≈ "}${fmt(Math.round(s.save))} <span class="text-[14px]">ج.م</span></div>
+      <div class="text-[12px] text-slate-500">على ${booksWord(s.books)} · ${pct}% أقل من سعر الغلاف</div>
+      ${s.actual ? "" : `<div class="text-[11.5px] text-amber-700 mt-1">${ic("info", "inline -mt-0.5 !w-3.5 !h-3.5")} ${s.unpriced ? `+ ${booksWord(s.unpriced)} لسه جاري تسعيرها، و` : ""}المبلغ النهائي بيتحدد في الفاتورة عند التوزيع</div>`}</div>
+    ${s.actual ? `<button class="btn btn-success btn-sm shrink-0" data-act="shareSave">${ic("send")} شارك</button>` : ""}</div></section>`;
 }
 on("shareSave", () => {
   const s = mySavings();
-  const txt = `💰 وفّرت ${fmt(Math.round(s.save))} ج.م على كتب أولادي الخارجية السنة دي (${Math.round(s.save / s.cover * 100)}% أقل من السعر قبل الخصم) مع مبادرة الكتب المخفضة — ${Brand.get().org} 📚\nنقابتك معاك… من أول كتاب\n${location.origin}`;
+  const txt = `💰 ${s.actual ? "وفّرت" : "هوفّر حوالي"} ${fmt(Math.round(s.save))} ج.م على كتب أولادي الخارجية السنة دي (${Math.round(s.save / s.cover * 100)}% أقل من السعر قبل الخصم) مع مبادرة الكتب المخفضة — ${Brand.get().org} 📚\nنقابتك معاك… من أول كتاب\n${location.origin}`;
   if (navigator.share) navigator.share({ text: txt }).catch(() => {}); else window.open("https://wa.me/?text=" + encodeURIComponent(txt), "_blank");
 });
 
@@ -339,7 +353,7 @@ Router.add("/e/pay", view => {
   view.innerHTML = `${UI.pageHead("مدفوعاتي", "حسابك في كل المراحل: الفواتير والأقساط والإيصالات")}
   ${next ? `<div class="mb-4 rounded-2xl bg-brand-50 ring-1 ring-brand-200 p-3.5 flex items-center gap-3">${ic("calendar-clock", "text-brand-700 text-xl")}<div class="flex-1 text-[13.5px]"><b>القسط الجاي:</b> <span class="num">${fmt(next.Remaining_Inst_Amount)}</span> ج.م — <span class="num">${esc(day(next.Due_Date))}</span></div></div>` : ""}
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-5">
-    ${UI.kpi("إجمالي فواتيرك", money(net), { icon: "receipt", tone: "brand", foot: invs.length > 1 ? `${invs.length} مراحل` : "" })}
+    ${invs.length ? UI.kpi("إجمالي فواتيرك", money(net), { icon: "receipt", tone: "brand", foot: invs.length > 1 ? `${invs.length} مراحل` : "" }) : (() => { const c = saveCalc(r.myReservationItems || []); return UI.kpi("قيمة حجزك المتوقعة", money(c.eNet), { icon: "receipt", tone: "brand", foot: "الفاتورة بتصدر عند التوزيع" + (c.unpriced ? ` · ${booksWord(c.unpriced)} بدون سعر` : "") }); })()}
     ${UI.kpi("المسدد", money(paid), { icon: "circle-check", tone: "green", pct: net ? paid / net * 100 : 0 })}
     ${UI.kpi("المتبقي", money(rem), { icon: "hourglass", tone: rem ? "amber" : "green", foot: credit ? `ليك رصيد ${fmt(credit)} ج.م` : "" })}
     ${UI.kpi("متأخرات", money(overdue), { icon: "triangle-alert", tone: overdue ? "red" : "gray" })}
@@ -383,12 +397,16 @@ function payBreakdownHTML() {
   const phCards = Object.keys(ph).map(pid => { const inv = (r.myInvoices || []).find(x => x.Phase_ID === pid);
     return `<div class="rounded-2xl bg-slate-50 p-3"><div class="text-[12px] text-slate-500 truncate">${esc(phName(pid))}</div><div class="font-bold num text-[17px] mt-0.5">${fmt(Math.round(inv ? n(inv.Net_Final_Invoice_Amount) : ph[pid].value))} <span class="text-[11px] font-normal text-slate-500">ج.م</span></div>
       <div class="text-[11.5px] mt-0.5 ${inv ? (n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600") : "text-slate-500"}">${inv ? (n(inv.Remaining_Balance) ? `مسدد ${fmt(inv.Total_Paid_Amount)} · باقي ${fmt(inv.Remaining_Balance)}` : "مسددة بالكامل ✅") : `${booksWord(ph[pid].books)} · الفاتورة لسه ما صدرتش`}</div></div>`; }).join("");
-  const save = Math.max(0, cover - emp), kidsN = Object.keys(who).length;
-  return `<div class="grid grid-cols-3 gap-2 sm:gap-3 mb-4">
-      <div class="rounded-2xl p-3 text-white" style="background:linear-gradient(135deg,#059669,#047857)"><div class="text-[11px] opacity-80">وفّرت</div><div class="font-bold num text-[18px]">${fmt(Math.round(save))}</div><div class="text-[10.5px] opacity-80">${cover ? Math.round(save / cover * 100) : 0}% من الغلاف</div></div>
-      <div class="rounded-2xl p-3 text-white" style="background:linear-gradient(135deg,#6a3aa0,#3b1d63)"><div class="text-[11px] opacity-80">متوسط الفرد</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp / (kidsN || 1)))}</div><div class="text-[10.5px] opacity-80">${kidsN} ${kidsN > 2 ? "أفراد" : kidsN === 2 ? "فردين" : "فرد"}</div></div>
-      <div class="rounded-2xl p-3 text-brand-950" style="background:linear-gradient(135deg,#fde08a,#f9b224)"><div class="text-[11px] opacity-80">قيمة الكتب</div><div class="font-bold num text-[18px]">${fmt(Math.round(emp))}</div><div class="text-[10.5px] opacity-80 line-through num">${fmt(Math.round(cover))}</div></div>
-    </div>
+  const kidsN = Object.keys(who).length, c = saveCalc(items), hasA = c.aBooks > 0, hasE = c.eBooks > 0 || c.unpriced > 0;
+  const tile = (bg, dark, t, v, f) => `<div class="rounded-2xl p-3 ${dark ? "text-white" : "text-brand-950"}" style="background:${bg}"><div class="text-[11px] opacity-85">${t}</div><div class="font-bold num text-[18px]">${v}</div><div class="text-[10.5px] opacity-85">${f}</div></div>`;
+  const pct = (sv, cv) => cv ? Math.round(sv / cv * 100) : 0;
+  const tot = c.aNet + c.eNet, totCov = c.aCover + c.eCover;
+  const saveT = hasA ? tile("linear-gradient(135deg,#059669,#047857)", 1, gTxt("وفّرت", "وفّرتي"), fmt(Math.round(c.aSave)), `${pct(c.aSave, c.aCover)}% من الغلاف${hasE ? ` · + ≈${fmt(Math.round(c.eSave))} متوقع` : ""}`)
+    : tile("linear-gradient(135deg,#10b981,#047857)", 1, "التوفير المتوقع", "≈ " + fmt(Math.round(c.eSave)), `${pct(c.eSave, c.eCover)}% من الغلاف`);
+  const valT = tile("linear-gradient(135deg,#fde08a,#f9b224)", 0, hasA && !hasE ? "قيمة الكتب" : hasA ? "قيمة الكتب (فعلي + متوقع)" : "قيمة الكتب المتوقعة", fmt(Math.round(tot)), `<span class="line-through num">${fmt(Math.round(totCov))}</span>`);
+  const avgT = tile("linear-gradient(135deg,#6a3aa0,#3b1d63)", 1, "متوسط الفرد", fmt(Math.round(tot / (kidsN || 1))), `${kidsN} ${kidsN > 2 ? "أفراد" : kidsN === 2 ? "فردين" : "فرد"}`);
+  return `<div class="grid grid-cols-3 gap-2 sm:gap-3 ${hasE ? "mb-2" : "mb-4"}">${saveT}${avgT}${valT}</div>
+    ${hasE ? `<div class="mb-4 rounded-2xl bg-amber-50 ring-1 ring-amber-100 text-amber-900 px-3.5 py-2.5 text-[12.5px] leading-relaxed flex gap-2">${ic("info", "mt-0.5 shrink-0")}<span>${hasA ? "فيه مرحلة لسه فاتورتها ما صدرتش — أرقامها تقديرية. " : "الأرقام دي تقديرية لحد ما الفاتورة تصدر عند التوزيع. "}${c.unpriced ? `<b>${booksWord(c.unpriced)}</b> لسه جاري تسعيرها ومش محسوبة.` : ""}</span></div>` : ""}
     ${payMethodsHTML()}
     ${UI.section(`${ic("users", "text-brand-600")} تكلفة كل فرد`, "قيمة كتب كل ابن أو قريب في كل المراحل", `${grpBtns(who)}<div class="grid gap-2 sm:grid-cols-2">${kidCards}</div>`)}
     <div class="mt-4">${UI.section(`${ic("calendar-range", "text-brand-600")} مدفوعات كل مرحلة`, "", `<div class="grid grid-cols-2 gap-2">${phCards}</div>`)}</div><div class="h-4"></div>`;
