@@ -796,6 +796,44 @@ function gradePicker() {
   return Emp.open() ? body : `<details class="card mb-4 overflow-hidden"><summary class="list-none cursor-pointer p-4 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">${ic("library")}</span>
     <span class="flex-1"><b class="block text-[14px] text-slate-800">تصفّح الكتب والأسعار</b><span class="block text-[12px] text-slate-500">للعلم بس — الحجز هيتفتح مع المرحلة الجديدة</span></span>${ic("chevron-down", "text-slate-400")}</summary><div class="px-4 pb-4">${body}</div></details>`;
 }
+// ============================================================ صفحة «احجز» بين المرحلتين (الحجز مقفول)
+function betweenView() {
+  const r = APP.emp, ph = r.activePhase || {}, st = ph.Effective_Status || ph.Phase_Status, psi = phaseStatusInfo(ph), carry = carryNotice(ph);
+  const steps = [["Closed", "التجميع", "clipboard-list"], ["Ordered", "التوريد", "truck"], ["Receiving", "الفرز", "boxes"], ["Delivering", "التسليم", "package-check"], ["Completed", "انتهت", "circle-check"]];
+  const cur = Math.max(0, steps.findIndex(x => x[0] === st));
+  const items = Emp.activeItems(), qty = k => items.reduce((a, i) => a + n(i[k]), 0);
+  const booked = qty("Requested_Qty"), got = qty("Delivered_Qty") - qty("Returned_Qty"), ready = items.reduce((a, i) => a + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+  const inv = Emp.invoice(), rem = inv ? n(inv.Remaining_Balance) : 0;
+  const now = new Date(), nx = (r.phases || []).filter(p => p.Phase_ID !== ph.Phase_ID && toDate(p.Start_DateTime) && toDate(p.Start_DateTime) > now).sort((a, b) => toDate(a.Start_DateTime) - toDate(b.Start_DateTime))[0];
+  const openPh = (r.phases || []).find(p => p.Booking_Open && p.Phase_ID !== ph.Phase_ID);
+  const days = nx ? Math.ceil((toDate(nx.Start_DateTime) - now) / 864e5) : null;
+  const ks = myKids();
+  const stat = (v, t, tone) => `<div class="rounded-2xl bg-white/10 px-2 py-2.5 text-center"><div class="font-display font-bold text-[22px] num ${tone || ""}">${fmt(v)}</div><div class="text-[11px] text-brand-200">${t}</div></div>`;
+  return `<div class="max-w-xl mx-auto">
+    <section class="rounded-3xl p-5 mb-4 text-white relative overflow-hidden shadow-soft" style="background:linear-gradient(140deg,#552c83,#2e1650)">
+      <span class="absolute -left-10 -top-10 w-40 h-40 rounded-full bg-white/5"></span><span class="absolute -right-6 -bottom-12 w-32 h-32 rounded-full bg-gold-400/10"></span>
+      <div class="relative flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center shrink-0">${ic(psi.icon || "package-check", "!w-6 !h-6")}</span>
+        <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${esc(ph.Phase_Name || "")}</div><div class="font-display font-bold text-[18px] leading-snug">${st === "Completed" ? "المرحلة خلصت ✨" : st === "Delivering" ? "دلوقتي وقت التسليم 📦" : "الحجز اتقفل — كتبك في الطريق 🚚"}</div></div></div>
+      <ol class="relative flex items-start mt-5">${steps.map((x, i) => `<li class="flex-1 flex flex-col items-center text-center relative">${i ? `<span class="absolute right-1/2 w-full h-0.5 ${i <= cur ? "bg-gold-400" : "bg-white/15"}" style="top:15px"></span>` : ""}
+        <span class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center ${i < cur ? "bg-gold-400 text-brand-950" : i === cur ? "bg-white text-brand-800 ring-4 ring-gold-400/40" : "bg-white/10 text-white/50"}">${ic(i < cur ? "check" : x[2], "!w-4 !h-4")}</span>
+        <span class="text-[10.5px] mt-1.5 ${i === cur ? "text-gold-300 font-bold" : i < cur ? "text-white/80" : "text-white/40"}">${x[1]}</span></li>`).join("")}</ol>
+      ${booked ? `<div class="relative grid grid-cols-3 gap-2 mt-5">${stat(booked, "حجزت")}${stat(got, "استلمت", "text-emerald-300")}${stat(ready, "جاهز ليك", ready ? "text-gold-300" : "")}</div>` : ""}
+    </section>
+    ${openPh ? `<button class="w-full mb-4 rounded-3xl p-4 text-right flex items-center gap-3 ring-2 ring-emerald-300 bg-emerald-50 active:scale-[.99] transition" data-act="setPhase" data-id="${esc(openPh.Phase_ID)}"><span class="text-[30px]">🎉</span><span class="flex-1"><b class="block text-emerald-900 text-[15px]">الحجز مفتوح في «${esc(openPh.Phase_Name)}»</b><span class="block text-[12.5px] text-emerald-700">ادخل احجز دلوقتي</span></span>${ic("chevron-left", "text-emerald-600")}</button>`
+      : `<section class="card p-4 mb-4 flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-gold-50 text-gold-600 flex items-center justify-center shrink-0">${ic("calendar-clock", "!w-6 !h-6")}</span>
+        <div class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900">${nx ? `المرحلة الجاية: «${esc(nx.Phase_Name)}»` : "المرحلة الجاية لسه هتتعلن"}</b>
+          <span class="block text-[12.5px] text-slate-500">${nx ? (days <= 1 ? "الحجز بيفتح بكرة" : `الحجز بيفتح بعد <b class="num text-brand-700">${days}</b> يوم · <span class="num">${esc(String(nx.Start_DateTime).slice(0, 10))}</span>`) : "أول ما تتحدد هنبلغك في الجرس 🔔 وتلاقيها هنا"}</span></div></section>`}
+    ${ready || rem || carry ? `<section class="card p-4 mb-4"><h3 class="font-bold text-[14px] text-slate-900 mb-2 flex items-center gap-2">${ic("list-checks", "text-brand-600")} المطلوب منك دلوقتي</h3><ul class="space-y-2 text-[13px]">
+      ${ready ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-gold-50 text-gold-600 flex items-center justify-center">${ic("package-check", "!w-4 !h-4")}</span><span class="flex-1">${booksWord(ready)} جاهزة للاستلام</span><button class="btn btn-primary btn-xs" data-act="myQr">رمز الاستلام</button></li>` : ""}
+      ${rem ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">${ic("wallet", "!w-4 !h-4")}</span><span class="flex-1">متبقي عليك <b class="num">${fmt(rem)}</b> ج.م</span><a class="btn btn-outline btn-xs" href="#/e/pay">مدفوعاتي</a></li>` : ""}
+      ${carry ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">${ic("arrow-left-right", "!w-4 !h-4")}</span><span class="flex-1 leading-snug">${esc(carry.text)}</span></li>` : ""}</ul></section>` : ""}
+    <section class="card p-4 mb-4"><h3 class="font-bold text-[14px] text-slate-900 mb-1 flex items-center gap-2">${ic("sparkles", "text-gold-500")} جهّز للمرحلة الجاية</h3>
+      <p class="text-[12.5px] text-slate-500 mb-3">${ks.length ? "راجع صفوف ولادك عشان أول ما الحجز يفتح تحجز في دقيقة." : "سجّل ولادك وصفوفهم من دلوقتي، وأول ما الحجز يفتح الكتب تكون جاهزة ليك."}</p>
+      ${ks.length ? `<div class="flex flex-wrap gap-1.5 mb-3">${ks.map(k => `<span class="inline-flex items-center gap-1 rounded-full bg-slate-50 ring-1 ring-slate-200 px-2.5 py-1 text-[12px]"><b>${esc(k.name)}</b><span class="text-slate-500">${esc(Doc.shortGrade(k.grade || ""))}</span></span>`).join("")}</div>` : ""}
+      <div class="grid grid-cols-2 gap-2"><button class="btn btn-outline btn-sm" data-act="kidsEdit">${ic(ks.length ? "pencil" : "user-plus")} ${ks.length ? "راجع ولادك" : "سجّل ولادك"}</button><a class="btn btn-outline btn-sm" href="#/e/orders">${ic("package")} حجوزاتي</a></div></section>
+    ${gradePicker()}
+  </div>`;
+}
 // ============================================================ جهّز الشنطة: كتاب لكل مادة بضغطة
 const BAG = { rows: [], m: null };
 /** يبني الشنطة المقترحة: لكل مادة كتاب واحد؛ يفضّل سلسلة واحدة تغطي أكثر المواد، ثم الأشهر */
@@ -979,6 +1017,7 @@ function renderBookGrid() {
 Router.add("/e/books", view => {
   const r = APP.emp, f = Emp.filter;
   if (!r.activePhase) { view.innerHTML = Art.empty("calendar", "لا توجد مرحلة حجز", "سيظهر الكتالوج عند فتح مرحلة حجز جديدة."); return; }
+  if (!Emp.open() && !f.grade && !f.q) { view.innerHTML = betweenView(); return; }
   const types = (r.catalog || {}).schoolTypes || [];
   const subs = f.grade && !f.q ? uniq(sortBooks(gradeList().list).map(b => b.Subject)) : [];
   const [c1, c2] = toneOf(f.grade || "x");
