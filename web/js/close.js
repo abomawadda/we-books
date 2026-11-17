@@ -364,7 +364,7 @@ Router.add("/a/live", view => {
     </div>`;
   if (!LIVE.f && !LIVE.tried) { LIVE.tried = 1; liveFetch().then(r => { if (r.success && Router.current === "/a/live") Shell.rerender(); }); }
   clearInterval(LIVE.timer);
-  LIVE.timer = setInterval(async () => { if (Router.current !== "/a/live") return clearInterval(LIVE.timer); await Promise.all([liveFetch(), Admin.load()]); if (Router.current === "/a/live") Shell.rerender(); }, 60000);
+  LIVE.timer = setInterval(async () => { if (Router.current !== "/a/live") return clearInterval(LIVE.timer); if (document.hidden) return; await Promise.all([liveFetch(), Admin.load()]); if (Router.current === "/a/live") Shell.rerender(); }, 60000);
 });
 on("liveNow", async () => { await Promise.all([liveFetch(), Admin.load()]); Shell.rerender(); });
 
