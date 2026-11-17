@@ -66,7 +66,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.keyboard.press('Escape'); await p.waitForTimeout(400);
     await p.evaluate(() => Router.go('/e/wiz')); await p.waitForTimeout(600); await shot('fam-wiz');
     await p.evaluate(() => { Emp.cartStep = 'list'; Router.go('/e/cart'); }); await p.waitForTimeout(600); await shot('cart-1');
-    await p.evaluate(() => ACTIONS.cartStep('pay')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-2');
+    await p.evaluate(() => ACTIONS.cartStep('pay')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-2'); await p.evaluate(() => scrollTo(0, 700)); await p.waitForTimeout(300); await shot('cart-2s'); await p.evaluate(() => scrollTo(0, 0));
     await p.evaluate(() => ACTIONS.cartStep('confirm')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-3');
     await p.evaluate(() => { APP.emp.employee.kids = []; Emp.filter.grade = ''; Emp.ben = ''; Emp.gsel = []; Router.go('/e/books'); }); await p.waitForTimeout(600);
     await shot('grades-page');
