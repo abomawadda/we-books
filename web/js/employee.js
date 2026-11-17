@@ -485,7 +485,6 @@ function kidSwitchSheet() {
 // شريط «جارٍ الحجز لـ…» يظهر بس بعد ما بطاقة الصف تختفي من الشاشة (منع تكرار المعلومة فوق)
 addEventListener("scroll", () => { const c = document.getElementById("ctxStick"); if (!c || c.dataset.fx) return; c.dataset.fx = 1; const st = $("#bkSticky"), g = $("#bookGrid"); if (st && g) g.style.setProperty("--subjTop", (64 + st.offsetHeight) + "px"); }, { passive: true });
 on("famTop", () => myKids().length > 1 ? kidSwitchSheet() : scrollTo({ top: 0, behavior: "smooth" }));
-on("kidSwitch", () => kidSwitchSheet());
 /** بطاقة آخر القائمة: خلّصت كتب الفرد ده؟ كمّل لفرد تاني أو أكّد */
 function nextKidCard() {
   const ks = myKids(), c = curKid(); if (!c || !Emp.open() || Emp.wzManual) return "";
@@ -774,7 +773,7 @@ function gradePicker() {
     <p class="text-[13px] text-slate-500 mb-4">نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر.</p>`}
     ${Emp.open() ? `<button type="button" class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 text-white shadow-soft active:scale-[.99] transition" style="background:linear-gradient(135deg,#552c83,#2e1650)" data-act="gbOpen"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[24px] shrink-0">📚</span><span class="flex-1"><b class="block text-[15px]">احجز بالصف الدراسي خطوة بخطوة</b><span class="block text-[12px] text-brand-200">المرحلة ← الصف ← نوع المدرسة — ${gTxt("وتقدر تضيف", "وتقدري تضيفي")} أكتر من صف</span></span>${ic("chevron-left")}</button>` : ""}
     ${Emp.open() ? "" : stages.map(s => `<section class="mb-5"><div class="text-[13px] font-bold text-brand-700 mb-2">${esc(s)}</div>
-      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => { const on = (Emp.gsel || []).includes(g); return `<div class="relative"><button class="w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 ${on ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200 hover:ring-brand-300"}" data-act="fGrade" data-id="${esc(g)}">
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => { return `<div class="relative"><button class="w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 bg-white ring-slate-200 hover:ring-brand-300" data-act="fGrade" data-id="${esc(g)}">
         <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>
 </div>`; }).join("")}</div></section>`).join("")}
 `;
@@ -834,7 +833,6 @@ on("bagOpen", () => { BAG.inline = false; BAG._for = "";
   bagRender();
 });
 on("bagQty", v => { const [i, d] = String(v).split("|"), r = BAG.rows[+i]; r.qty = Math.min(10, Math.max(1, (r.qty || 1) + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
-on("bagTog", v => { const r = BAG.rows[+v]; r.on = !r.on; bagRender(); });
 on("bagPick", v => { const [i, id] = String(v).split("|"), r = BAG.rows[+i]; if (r.on && r.pick === id) r.on = false; else { r.pick = id; r.on = true; } bagRender(); });
 on("bagAdd", () => {
   const sel = BAG.rows.filter(r => r.on); let added = 0;
@@ -884,7 +882,7 @@ function familyPanel() {
         <div class="min-w-0 leading-tight"><b class="block text-[15px] text-slate-900">أبنائي</b><span class="block text-[11px] text-slate-500">${nk ? nk + (nk === 1 ? " فرد" : " أفراد") : ""}${nk && nr ? " · " : ""}${nr ? nr + " قريب" : ""}</span></div></div>
       <div class="flex items-center gap-1.5 shrink-0">${act("kidsAddNew", "plus", "إضافة", "bg-brand-700 text-white ring-brand-700")}${act("kidsEdit", "pencil", "تعديل", "bg-white text-slate-700 ring-slate-200")}${ro ? act("addRel", "users", "قريب", "bg-sky-50 text-sky-700 ring-sky-200") : ""}</div>
     </div>
-    ${(() => { const picked = ks.some(sel); return `<div class="mt-3 mb-2.5 rounded-2xl px-3 py-2 flex items-center gap-2 text-white shadow-soft ${picked ? "" : "animate-pulse"}" style="background:linear-gradient(90deg,#c99a2e,#e0b84a 45%,#552c83)">
+    ${(() => { const picked = ks.some(sel); return `<div class="mt-3 mb-2.5 rounded-2xl px-3 py-2 flex items-center gap-2 text-white shadow-soft ${picked ? "" : "animate-pulse"}" style="animation-iteration-count:4;background:linear-gradient(90deg,#c99a2e,#e0b84a 45%,#552c83)">
       <span class="w-7 h-7 rounded-full bg-white/25 flex items-center justify-center shrink-0">${ic("users", "!w-4 !h-4")}</span>
       <b class="text-[13.5px] flex-1">${picked ? gTxt("بتحجز لمين؟ تقدر تبدّل من هنا", "بتحجزي لمين؟ تقدري تبدّلي من هنا") : gTxt("👇 اختار الأول بتحجز لمين", "👇 اختاري الأول بتحجزي لمين")}</b>
       <span class="text-[11px] font-semibold bg-white/20 rounded-full px-2 py-0.5 shrink-0">${ks.length} ${ks.length > 2 ? "أفراد" : ks.length === 2 ? "فردين" : "فرد"}</span></div>`; })()}
@@ -1011,7 +1009,6 @@ Router.add("/e/books", view => {
   renderBookGrid(); refreshCartViews();
 });
 on("bookSearch", v => { Emp.filter.q = v.trim(); renderBookGrid(); });
-on("fStage", v => { Emp.filter.stage = v; Emp.filter.grade = ""; Shell.rerender(); });
 on("fGrade", v => { Emp.filter.grade = v; Emp.filter.track = ""; Emp.filter.q = ""; Shell.rerender(); scrollTo({ top: 0 }); });
 /** الابن المسجّل اللي بنحجز له دلوقتي (لو موجود) */
 const curKid = () => { const ks = myKids(), f = Emp.filter; const i = ks.findIndex(k => k.grade === f.grade && kidBen(k) === Emp.ben); return i >= 0 ? { k: ks[i], i } : null; };
@@ -1042,7 +1039,6 @@ on("addBundle", async pub => {
 
 on("pickBen", v => { Emp.ben = v; Shell.rerender(); });
 on("addBen", () => ACTIONS.addRel());
-on("fSubject", v => { Emp.filter.subject = v; Shell.rerender(); });
 /** ترتيب الصفوف كما في الكتالوج (تأسيس ← كي جي ← ابتدائي ← إعدادي ← ثانوي) */
 function gradeOrder() { const o = {}; ((APP.emp && APP.emp.catalog && APP.emp.catalog.grades) || []).forEach((g, i) => { o[g.label] = i; }); return o; }
 function cartChanged(id) {
@@ -1169,17 +1165,13 @@ function wzSteps() {
   const ms = wzMembers(), steps = [["family", "العائلة"], ["member", "الكتب"], ["review", "المراجعة"], ["pay", "السداد"]], cur = steps.findIndex(s => s[0] === WZ.step);
   return `<ol class="flex items-center gap-1.5 mb-4">${steps.map((s, k) => `<li class="flex-1"><div class="h-1.5 rounded-full ${k <= cur ? "bg-brand-600" : "bg-slate-200"}"></div><div class="text-[11px] mt-1 font-semibold ${k === cur ? "text-brand-800" : "text-slate-400"}">${s[1]}${s[0] === "member" && ms.length > 1 && WZ.step === "member" ? ` <span class="num">${WZ.i + 1}/${ms.length}</span>` : ""}</div></li>`).join("")}</ol>`;
 }
-const personCard = (k, i, on, act) => `<button class="min-w-0 text-right rounded-2xl p-2.5 ring-2 transition active:scale-[.98] flex items-center gap-2 ${on ? "ring-brand-600 bg-brand-50" : "ring-slate-200 bg-white opacity-70"}" data-act="${act}" data-id="${i}">
-  <span class="w-10 h-10 rounded-xl ${k.rel ? "bg-sky-50" : "bg-gold-50"} flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span>
-  <span class="flex-1 min-w-0"><b class="block text-[14.5px] text-slate-900 truncate">${esc(kidName(k, i))}</b><span class="block text-[11.5px] text-slate-500 truncate">${k.rel ? esc(k.rel) + " · " : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span></span>
-  <span class="w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check") : ""}</span></button>`;
 
 const wzGuideKey = () => "wb_wz_guide_off_" + ((APP.user && APP.user.empId) || "");
 const wzMarkGuideOff = () => { try { localStorage.setItem(wzGuideKey(), "1"); } catch (_) {} };
 
 function wzFamily() {
   const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i), kids = ks.map((k, i) => [k, i]).filter(x => !x[0].rel), rels = ks.map((k, i) => [k, i]).filter(x => x[0].rel);
-  if (WZ.skip) return wzGradePick();
+  if (WZ.skip) { WZ.skip = false; setTimeout(gbOpen, 50); }
   const firstName = String((APP.user && APP.user.fullName) || "").trim().split(/\s+/)[0];
   const fem = empGender() === "F";
   const greet = `${fem ? "أهلاً بكِ" : "أهلاً بك"}${firstName ? " يا " + firstName : ""} — نجهّز كتب أولادك في دقائق`;
@@ -1259,13 +1251,6 @@ function wzFamily() {
     </div>
     <button class="w-full mt-2.5 text-[13px] font-semibold text-slate-600 hover:text-brand-800 underline underline-offset-4 py-2 transition" data-act="wzSkip">${ks.length ? "أو أحجز لصف آخر بدون تسجيل" : gTxt("أو كمّل بدون تسجيل — اختر الصف مباشرة", "أو كمّلي بدون تسجيل — اختاري الصف مباشرة")}</button>
     <button class="btn btn-primary btn-lg w-full mt-3 shadow-soft" data-act="wzStart" ${ms.length ? "" : "disabled"}>${ic("chevron-left")} ${gTxt("ابدأ الحجز بالترتيب", "ابدأي الحجز بالترتيب")} (${ms.length})</button>`;
-}
-function wzGradePick() {
-  const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
-  return `<h1 class="font-display font-bold text-[20px] text-slate-900">${gTxt("اختر الصف", "اختاري الصف")}</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">${gTxt("بدون تسجيل — علّم كل الصفوف اللي محتاجها، ونحجز لكل صف لوحده كأنه ابن.", "بدون تسجيل — علّمي كل الصفوف اللي محتاجاها، ونحجز لكل صف لوحده كأنه ابن.")}</p>
-    ${stages.map(s => `<div class="text-[12.5px] font-bold text-brand-700 mb-2">${esc(s)}</div><div class="grid grid-cols-3 gap-2 mb-4">${(cat.grades || []).filter(g => g.stage === s && cnt[g.label]).map(g => { const on = (Emp.gsel || []).includes(g.label); return `<button class="relative rounded-2xl p-3 font-bold text-[15px] active:scale-95 transition ring-1 ${on ? "bg-brand-700 text-white ring-brand-700" : "bg-white ring-slate-200"}" data-act="gpSel" data-id="${esc(g.label)}" aria-pressed="${on}">${on ? `<span class="absolute top-1 left-1">${ic("check", "!w-3.5 !h-3.5")}</span>` : ""}${esc(gradeShort(g.label))}</button>`; }).join("")}</div>`).join("")}
-    <button class="btn btn-primary btn-lg w-full mb-2" data-act="gpStart" ${(Emp.gsel || []).length ? "" : "disabled"}>${(Emp.gsel || []).length ? `ابدأ الحجز لـ ${Emp.gsel.length === 1 ? "صف واحد" : Emp.gsel.length === 2 ? "صفين" : Emp.gsel.length + " صفوف"} — صف صف ←` : gTxt("اختار صف أو أكتر", "اختاري صف أو أكتر")}</button>
-    <button class="btn btn-ghost w-full" data-act="wzUnskip">${ic("arrow-right")} رجوع</button>`;
 }
 function wzMember() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
@@ -1363,12 +1348,9 @@ Router.add("/e/wiz", view => {
 const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
 on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
 on("wzHideGuide", () => { wzMarkGuideOff(); WZ.forceGuide = false; Shell.rerender(); });
-on("wzShowGuide", () => { WZ.guideStep = 0; WZ.forceGuide = true; Shell.rerender(); });
-on("wzGuideStep", v => { WZ.guideStep = +v || 0; Shell.rerender(); });
 on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { Shell.rerender(); gbOpen(); } else { Shell.rerender(); } });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
 on("wzSkip", () => gbOpen());
-on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
 
 // ================================================================ الحجز بالصف الدراسي — نفس أسلوب «أبنائي»: محادثة خطوة بخطوة
 // المرحلة ← الصف ← نوع المدرسة ← الشعبة (لو فيه) ← «خلاص كده ولا هتضيف صف تاني؟» ← ابدأ الحجز (لكل صف: الشنطة/السلسلة/بنفسي)
@@ -1426,20 +1408,6 @@ on("gbDone", () => {
   toast(ok.length > 1 ? `هنحجز لكل صف لوحده — نبدأ بـ ${gradeShort(first.grade)} 📚` : `يلا نحجز كتب ${gradeShort(first.grade)} 📚`, "info");
   setTimeout(() => wzGo("member", i >= 0 ? i : 0), 250);
 });
-// اختيار أكتر من صف (بدون تسجيل أبناء) ← الحجز لهم صف صف في المعالج كأنهم أولاد
-on("gpSel", g => { Emp.gsel = Emp.gsel || []; Emp.gsel = Emp.gsel.includes(g) ? Emp.gsel.filter(x => x !== g) : Emp.gsel.concat(g); if (navigator.vibrate) navigator.vibrate(6); if (Router.current === "/e/books") renderBookGrid(); else Shell.rerender(); });
-on("gpClear", () => { Emp.gsel = []; renderBookGrid(); });
-on("gpStart", () => {
-  const gs = (Emp.gsel || []).slice(); if (!gs.length) return toast(gTxt("اختار صف الأول", "اختاري صف الأول"), "info");
-  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
-  const go = gradeOrder(); gs.sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99));
-  gs.forEach(g => { if (!WZ.temp.some(t => t.grade === g)) WZ.temp.push({ name: "", grade: g, type: "" }); });
-  WZ.skip = false; WZ.mode = {}; WZ.pub = {}; BAG._for = ""; Emp.gsel = []; Emp.bookMode = ""; wzSave();
-  const ms = wzMembers(), i = ms.findIndex(m => m._temp && m.grade === gs[0]);
-  toast(`هنحجز ${gs.length === 1 ? "للصف" : "لكل صف لوحده"} — نبدأ بـ ${gradeShort(gs[0])} 📚`, "info");
-  wzGo("member", i >= 0 ? i : 0);
-});
-on("wzTempAdd", g => { WZ.temp.push({ name: "", grade: g, type: "" }); WZ.skip = false; wzSave(); Shell.rerender(); });
 on("wzTempDel", j => { WZ.temp.splice(+j, 1); wzSave(); Shell.rerender(); });
 on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; const ms = wzMembers(); const nxt = ms.findIndex((_, idx) => !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); wzGo("member", nxt >= 0 ? nxt : 0); });
 on("wzStartOne", idx => { const i = +idx || 0; wzSet("later", i, false); wzSet("noBooks", i, false); delete WZ.mode[i]; delete WZ.pub[i]; BAG._for = ""; wzGo("member", i); });
@@ -1447,7 +1415,6 @@ on("wzToFamily", () => wzGo("family"));
 on("wzMode", v => { WZ.mode[WZ.i] = v; wzSave(); if (v === "manual") { wzFocus(wzMembers()[WZ.i]); Emp.wzManual = true; Router.go("/e/books"); scrollTo({ top: 0 }); return; } Shell.rerender(); });
 on("wzModeReset", () => { delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = ""; wzSave(); Shell.rerender(); });
 on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); });
-const wzAdvance = () => { const ms = wzMembers(); BAG._for = ""; BAG.inline = false; if (WZ.i + 1 < ms.length) wzGo("member", WZ.i + 1); else wzGo("review"); };
 const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); };
 on("wzNext", () => {
   BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); APP.cart[ck(r.pick, Emp.ben)] = r.qty || 1; });
@@ -1468,7 +1435,6 @@ on("wzNoBooks", () => {
   const nxt = wzNextUnbooked();
   if (nxt >= 0) wzGo("member", nxt); else wzGo("review");
 });
-on("wzPrev", () => { BAG._for = ""; wzGo("member", Math.max(0, WZ.i - 1)); });
 on("wzBack", () => { Emp.wzManual = false; wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false); BAG._for = ""; wzGo("afterMember", WZ.i); });
 on("wzReview", () => wzGo("review"));
 on("wzBackReview", () => { Emp.wzManual = false; wzGo("review"); });

@@ -556,16 +556,7 @@ Notif.list = function () {
 };
 
 // ================================================================ فتح تطبيق إنستاباي
-const isAndroid = () => /android/i.test(navigator.userAgent), isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
-function openInstaPay(num) {
-  try { navigator.clipboard.writeText(num); } catch (_) {}
-  const link = payS().PAY_INSTAPAY_LINK;
-  if (link) { window.location.href = link; return; }
-  toast("اتنسخ الرقم " + num + " — الصقه في إنستاباي 👌", "success");
-  if (isAndroid()) window.location.href = "intent://#Intent;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;package=com.egyptianbanks.instapay;S.browser_fallback_url=" + encodeURIComponent("https://play.google.com/store/apps/details?id=com.egyptianbanks.instapay") + ";end";
-  else if (isIOS()) window.location.href = "itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=InstaPay%20Egypt";
-}
-on("openInsta", () => openInstaPay(payS().PAY_INSTAPAY));
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
 // بطاقة الدفع بإنستاباي: رمز QR نظيف (يُعاد توليده من رابط الدفع) + عنوان الدفع IPA بنسخ سريع + فتح التطبيق + حفظ الرمز كصورة
 const INSTA_DEFAULT = { link: "https://ipn.eg/C/Q/mahmoud.aliraky/instapay?ISIGN=23052601MEQCIBZG2PIdL9Sw+02NldtaUIAkuwpiY81zB8j7m+WLKGHeAiB6eWQDCbq4OTL0M7KUpdeMAhyHVZI0ImBgwbwg61/qjw==", ipa: "mahmoud.aliraky@instapay" };
 const instaInfo = () => { const s = Object.assign({}, (APP.adm && APP.adm.settingsMap) || {}, payS()); return { link: s.PAY_INSTAPAY_LINK || INSTA_DEFAULT.link, ipa: s.PAY_INSTAPAY_IPA || INSTA_DEFAULT.ipa, num: s.PAY_INSTAPAY || "", holder: s.CASH_ACCOUNT_HOLDER || "" }; };

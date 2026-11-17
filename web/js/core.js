@@ -77,7 +77,6 @@ const TONE = {
   Approved: "green", Approved_With_Variance: "amber", Voided: "red"
 };
 const pill = (code, label, tone) => `<span class="pill pill-${tone || TONE[code] || "gray"}">${esc(label || ar(code))}</span>`;
-const PHASE_STATUS_LABEL = { Open: "الحجز مفتوح", Scheduled: "لم يبدأ", Closed: "الحجز مغلق" };
 
 // ---------------------------------------------------------------- مؤشرات التحميل والتنبيهات
 let busyCount = 0;
