@@ -814,3 +814,69 @@ _wrapA("/a/dash", view => {
   nav.addEventListener("click", e => { const b = e.target.closest("[data-jump]"); if (!b) return; const t = document.getElementById(b.dataset.jump); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); });
   const first = view.firstElementChild; first ? first.insertAdjacentElement("afterend", nav) : view.prepend(nav);
 });
+
+// ============================================================ كشف حساب المرحلة (مثل كشف البنك) + الموقف المالي
+/** حركات الخزينة الفعلية + الموقف المالي، حسب المرحلة/كل المراحل وفترة اختيارية */
+const LQ = { ph: "", from: "", to: "" };
+function ledgerData() {
+  const d = A(), R = v => Math.round(v * 100) / 100, ph = LQ.ph, inPh = id => !ph || String(id || "") === ph;
+  const invPh = {}; d.empInvoices.forEach(i => invPh[i.Emp_Inv_ID] = i.Phase_ID);
+  const { e } = maps(), mv = [];
+  d.empPayments.filter(p => !isTrue(p.Is_Voided) && p.Payment_Method !== "CREDIT" && inPh(invPh[p.Emp_Inv_ID])).forEach(p => {
+    const a = n(p.Amount); mv.push({ at: String(p.Payment_Date), kind: a < 0 ? "refund" : "collect", type: a < 0 ? "رد رصيد لموظف" : "تحصيل من موظف", ref: p.Receipt_No,
+      notes: `${empName(e, p.Emp_ID)} · ${ar(p.Payment_Method)}${p.Transaction_Ref && p.Payment_Method !== "CASH" ? " · " + p.Transaction_Ref : ""}`, cr: a > 0 ? a : 0, dr: a < 0 ? -a : 0 }); });
+  d.supLedger.filter(l => l.Trans_Type === "PAYMENT_DEBIT" && inPh(l.Phase_ID)).forEach(l => mv.push({ at: String(l.Trans_Date), kind: "sup", type: "دفعة للمكتبة", ref: l.Document_Ref || l.Sup_Trans_ID, notes: `${l.Payment_Channel || ""} · ${l.Notes || ""}`, cr: 0, dr: n(l.Debit_Amount) }));
+  d.expenses.filter(x => inPh(x.Phase_ID)).forEach(x => mv.push({ at: String(x.Expense_Date), kind: "exp", type: "مصروف: " + x.Expense_Category, ref: x.Expense_ID, notes: `${x.Beneficiary_Name || ""}${x.Receipt_Doc_No && x.Receipt_Doc_No !== "-" ? " · إيصال " + x.Receipt_Doc_No : ""}${x.Notes ? " · " + x.Notes : ""}`, cr: 0, dr: n(x.Amount) }));
+  mv.sort((a, b) => a.at.localeCompare(b.at));
+  const dayOf = m => m.at.slice(0, 10);
+  let open = 0; const rows = [];
+  mv.forEach(m => { if (LQ.from && dayOf(m) < LQ.from) { open = R(open + m.cr - m.dr); return; } if (LQ.to && dayOf(m) > LQ.to) return; rows.push(m); });
+  let run = open; rows.forEach(m => { run = R(run + m.cr - m.dr); m.bal = run; m.date = dayOf(m); });
+  const sumK = k => R(rows.filter(m => m.kind === k).reduce((a, m) => a + m.cr + m.dr, 0));
+  // الموقف المالي (حسب المرحلة؛ الفترة تخص حركة الخزينة فقط)
+  const sl = d.supLedger.filter(l => inPh(l.Phase_ID)), sT = t => R(sl.filter(l => l.Trans_Type === t).reduce((a, l) => a + n(l.Credit_Amount) - n(l.Debit_Amount), 0));
+  const sih = d.supInvHeaders.filter(h => h.Status !== "Voided" && inPh(h.Phase_ID));
+  const invs = d.empInvoices.filter(i => inPh(i.Phase_ID)), sum2 = (a, k) => R(a.reduce((s, x) => s + n(x[k]), 0));
+  const supBal = R(sl.reduce((a, l) => a + n(l.Credit_Amount) - n(l.Debit_Amount), 0));
+  const P = {
+    supInvCount: sih.length, supGross: sum2(sih, "Gross_Total_Cover"), supAfter: sum2(sih, "Total_After_Item_Discount"), supVol: sum2(sih, "Volume_Discount_Amount"),
+    supNet: R(sT("INVOICE_CREDIT") + sT("INVOICE_VOID")), supClaims: (R(-(sT("DAMAGE_CLAIM") + sT("DAMAGE_CLAIM_VOID"))) || 0), supReturns: (R(-sT("RETURN_DEBIT_NOTE")) || 0), supPaid: (R(-sT("PAYMENT_DEBIT")) || 0), supBal,
+    empCount: invs.length, empCover: sum2(invs, "Total_Cover_Amount"), empNet: sum2(invs, "Net_Final_Invoice_Amount"), empPaid: sum2(invs, "Total_Paid_Amount"), empRem: sum2(invs, "Remaining_Balance"), empCredit: sum2(invs, "Credit_Balance"),
+    collected: sumK("collect"), refunds: sumK("refund"), supPaidCash: sumK("sup"), expenses: sumK("exp"),
+    expByCat: Object.entries(rows.filter(m => m.kind === "exp").reduce((a, m) => (a[m.type.replace("مصروف: ", "")] = R((a[m.type.replace("مصروف: ", "")] || 0) + m.dr), a), {})),
+    byMethod: Object.entries(rows.filter(m => m.kind === "collect").reduce((a, m) => { const k = m.notes.split(" · ")[1] || "—"; a[k] = R((a[k] || 0) + m.cr); return a; }, {}))
+  };
+  P.cash = run; P.net = R(P.cash + P.empRem - P.empCredit - P.supBal);
+  const phName = ph ? ((d.phases.find(p => p.Phase_ID === ph) || {}).Phase_Name || ph) : "كل المراحل";
+  return { scope: phName + (LQ.from || LQ.to ? ` · من ${LQ.from || "البداية"} إلى ${LQ.to || "اليوم"}` : ""), open, rows, close: run, P,
+    dr: R(rows.reduce((a, m) => a + m.dr, 0)), cr: R(rows.reduce((a, m) => a + m.cr, 0)), filtered: !!(LQ.from || LQ.to) };
+}
+Router.add("/a/ledger", view => {
+  const d = A(), x = ledgerData(), P = x.P;
+  const bal = v => `<b class="num ${v < 0 ? "text-rose-600" : "text-slate-900"}">${fmt(v)}</b>`;
+  const kv = (t, v, cls) => `<div class="flex justify-between py-1.5 text-[13px] border-b border-slate-100 last:border-0"><span class="text-slate-600">${t}</span><b class="num ${cls || ""}">${fmt(v)}</b></div>`;
+  view.innerHTML = UI.pageHead("كشف حساب المرحلة", "حركة الخزينة الفعلية بالترتيب الزمني + الموقف المالي — مؤيَّد بالإيصالات والفواتير والأذون",
+    `<button class="btn btn-primary btn-sm" data-act="ledgerPdf">${ic("printer")} كشف PDF</button>`)
+  + `<section class="card card-pad mb-4"><div class="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
+      <div class="col-span-2 sm:col-span-2"><div class="label">المرحلة</div><select class="input" data-change="lqPh"><option value="">كل المراحل</option>${d.phases.map(p => `<option value="${esc(p.Phase_ID)}" ${LQ.ph === p.Phase_ID ? "selected" : ""}>${esc(p.Phase_Name || p.Phase_ID)}</option>`).join("")}</select></div>
+      <div><div class="label">من تاريخ</div><input type="date" class="input" value="${esc(LQ.from)}" data-change="lqFrom"></div>
+      <div><div class="label">إلى تاريخ</div><input type="date" class="input" value="${esc(LQ.to)}" data-change="lqTo"></div></div>
+      ${LQ.from || LQ.to || LQ.ph ? `<button class="text-[12px] text-brand-700 font-semibold mt-2" data-act="lqReset">${ic("x", "inline !w-3.5 !h-3.5")} إلغاء الفلاتر</button>` : ""}</section>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+      ${UI.kpi("رصيد أول المدة", money(x.open), { icon: "wallet", tone: "gray" })}${UI.kpi("الوارد (دائن)", money(x.cr), { icon: "arrow-down", tone: "green", foot: `${x.rows.filter(m => m.cr).length} حركة` })}
+      ${UI.kpi("المنصرف (مدين)", money(x.dr), { icon: "arrow-up", tone: "red", foot: `${x.rows.filter(m => m.dr).length} حركة` })}${UI.kpi("رصيد الخزينة", money(x.close), { icon: "landmark", tone: x.close < 0 ? "red" : "brand" })}</div>
+    <div class="grid gap-4 lg:grid-cols-3 mb-4">
+      ${UI.section(`${ic("truck", "text-brand-600")} المكتبة والطلبيات`, `${P.supInvCount} فاتورة توريد`, kv("قيمة الطلبيات بسعر الغلاف", P.supGross) + kv("بعد خصم الأصناف", P.supAfter) + kv("(−) خصم الكمية", P.supVol) + kv("صافي الطلبيات الموردة (بعد الإلغاءات)", P.supNet, "text-brand-800") + kv("(−) مطالبات تالف", P.supClaims) + kv("(−) مرتجع نهائي", P.supReturns) + kv("(−) مدفوع للمكتبة", P.supPaid) + `<div class="mt-2 text-left">${supDue(P.supBal)}</div>`)}
+      ${UI.section(`${ic("receipt", "text-brand-600")} فواتير الموظفين`, `${P.empCount} فاتورة`, kv("بسعر الغلاف", P.empCover) + kv("صافي الفواتير النهائية", P.empNet, "text-brand-800") + kv("المحصّل فعلاً", P.empPaid, "text-emerald-600") + kv("المتبقي على الموظفين", P.empRem, P.empRem ? "text-rose-600" : "") + kv("أرصدة مستحقة الرد للموظفين", P.empCredit) + kv("وفّرها الموظفون", P.empCover - P.empNet, "text-emerald-600"))}
+      ${UI.section(`${ic("scale", "text-brand-600")} الموقف المالي`, x.filtered ? "الخزينة حسب الفترة" : "", kv("رصيد الخزينة", P.cash) + kv("(+) المتبقي على الموظفين", P.empRem) + kv("(−) أرصدة مستحقة الرد", P.empCredit) + kv(P.supBal >= 0 ? "(−) المستحق للمكتبة" : "(+) المستحق على المكتبة", Math.abs(P.supBal)) + `<div class="flex justify-between pt-2 mt-1 text-[14px]"><b>صافي المركز المالي</b>${bal(P.net)}</div><p class="text-[11px] text-slate-400 mt-1">لا يشمل قيمة المخزون المتبقي.</p>` + (P.expByCat.length ? `<div class="label mt-3">المصروفات</div>` + P.expByCat.map(([k, v]) => kv(esc(k), v)).join("") : ""))}
+    </div>`
+  + UI.section(`${ic("file-text", "text-brand-600")} حركة الخزينة`, esc(x.scope), UI.table([
+    { t: "التاريخ", cls: "num", v: m => esc(m.date) }, { t: "البند", v: m => `<b>${esc(m.type)}</b>` }, { t: "البيان", v: m => `<span class="text-[12px] text-slate-500">${esc(m.notes)}</span>` }, { t: "المرجع", cls: "num", v: m => esc(m.ref) },
+    { t: "مدين (منصرف)", cls: "num", v: m => m.dr ? `<span class="text-rose-600">${fmt(m.dr)}</span>` : "" }, { t: "دائن (وارد)", cls: "num", v: m => m.cr ? `<span class="text-emerald-600">${fmt(m.cr)}</span>` : "" }, { t: "الرصيد", cls: "num", v: m => bal(m.bal) }
+  ], x.rows.slice().reverse(), { maxH: 620, emptyIcon: "file-text", empty: "لا حركات في النطاق المختار" }));
+});
+on("lqPh", v => { LQ.ph = v; Shell.rerender(); });
+on("lqFrom", v => { LQ.from = v; Shell.rerender(); });
+on("lqTo", v => { LQ.to = v; Shell.rerender(); });
+on("lqReset", () => { LQ.ph = LQ.from = LQ.to = ""; Shell.rerender(); });
+on("ledgerPdf", () => { const x = ledgerData(); Doc.show("كشف حساب " + x.scope, Doc.cashStatement(x), { size: "A4", file: "كشف-حساب-" + x.scope.replace(/\s+/g, "-") }); });

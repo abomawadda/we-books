@@ -359,6 +359,30 @@ td.bk b { font-weight: 700; color: #3b1d63; } td.bk .ben { font-size: .78em; col
       <div class="sig"><div>أمين المخزن</div><div>المدير المالي</div><div>مسؤول المبادرة</div></div>${Doc.foot("الكشف الشامل للمرتجعات")}`, "", "", Doc.density(i + d.docs.length + d.poolRows.length, "A4"));
   },
 
+  /** كشف حساب المرحلة (الخزينة) + الموقف المالي: d = ledgerData() */
+  cashStatement(d) {
+    const P = d.P, m = v => Doc.money(v), bal = v => `<span style="color:${v < 0 ? "#be123c" : "inherit"}">${m(v)}</span>`;
+    const PER = 26, chunks = []; for (let k = 0; k < Math.max(1, d.rows.length); k += PER) chunks.push(d.rows.slice(k, k + PER));
+    const kv = (t, v, b) => Doc.kv(t, `<span class="num">${b ? "<b>" + m(v) + "</b>" : m(v)}</span>`);
+    const sb = Math.abs(P.supBal) < 0.005 ? "متصفّي" : (P.supBal > 0 ? "للمكتبة " : "على المكتبة ") + m(Math.abs(P.supBal));
+    const summary = Doc.page(`${Doc.head("كشف حساب وتقرير مالي", "FIN-" + Doc.date())}
+      <div class="meta"><div class="box"><h4>النطاق</h4>${Doc.kv("المرحلة / الفترة", esc(d.scope))}${Doc.kv("عدد حركات الخزينة", `<span class="num">${d.rows.length}</span>`)}</div>
+        <div class="box"><h4>الخزينة</h4>${kv("رصيد أول المدة", d.open)}${kv("الوارد", d.cr)}${kv("المنصرف", d.dr)}${kv("رصيد آخر المدة", d.close, 1)}</div></div>
+      <div class="meta"><div class="box"><h4>المكتبة والطلبيات (${P.supInvCount} فاتورة)</h4>${kv("قيمة الطلبيات بسعر الغلاف", P.supGross)}${kv("بعد خصم الأصناف", P.supAfter)}${kv("خصم الكمية", P.supVol)}${kv("صافي الطلبيات الموردة", P.supNet, 1)}${kv("مطالبات تالف", P.supClaims)}${kv("مرتجع نهائي", P.supReturns)}${kv("المدفوع للمكتبة", P.supPaid)}${Doc.kv("رصيد المكتبة", `<b class="num">${sb}</b>`)}</div>
+        <div class="box"><h4>فواتير الموظفين (${P.empCount} فاتورة)</h4>${kv("بسعر الغلاف", P.empCover)}${kv("صافي الفواتير النهائية", P.empNet, 1)}${kv("المحصّل فعلاً", P.empPaid)}${kv("المتبقي على الموظفين", P.empRem)}${kv("أرصدة مستحقة الرد", P.empCredit)}${kv("وفّرها الموظفون", P.empCover - P.empNet)}</div></div>
+      <div class="meta"><div class="box"><h4>تحليل الخزينة في النطاق</h4>${kv("تحصيلات الموظفين", P.collected)}${P.byMethod.map(([k, v]) => Doc.kv("— " + esc(k), `<span class="num">${m(v)}</span>`)).join("")}${kv("ردود للموظفين", P.refunds)}${kv("مدفوعات المكتبة", P.supPaidCash)}${kv("المصروفات والشحن", P.expenses)}${P.expByCat.map(([k, v]) => Doc.kv("— " + esc(k), `<span class="num">${m(v)}</span>`)).join("")}</div>
+        <div class="box"><h4>المركز المالي</h4>${kv("رصيد الخزينة", P.cash)}${kv("(+) المتبقي على الموظفين", P.empRem)}${kv("(−) أرصدة مستحقة الرد", P.empCredit)}${kv(P.supBal >= 0 ? "(−) المستحق للمكتبة" : "(+) المستحق على المكتبة", Math.abs(P.supBal))}<div class="kv big"><span>صافي المركز المالي (ج.م)</span><b class="num">${bal(P.net)}</b></div></div></div>
+      <div class="note">• حركة الخزينة = العمليات النقدية الفعلية فقط (إيصالات التحصيل، الردود، دفعات المكتبة، المصروفات)، وتسويات الرصيد الداخلية لا تدخلها. صافي المركز لا يشمل قيمة المخزون المتبقي.${d.filtered ? " فلتر التاريخ يخص حركة الخزينة؛ أرصدة المكتبة والموظفين تراكمية للمرحلة." : ""}</div>
+      <div class="sig"><div>المحاسب</div><div>المدير المالي</div><div>مسؤول المبادرة</div></div>${Doc.foot("كشف حساب · " + d.scope)}`, "", "", "dense");
+    let i = 0;
+    const pages = chunks.map((ls, ci) => Doc.page(`${Doc.head("حركة الخزينة", d.scope)}
+      <table><thead><tr><th class="c" style="width:4%">#</th><th class="c" style="width:10%">التاريخ</th><th style="width:15%">البند</th><th>البيان</th><th class="c" style="width:12%">المرجع</th><th class="l" style="width:10%">مدين (منصرف)</th><th class="l" style="width:10%">دائن (وارد)</th><th class="l" style="width:11%">الرصيد</th></tr></thead>
+        <tbody>${ci === 0 ? `<tr><td></td><td colspan="6"><b>رصيد أول المدة</b></td><td class="l num"><b>${bal(d.open)}</b></td></tr>` : ""}${ls.map(r => `<tr><td class="c num">${++i}</td><td class="c num">${esc(r.date)}</td><td><b>${esc(r.type)}</b></td><td><span class="sub">${esc(r.notes)}</span></td><td class="c num">${esc(r.ref)}</td><td class="l num">${r.dr ? m(r.dr) : ""}</td><td class="l num">${r.cr ? m(r.cr) : ""}</td><td class="l num"><b>${bal(r.bal)}</b></td></tr>`).join("") || `<tr><td colspan="8" class="c sub">لا حركات</td></tr>`}
+        ${ci === chunks.length - 1 ? `<tr class="tot-row"><td colspan="5" style="text-align:right;font-weight:800">الإجمالي ورصيد آخر المدة</td><td class="l num"><b>${m(d.dr)}</b></td><td class="l num"><b>${m(d.cr)}</b></td><td class="l num"><b>${bal(d.close)}</b></td></tr>` : ""}</tbody></table>
+      ${ci === chunks.length - 1 ? `<div class="words">رصيد الخزينة آخر المدة: ${esc(Doc.words(Math.abs(d.close)))}${d.close < 0 ? " (عجز)" : ""}</div>` : ""}${Doc.foot("حركة الخزينة · " + d.scope)}`, "", "", "dense"));
+    return summary + pages.join("");
+  },
+
   // ---------------------------------------------------------------- المعاينة والحفظ
   fontsCss(base) {
     return [400, 500, 600, 700, 800].map(w =>
