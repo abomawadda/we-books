@@ -31,6 +31,11 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   await p.goto('https://app.test/'); await p.waitForTimeout(700);
   const sg = await p.$('#spGo'); if (sg) { await sg.click({ force: true }); await p.waitForTimeout(500); }
   await shot('login');
+  if (process.env.LOGIN) {
+    for (const [k, m] of [['emp', 'login'], ['guest', 'login'], ['guest', 'register'], ['outsource', 'register']]) {
+      await p.evaluate(([k, m]) => { Shell.loginTab = k; Shell.regMode = m; Shell.renderLogin(); }, [k, m]); await p.waitForTimeout(400); await shot('lg-' + k + '-' + m); }
+    await b.close(); return;
+  }
   await p.evaluate(() => { Shell.loginTab = 'emp'; Shell.renderLogin(); }); await p.waitForTimeout(300);
   await p.evaluate(() => { const d = document; d.getElementById('lgEmp').value = '1001'; d.getElementById('lgNat').value = '4512'; d.getElementById('lgMob').value = '01012345678'; d.getElementById('fEmp').dispatchEvent(new Event('submit', { cancelable: true })); }); await p.waitForTimeout(1500);
   await shot('home0');
