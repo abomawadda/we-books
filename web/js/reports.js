@@ -154,7 +154,7 @@ function r01Summary(items, e) {
     { t: "الموظف", v: r => `<b>${esc(empName(e, r.id))}</b><div class="text-[11px] text-slate-400">${esc((e[r.id] || {}).Department || "")}</div>` },
     { t: "الكتب / النسخ", cls: "num", v: r => `${fmt(r.books.size)} / <b>${fmt(r.q)}</b>` },
     { t: "القيمة", cls: "num", v: r => `<b>${fmt(r.v)}</b>` },
-    { t: "السداد", v: r => esc(ar((d.resHeaders.find(x => x.Res_ID === r.resId) || {}).Payment_Method_Selected)) },
+    { t: "السداد", v: r => { const h = d.resHeaders.find(x => x.Res_ID === r.resId) || {}; return esc(ar(h.Payment_Method_Selected)) + (h.Payment_Method_Selected === "INSTALLMENT" && h.Payment_Channel ? " · " + esc(ar(h.Payment_Channel)) : ""); } },
     { t: "أول أسبقية", cls: "num", v: r => `<span dir="ltr">${esc(String(r.first).slice(0, 16))}</span>` },
     { t: "للأقارب", v: r => r.rel.size ? [...r.rel].map(x => `<span class="pill pill-blue">${esc(x)}</span>`).join(" ") : "" },
     { t: "", actions: true, v: r => `<button class="btn btn-soft btn-xs" data-act="r01Detail" data-id="${esc(r.id)}" aria-label="تفاصيل الحجز">${ic("eye")} تفاصيل الحجز</button>` }

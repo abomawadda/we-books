@@ -37,7 +37,8 @@ const Emp = {
       method: h ? h.Payment_Method_Selected : (r.employee.installmentAllowed ? "INSTALLMENT" : "CASH"),
       downType: (h && h.Down_Payment_Type) || "PERCENTAGE",
       down: h ? n(h.Down_Payment_Input) : Math.max(25, n(s.MIN_DOWN_PAYMENT_PCT)),
-      count: (h && n(h.Installment_Count)) || n(s.DEFAULT_INSTALLMENT_COUNT) || 2
+      count: (h && n(h.Installment_Count)) || n(s.DEFAULT_INSTALLMENT_COUNT) || 2,
+      channel: (h && h.Payment_Channel) || ""
     };
     if (!r.employee.installmentAllowed && APP.plan.method === "INSTALLMENT") APP.plan.method = "CASH";
   },
@@ -320,7 +321,7 @@ function cartHTML() {
   // السلة بنفس السلوك في كل طرق الحجز: ١ الكتب (مراجعة) ← ٢ طريقة السداد ← ٣ التأكيد
   let step = Emp.cartStep || "list"; if (Emp._noList && step === "list") step = "pay"; if (!ids.length || !open) step = "list";
   const stepBar = open && ids.length ? (() => { const st = [["list", "book-open", "الكتب"], ["pay", "wallet", "السداد"], ["confirm", "check-check", "التأكيد"]], k = st.findIndex(y => y[0] === step);
-    return `<ol class="sticky z-20 flex items-start mb-4 rounded-2xl p-3 ring-1 ring-brand-100 shadow-soft" style="top:${Emp._cartSheet || Router.current === "/e/wiz" ? "0" : "4rem"};background:linear-gradient(135deg,#faf7ff,#f1e9fc)">${st.map((x, i) => { const done = i < k, cur = i === k;
+    return `<ol class="sticky z-20 flex items-start mb-4 rounded-2xl p-3 ring-1 ring-brand-100 shadow-soft" style="top:${Emp._cartSheet || Router.current === "/e/wiz" ? "0" : "calc(4rem + var(--cartHead,4.5rem))"};background:linear-gradient(135deg,#faf7ff,#f1e9fc)">${st.map((x, i) => { const done = i < k, cur = i === k;
       return `<li class="flex-1 flex flex-col items-center text-center relative">${i < st.length - 1 ? `<span class="absolute top-[19px] h-1 rounded-full ${done ? "bg-emerald-400" : "bg-brand-100"}" style="inset-inline-start:calc(50% + 22px);inset-inline-end:calc(-50% + 22px)"></span>` : ""}
         <span class="relative z-[1] w-10 h-10 rounded-2xl flex items-center justify-center transition ${done ? "bg-emerald-500 text-white" : cur ? "bg-brand-700 text-white ring-4 ring-gold-300 shadow-glow" : "bg-white text-slate-400 ring-1 ring-slate-200"}">${ic(done ? "check" : x[1], "!w-5 !h-5")}</span>
         <span class="mt-1.5 text-[11.5px] font-bold ${cur ? "text-brand-800" : done ? "text-emerald-700" : "text-slate-400"}"><span class="num">${i + 1}</span> ${x[2]}</span></li>`; }).join("")}</ol>`; })() : "";
@@ -365,27 +366,28 @@ function payBlock() {
   <div class="mt-4 rounded-2xl px-4 py-3 text-white flex items-center gap-3 shadow-soft" style="background:linear-gradient(135deg,#552c83,#2e1650)"><span class="w-10 h-10 rounded-xl bg-gold-400 text-brand-950 flex items-center justify-center shrink-0">${ic("wallet", "!w-5 !h-5")}</span><div class="leading-tight"><b class="block font-display text-[17px]">${gTxt("هتدفع إزاي؟", "هتدفعي إزاي؟")}</b><span class="block text-[11.5px] text-brand-200">اختار نوع السداد، وبعدين طريقة الدفع</span></div></div>
   <div class="mt-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5"><span class="num">١</span> نوع السداد</div>
     <div class="grid grid-cols-2 gap-2">${typeBtn("ONE", "banknote", "كاش", "مرة واحدة — كامل المبلغ عند الاستلام", false)}${typeBtn("INSTALLMENT", "calendar-check", "تقسيط", "مقدم عند الاستلام + أقساط شهرية", !instOk)}</div></div>
-  <div class="mt-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5"><span class="num">٢</span> ${inst ? "هتدفع المقدم والأقساط بـ" : "هتدفع بـ"}</div>
-    <div class="grid grid-cols-3 gap-2">${chBtn("CASH", "banknote", "نقداً")}${chBtn("INSTAPAY", "send", "إنستاباي")}${chBtn("WALLET", "smartphone", "محفظة")}</div>
-    ${ch !== "CASH" ? `<p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5 text-brand-500")} التحويل على رقم <b class="num">${esc((ch === "INSTAPAY" ? s.PAY_INSTAPAY : s.PAY_WALLET) || s.CONTACT_PHONE || "")}</b>${s.CASH_ACCOUNT_HOLDER ? " باسم " + esc(String(s.CASH_ACCOUNT_HOLDER).replace(/\s*\d{8,}.*$/, "")) : ""} — وابعت صورة التحويل من «مدفوعاتي».</p>` : ""}</div>
-
-  ${p.method === "INSTALLMENT" ? `<div class="mt-4 rounded-2xl ring-1 ring-slate-200 p-3.5 space-y-3">
+  ${p.method === "INSTALLMENT" ? `<div class="mt-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5"><span class="num">٢</span> نظام التقسيط</div><div class="rounded-2xl ring-1 ring-brand-100 bg-brand-50/30 p-3.5 space-y-3">
     <div class="grid grid-cols-2 gap-3">
       <div><div class="label">المقدم</div><div class="seg grid-cols-2"><button data-act="planDownType" data-id="PERCENTAGE" aria-pressed="${p.downType === "PERCENTAGE"}" ${open ? "" : "disabled"}>نسبة %</button><button data-act="planDownType" data-id="FIXED" aria-pressed="${p.downType === "FIXED"}" ${open ? "" : "disabled"}>مبلغ</button></div></div>
       <div><label class="label" for="planDown">${p.downType === "PERCENTAGE" ? "النسبة %" : "المبلغ ج.م"}</label><input id="planDown" type="number" inputmode="decimal" class="input input-sm !h-[44px] num" value="${esc(p.down)}" data-input="planDown" ${open ? "" : "disabled"}></div>
     </div>
     <div><div class="label">عدد الأقساط الشهرية</div><div class="flex flex-wrap gap-2">${Array.from({ length: n(s.MAX_INSTALLMENT_COUNT) || 4 }, (_, i) => i + 1).map(c => `<button class="chip !h-9 !w-11 justify-center" data-act="planCount" data-id="${c}" aria-pressed="${n(p.count) === c}" ${open ? "" : "disabled"}>${c}</button>`).join("")}</div></div>
     <div class="plan-preview">${planPreview(pc)}</div>
-  </div>` : `<div class="mt-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 px-3.5 py-2.5 text-[13px] text-emerald-900 flex items-center justify-between gap-2"><span>${ic("banknote", "inline -mt-0.5")} هتدفع مرة واحدة عند الاستلام</span><b class="num">${money(t.net)}</b></div>`}
+  </div></div>` : `<div class="mt-3 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 px-3.5 py-2.5 text-[13px] text-emerald-900 flex items-center justify-between gap-2"><span>${ic("banknote", "inline -mt-0.5")} هتدفع مرة واحدة عند الاستلام</span><b class="num">${money(t.net)}</b></div>`}
+  <div class="mt-3"><div class="text-[12.5px] font-bold text-slate-700 mb-1.5"><span class="num">${inst ? "٣" : "٢"}</span> ${inst ? "هتدفع المقدم والأقساط بـ" : "هتدفع بـ"}</div>
+    <div class="grid grid-cols-3 gap-2">${chBtn("CASH", "banknote", "نقداً")}${chBtn("INSTAPAY", "send", "إنستاباي")}${chBtn("WALLET", "smartphone", "محفظة")}</div>
+    ${ch !== "CASH" ? `<p class="text-[11.5px] text-slate-500 mt-1.5">${ic("info", "inline -mt-0.5 text-brand-500")} التحويل على رقم <b class="num">${esc((ch === "INSTAPAY" ? s.PAY_INSTAPAY : s.PAY_WALLET) || s.CONTACT_PHONE || "")}</b>${s.CASH_ACCOUNT_HOLDER ? " باسم " + esc(String(s.CASH_ACCOUNT_HOLDER).replace(/\s*\d{8,}.*$/, "")) : ""} — وابعت صورة التحويل من «مدفوعاتي».</p>` : ""}</div>
+
+
 
 `;
 }
 /** طريقة الدفع: في الكاش هي نفسها طريقة السداد، وفي التقسيط تتحفظ كتفضيل للموظف */
 const PAYCH_KEY = () => "wb_paych_" + ((APP.user && APP.user.empId) || "");
-function payChannel() { const m = APP.plan.method; if (m && m !== "INSTALLMENT") return m; let c = ""; try { c = localStorage.getItem(PAYCH_KEY()) || ""; } catch (_) {} return ["CASH", "INSTAPAY", "WALLET"].includes(c) ? c : "CASH"; }
+function payChannel() { const m = APP.plan.method; if (m && m !== "INSTALLMENT") return m; if (APP.plan.channel) return APP.plan.channel; let c = ""; try { c = localStorage.getItem(PAYCH_KEY()) || ""; } catch (_) {} return ["CASH", "INSTAPAY", "WALLET"].includes(c) ? c : "CASH"; }
 const payLabel = () => APP.plan.method === "INSTALLMENT" ? "تقسيط · " + ar(payChannel()) : "كاش · " + ar(payChannel());
 on("planType", v => { APP.plan.method = v === "INSTALLMENT" ? "INSTALLMENT" : payChannel(); Emp.dirty = true; refreshCartViews(); });
-on("planChannel", v => { try { localStorage.setItem(PAYCH_KEY(), v); } catch (_) {} if (APP.plan.method !== "INSTALLMENT") APP.plan.method = v; Emp.dirty = true; refreshCartViews(); });
+on("planChannel", v => { APP.plan.channel = v; try { localStorage.setItem(PAYCH_KEY(), v); } catch (_) {} if (APP.plan.method !== "INSTALLMENT") APP.plan.method = v; Emp.dirty = true; refreshCartViews(); });
 /** خطوة التأكيد: ملخص كل فرد + السداد + أكّد / عدّل / احفظ مؤقتاً / احذف */
 function confirmBlock() {
   const t = Emp.totals(), hadRes = Emp.activeItems().length > 0, gs = resGroups(cartLines()), p = APP.plan;
@@ -1078,9 +1080,10 @@ on("planDown", v => { APP.plan.down = v; Emp.dirty = true; const html = planPrev
 Router.add("/e/cart", view => {
   if (!APP.emp.activePhase) { view.innerHTML = Art.empty("cart", "السلة فاضية", "اختار كتب أولادك من «احجز» 😊", `<a href="#/e/books" class="btn btn-primary btn-sm mt-4">${ic("library")} ابدأ الحجز</a>`); return; }
   const t = Emp.totals();
-  view.innerHTML = `<div class="max-w-xl mx-auto">${UI.pageHead(`${ic("shopping-cart", "text-brand-600")} سلة الكتب`, t.count ? booksWord(t.count) + " · " + esc(APP.emp.activePhase.Phase_Name) : esc(APP.emp.activePhase.Phase_Name), `<a href="#/e/books" class="btn btn-outline btn-sm">${ic("plus")} أضف كتب</a>`)}
+  view.innerHTML = `<div class="max-w-xl mx-auto"><div id="cartHead" class="sticky top-16 z-30 -mx-4 px-4 pt-1 bg-slate-50/95 backdrop-blur">${UI.pageHead(`${ic("shopping-cart", "text-brand-600")} سلة الكتب`, t.count ? booksWord(t.count) + " · " + esc(APP.emp.activePhase.Phase_Name) : esc(APP.emp.activePhase.Phase_Name), `<a href="#/e/books" class="btn btn-outline btn-sm">${ic("plus")} أضف كتب</a>`)}</div>
     <section class="card card-pad"><div class="cart-body"></div></section></div>`;
   refreshCartViews();
+  const ch = $("#cartHead"); if (ch) document.documentElement.style.setProperty("--cartHead", ch.offsetHeight + "px");
 });
 on("cartStep", v => {
   if (v === "list" && Router.current === "/e/wiz") { Emp.cartStep = "pay"; return wzGo("review"); }
@@ -1142,7 +1145,7 @@ on("submitRes", async () => {
   const t = Emp.totals(), pc = Emp.planCalc(t.net);
   if (APP.plan.method === "INSTALLMENT" && items.length && !pc.ok) return toast(`أقل مقدم مسموح ${moneyTxt(pc.minDown)}`, "warning");
   if (!items.length && !(await UI.confirm({ title: "إلغاء الحجز", message: "الاستمارة فارغة، وسيتم إلغاء حجزك في هذه المرحلة بالكامل. متابعة؟", tone: "danger", ok: "إلغاء الحجز" }))) return;
-  const r = await call("SUBMIT_OR_UPDATE_RESERVATION", { phaseId: APP.phaseId, items, paymentMethod: APP.plan.method, downPaymentType: APP.plan.downType, downPaymentInput: n(APP.plan.down), installmentCount: APP.plan.count }, { block: true });
+  const r = await call("SUBMIT_OR_UPDATE_RESERVATION", { phaseId: APP.phaseId, items, paymentMethod: APP.plan.method, paymentChannel: payChannel(), downPaymentType: APP.plan.downType, downPaymentInput: n(APP.plan.down), installmentCount: APP.plan.count }, { block: true });
   if (!r.success) return toast(r.message, "danger");
   if (r.queued) { if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; } return UI.open(`<div class="text-center py-4"><div class="text-4xl">${r.busy ? "⏳" : "📴"}</div><h3 class="text-xl font-bold mt-3">حجزك اتحفظ على موبايلك</h3><p class="text-sm text-slate-600 mt-1">${esc(r.message)} — هيوصلك تأكيد أول ما يتبعت. ما تمسحش التطبيق لحد ما يتبعت 🙏</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تمام</button>` }); }
   Emp.dirty = false; Emp.cartStep = "list";
