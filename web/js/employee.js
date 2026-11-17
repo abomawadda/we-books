@@ -555,18 +555,17 @@ function kdHTML() {
       <span class="min-w-0 flex-1 leading-tight"><span class="block text-[10.5px] text-slate-500">${x.t}</span><span class="block text-[13px] font-bold text-slate-800 truncate">${x.v}</span></span>
       <button type="button" class="text-[12px] font-semibold text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50" data-act="kdGoStep" data-id="${x.id}">تغيير</button></div>`).join("")}
     ${cur ? `<div class="animate-pop-in rounded-2xl ring-2 ring-brand-100 bg-brand-50/30 p-3.5 space-y-3"><div class="text-[14px] font-bold text-slate-900">${cur.q}</div>${cur.body}</div>` : ""}
-    ${typeDone ? `<div class="animate-pop-in rounded-2xl bg-white ring-1 ring-emerald-200 p-3.5 space-y-3 shadow-xs">
-      <div class="flex items-start gap-2 text-[13px] text-emerald-800">${ic("sparkles", "text-gold-500 shrink-0 mt-0.5")} <span>${k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك "}<b>${esc(k.name || "")}</b> في <b>${esc(gradeTitle(k.grade))}</b>${k.track ? " (" + esc(k.track) + ")" : ""}${k.type ? " · " + esc(k.type) : ""} — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه فور تسعيرها"}</span></div>
-      <div class="pt-2 border-t border-slate-100">
-        <div class="text-[12.5px] font-bold text-slate-800 mb-2">${gTxt("تحب تحفظ على كده ولا هتعدّل البيانات؟", "تحبي تحفظي على كده ولا هتعدّلي البيانات؟")}</div>
-        <div class="grid grid-cols-2 gap-2">
-          <button type="button" data-act="kdSave" class="btn btn-primary btn-sm justify-center">${ic("check-check")} حفظ على كده</button>
-          <button type="button" data-act="kdAdd" class="btn btn-outline btn-sm justify-center">${ic("plus")} ${gTxt("إضافة ابن تاني", "إضافة ابن تاني")}</button>
-        </div>
-        <button type="button" data-act="kdEditAgain" class="w-full text-center text-[11.5px] font-semibold text-slate-500 hover:text-brand-700 mt-2">✏️ تعديل البيانات</button>
-      </div>
-    </div>` : ""}
   </div>
+    ${typeDone ? (() => { const who = (k.rel ? esc(relYou(k.rel)) + " " : k.gender === "g" ? "بنتك " : "ابنك ") + `<b>${esc(k.name || "")}</b>`, nOk = KD.list.filter(x => x.grade).length;
+      const bub = (t, d) => `<div class="flex items-start gap-2 animate-pop-in" style="animation-delay:${d}ms"><span class="w-8 h-8 rounded-full bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("sparkles", "!w-4 !h-4")}</span><div class="rounded-2xl rounded-tr-sm bg-brand-50 ring-1 ring-brand-100 px-3.5 py-2.5 text-[13.5px] text-brand-950 leading-relaxed">${t}</div></div>`;
+      return `<div id="kdAsk" class="mt-3 space-y-2.5">
+      ${bub(`تمام ✅ ${who} في <b>${esc(gradeTitle(k.grade))}</b>${k.track ? " (" + esc(k.track) + ")" : ""}${k.type ? " · " + esc(k.type) : ""} — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض له كتب صفه أول ما تتسعّر"}.`, 0)}
+      ${bub(`<b>${gTxt("نحفظ على كده ولا تضيف", "نحفظ على كده ولا تضيفي")} ${k.rel ? "قريب تاني" : "ابن تاني"}؟</b>${nOk > 1 ? `<span class="block text-[12px] text-brand-700 mt-0.5">معاك دلوقتي ${nOk} ${nOk > 2 ? "أفراد" : "فردين"} جاهزين</span>` : ""}`, 150)}
+      <div class="grid grid-cols-2 gap-2 pr-10 animate-pop-in" style="animation-delay:300ms">
+        <button type="button" data-act="kdSave" class="btn btn-primary justify-center">${ic("check-check")} احفظ على كده</button>
+        <button type="button" data-act="kdAdd" class="btn btn-outline justify-center !bg-white">${ic("plus")} ${k.rel ? "قريب تاني" : gTxt("ابن تاني", "ابن تاني")}</button>
+      </div>
+      <button type="button" data-act="kdEditAgain" class="w-full text-center text-[12px] font-semibold text-slate-500 hover:text-brand-700">✏️ لأ، عايز أعدّل البيانات</button></div>`; })() : ""}
   ${(KD.list.length > 1 || k.grade) ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="kdDel">${ic(k._saved ? "trash-2" : "x")} ${k._saved ? "حذف" : "إلغاء إضافة"} ${esc(k.name || (k.rel ? "هذا القريب" : k.gender === "g" ? "هذه البنت" : "هذا الابن"))}</button>` : ""}
   <div class="text-center text-[12px] text-slate-400 mt-2">${done} من ${KD.list.length} جاهز · بياناتك تُحفظ في حسابك وتنتقل معك لأي جهاز</div>`;
 }
@@ -594,8 +593,9 @@ on("kdConfirmName", () => { const k = KD.list[KD.i]; if (!k) return; if (k.rel &
 on("kdGender", v => { KD.list[KD.i].gender = v; kdRender(); });
 on("kdStage", v => { const k = KD.list[KD.i]; k._nameOk = true; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) { k.grade = ""; k.track = ""; k._trackOk = false; k._typeOk = false; } kdRender(); });
 on("kdGrade", v => { const k = KD.list[KD.i]; k._nameOk = true; k.grade = v; if (!gradeTracks(v).includes(k.track)) k.track = ""; k._trackOk = false; k._typeOk = false; kdRender(); });
-on("kdTrack", v => { const k = KD.list[KD.i]; k.track = v; k._trackOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
-on("kdType", v => { const k = KD.list[KD.i]; k.type = v; k._typeOk = true; kdRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("kdTrack", v => { const k = KD.list[KD.i]; k.track = v; k._trackOk = true; kdRender(); kdAskShow(); if (navigator.vibrate) navigator.vibrate(8); });
+const kdAskShow = () => setTimeout(() => { const a = KD.m && KD.m.root.querySelector("#kdAsk"); if (a && a.scrollIntoView) a.scrollIntoView({ behavior: "smooth", block: "center" }); }, 120);
+on("kdType", v => { const k = KD.list[KD.i]; k.type = v; k._typeOk = true; kdRender(); kdAskShow(); if (navigator.vibrate) navigator.vibrate(8); });
 on("kdEditAgain", () => { const k = KD.list[KD.i]; if (!k) return; k._nameOk = false; k._trackOk = false; k._typeOk = false; kdRender(); });
 on("kdPick", v => { KD.i = +v; kdRender(); kdTop(); });
 const kdTop = () => { const c = KD.m && KD.m.root && KD.m.root.querySelector("#kdCard"); if (c && c.scrollIntoView) c.scrollIntoView({ block: "start", behavior: "smooth" }); };
