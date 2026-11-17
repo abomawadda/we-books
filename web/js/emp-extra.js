@@ -861,6 +861,6 @@ function budgetBar(g, label, emoji, spent) {
 if (typeof cartHTML === "function") { const _cartHTML2 = cartHTML; cartHTML = function () {
   const html = _cartHTML2(); if (cartPostDelivery() || Emp._noList || !Emp.open() || (Emp.cartStep && Emp.cartStep !== "list")) return html;
   const sp = budgetSpent(), bars = budgetBar("fam", "ميزانية الأسرة", "👨‍👩‍👧", sp.fam) + budgetBar("rel", "ميزانية الأقارب", "🧒", sp.rel);
-  const missing = !budgetGet("fam") || (relOn() && !budgetGet("rel"));
-  return (bars ? `<div class="mb-1">${bars}</div>` : "") + html + (missing ? `<button class="w-full text-center text-[12.5px] text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} ${bars ? "حدد الميزانية التانية" : "حدد ميزانية للأسرة" + (relOn() ? " وللأقارب" : "")}</button>` : "");
+  const hasRel = Object.keys(APP.cart || {}).some(k => bn(k)), missing = !budgetGet("fam") && !budgetGet("rel"); // مفيش ميزانية خالص ← رابط صغير بس
+  return (bars ? `<div class="mb-1">${bars}</div>` : "") + html + (missing ? `<button class="w-full text-center text-[12px] text-slate-500 hover:text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} ${hasRel ? "حط ميزانية لأولادك وللأقارب (اختياري)" : "حط ميزانية لأولادك (اختياري)"}</button>` : (bars ? `<button class="w-full text-center text-[11.5px] text-slate-400 hover:text-brand-700 mt-2" data-act="setBudget">${ic("pencil", "inline -mt-0.5 !w-3 !h-3")} تعديل الميزانية</button>` : ""));
 }; }
