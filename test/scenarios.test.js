@@ -625,6 +625,40 @@ ok(api('SAVE_CART_DRAFT', { phaseId: 'PH-01', cart: { 'BK-101|': 2, 'bad|': 99 }
 ok(api('SAVE_CART_DRAFT', { phaseId: 'PH-01', cart: null }, e1), 'clear cart draft');
 assert.strictEqual(rows(S.EMPLOYEES).find(e => e.Emp_ID === '1001').Cart_Draft, ''); passed++;
 fail(api('SAVE_CART_DRAFT', { cart: {} }, coord), 'cart draft employee only');
+// 14) حساب المرتجعات والمرتجع النهائي للمكتبة
+{
+  const D = ok(api('GET_ADMIN_DASHBOARD_DATA', {}, A), 'dash pool');
+  const pool = D.returnPool;
+  Object.values(pool).forEach(x => assert.strictEqual(x.returnable, Math.max(0, x.free - x.demand), 'returnable = free − demand'));
+  // رصيد حر مضمون: تسوية جرد بنسختين من BK-101 (محدش حاجزهم)
+  ok(api('RECORD_STOCK_ADJUSTMENT', { bookId: 'BK-101', qty: 3, reason: 'جرد' }, store), 'adj for return');
+  const p0 = ok(api('GET_ADMIN_DASHBOARD_DATA', {}, A), 'dash pool 2').returnPool['BK-101'];
+  assert.ok(p0.returnable >= 3, 'returnable after adj');
+  fail(api('RECORD_BOOK_RETURN', { returnType: 'SUPPLIER_RETURN', lines: [{ bookId: 'BK-101', qty: p0.returnable + 1 }] }, store), 'over final return', /المتاح للمرتجع النهائي/);
+  fail(api('RECORD_BOOK_RETURN', { returnType: 'SUPPLIER_RETURN', lines: [{ bookId: 'BK-101', qty: 1 }], volumePct: 9, volumeReason: 'x' }, store), 'vol override acl', /للمدير أو المالية/);
+  const pv = ok(api('RECORD_BOOK_RETURN', { returnType: 'SUPPLIER_RETURN', preview: true, lines: [{ bookId: 'BK-101', qty: 3 }] }, store), 'preview');
+  // آخر فاتورة للمكتبة N-200 (بسعر وخصم آخر سطر مفوتر للكتاب)، خصم الكمية من آخر فاتورة معتمدة
+  const L = pv.lines[0], R = v => Math.round(v * 100) / 100;
+  assert.strictEqual(L.unit, R(L.cover * (1 - L.disc / 100)));
+  assert.strictEqual(pv.afterItem, R(L.unit * 3));
+  assert.strictEqual(pv.volAmt, R(pv.afterItem * pv.volPct / 100));
+  assert.strictEqual(pv.net, R(pv.afterItem - pv.volAmt));
+  assert.strictEqual(rows(S.SUP_LEDGER).filter(l => l.Trans_Type === 'RETURN_DEBIT_NOTE').length, 0, 'preview writes nothing');
+  const bal0 = ok(api('GET_SETTLEMENT_REPORT', {}, A), 'set0').supplier.balance;
+  const fr = ok(api('RECORD_BOOK_RETURN', { returnType: 'SUPPLIER_RETURN', lines: [{ bookId: 'BK-101', qty: 3 }] }, store), 'final return');
+  assert.ok(/^SRT-/.test(fr.docNo));
+  const led = rows(S.SUP_LEDGER).filter(l => l.Reference_ID === fr.docNo);
+  assert.strictEqual(led.length, 1); assert.strictEqual(led[0].Debit_Amount, pv.net);
+  const drs = rows(S.DELIVERY_RETURNS).filter(r => r.Printed_Receipt_No === fr.docNo);
+  assert.strictEqual(R(-drs.reduce((s, r) => s + r.Total_Amount_Impact, 0)), pv.net, 'lines sum = doc net');
+  assert.strictEqual(rows(S.INVENTORY).filter(r => r.Reference_Doc_ID === fr.docNo).reduce((s, r) => s + r.Qty_Change, 0), -3);
+  assert.strictEqual(ok(api('GET_SETTLEMENT_REPORT', {}, A), 'set1').supplier.balance, R(bal0 - pv.net), 'balance drops by net');
+  // خصم الكمية على إجمالي الإذن (مش لكل صنف): كتابين بتقريب مختلف
+  ok(api('RECORD_STOCK_ADJUSTMENT', { bookId: 'BK-101', qty: 1, reason: 'جرد' }, store), 'adj 2');
+  const pv2 = ok(api('RECORD_BOOK_RETURN', { returnType: 'SUPPLIER_RETURN', preview: true, volumePct: 3, volumeReason: 'بند العقد', lines: [{ bookId: 'BK-101', qty: 1 }] }, A), 'preview admin vol');
+  assert.strictEqual(pv2.volPct, 3); assert.strictEqual(pv2.net, R(pv2.afterItem - R(pv2.afterItem * 0.03)));
+}
+
 console.log('\nALL PASSED:', passed, 'checks');
 
 

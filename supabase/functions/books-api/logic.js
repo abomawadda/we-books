@@ -912,6 +912,102 @@ const OperationsEngine = {
       .reduce((s, i) => s + Util.num(i.Remaining_Inst_Amount), 0);
   },
 
+  /**
+   * مخزون المرتجعات: لكل كتاب له رصيد حر بالمخزن
+   * free = بالمخزن − مخصص لم يُسلَّم · demand = حجوزات لم تُخصَّص بعد في مراحل غير مكتملة (هتتغطى من المخزن ويتخصم من طلبية المكتبة)
+   * returnable = free − demand (ده بس اللي ينفع يترجع للمكتبة مرتجع نهائي)
+   */
+  returnPool_: function(resItems) {
+    const S = this.S(), items = resItems || DB_Engine.getAllRecords(S.RES_ITEMS), snap = this.getStockSnapshot_(items);
+    const phases = {}; DB_Engine.getAllRecords(S.PHASES).forEach(p => phases[Util.str(p.Phase_ID)] = p);
+    const empRet = {}, supRet = {};
+    DB_Engine.getAllRecords(S.INVENTORY).forEach(r => { const b = Util.str(r.Book_ID), q = Util.num(r.Qty_Change);
+      if (r.Movement_Type === "IN_EMP_RETURN") empRet[b] = (empRet[b] || 0) + q;
+      if (r.Movement_Type === "OUT_SUPPLIER_RETURN") supRet[b] = (supRet[b] || 0) - q; });
+    const demand = {};
+    items.forEach(i => {
+      if (this.isCancelledItem_(i)) return;
+      const ph = phases[Util.str(i.Phase_ID)]; if (!ph || ph.Phase_Status === "Completed") return;
+      const unmet = Math.max(0, Util.num(i.Requested_Qty) - Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty)));
+      if (!unmet) return;
+      const b = Util.str(i.Book_ID), d = demand[b] = demand[b] || { total: 0, byPhase: {} };
+      d.total += unmet; d.byPhase[Util.str(i.Phase_ID)] = (d.byPhase[Util.str(i.Phase_ID)] || 0) + unmet;
+    });
+    const out = {};
+    Object.keys(snap).forEach(b => {
+      const x = snap[b], free = Math.max(0, x.free); if (free <= 0 && !empRet[b]) return;
+      const d = demand[b] || { total: 0, byPhase: {} }, merge = Math.min(free, d.total);
+      out[b] = { free: free, onHand: x.onHand, reserved: x.reserved, empReturned: empRet[b] || 0, supplierReturned: supRet[b] || 0,
+        demand: d.total, mergeQty: merge, byPhase: d.byPhase, returnable: Math.max(0, free - d.total) };
+    });
+    return out;
+  },
+
+  /** تسعير المرتجع النهائي: لكل صنف آخر سعر غلاف ونسبة خصم مفوترين من المكتبة (وإلا الكتالوج)، وخصم الكمية من آخر فاتورة معتمدة للمكتبة */
+  supplierReturnTerms_: function(supplierId) {
+    const S = this.S();
+    const heads = DB_Engine.getAllRecords(S.SUP_INV_HEADER).filter(h => h.Status !== "Voided" && (!supplierId || Util.str(h.Supplier_ID) === supplierId))
+      .sort((a, b) => String(a.Invoice_Date).localeCompare(String(b.Invoice_Date)) || String(a.Sup_Inv_ID).localeCompare(String(b.Sup_Inv_ID)));
+    const order = {}; heads.forEach((h, k) => order[Util.str(h.Sup_Inv_ID)] = k);
+    const line = {};
+    DB_Engine.getAllRecords(S.SUP_INV_ITEMS).forEach(l => { const k = order[Util.str(l.Sup_Inv_ID)]; if (k === undefined) return;
+      const b = Util.str(l.Book_ID); if (!line[b] || line[b].k <= k) line[b] = { k: k, cover: Util.num(l.Cover_Price_Invoiced), disc: Util.num(l.Item_Discount_Pct_Invoiced), inv: Util.str(heads[k].Supplier_Invoice_No) }; });
+    const last = heads[heads.length - 1];
+    return { line: line, volPct: last ? Util.num(last.Volume_Discount_Pct) : 0, volFrom: last ? Util.str(last.Supplier_Invoice_No) : "" };
+  },
+
+  /** مرتجع نهائي للمكتبة بإذن واحد لعدة كتب. preview=true يحسب بدون تسجيل. يُستدعى داخل القفل. */
+  supplierFinalReturn_: function(session, payload) {
+    const S = this.S(), R = v => FinancialEngine.roundCurrency(v);
+    const raw = Array.isArray(payload.lines) ? payload.lines : [{ bookId: payload.bookId, qty: payload.qty }];
+    const qty = {}; raw.forEach(l => { const b = Util.str(l.bookId), q = parseInt(l.qty, 10) || 0; if (b && q > 0) qty[b] = (qty[b] || 0) + q; });
+    const ids = Object.keys(qty); Util.require(ids.length, "اختار كتاب واحد على الأقل بكمية أكبر من صفر.");
+    const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => books[Util.str(b.Book_ID)] = b);
+    const main = this.mainSupplier_(), supplierId = Util.str(payload.supplierId) || (main ? Util.str(main.Supplier_ID) : "");
+    Util.require(supplierId, "حدد المكتبة.");
+    const pool = this.returnPool_(), terms = this.supplierReturnTerms_(supplierId);
+    let volPct = terms.volPct;
+    if (payload.volumePct !== undefined && payload.volumePct !== "" && Util.num(payload.volumePct) !== terms.volPct) {
+      Util.require(session.role === "Admin" || session.role === "Finance", "تعديل خصم الكمية للمرتجع للمدير أو المالية فقط.");
+      Util.require(Util.str(payload.volumeReason), "اكتب سبب تعديل خصم الكمية.");
+      volPct = Util.num(payload.volumePct);
+    }
+    Util.require(volPct >= 0 && volPct < 100, "نسبة خصم الكمية غير صحيحة.");
+    const lines = ids.map(b => {
+      const bk = books[b]; Util.require(bk, "الكتاب " + b + " غير موجود.");
+      const pl = pool[b] || { returnable: 0, free: 0, demand: 0 };
+      Util.require(qty[b] <= pl.returnable, "«" + bk.Book_Name + "»: المتاح للمرتجع النهائي " + pl.returnable + " نسخة فقط" + (pl.demand ? " (" + Math.min(pl.free, pl.demand) + " محجوزة لموظفين وهتتدمج في المرحلة الجاية)" : "") + ".");
+      const t = terms.line[b], cover = t ? t.cover : Util.num(bk.Cover_Price), disc = t ? t.disc : Util.num(bk.Supplier_Discount_Pct);
+      Util.require(cover > 0, "«" + bk.Book_Name + "» ملوش سعر غلاف — سعّره الأول.");
+      const unit = R(cover * (1 - disc / 100));
+      return { bookId: b, name: bk.Book_Name, qty: qty[b], cover: cover, disc: disc, unit: unit, gross: R(cover * qty[b]), afterItem: R(unit * qty[b]), src: t ? "فاتورة " + t.inv : "الكتالوج" };
+    });
+    const grossCover = R(lines.reduce((s, l) => s + l.gross, 0));
+    const afterItem = R(lines.reduce((s, l) => s + l.afterItem, 0));
+    const volAmt = R(afterItem * volPct / 100), net = R(afterItem - volAmt);
+    // توزيع خصم الكمية على السطور بالتناسب، والفرق (قروش التقريب) على آخر سطر — فمجموع السطور = صافي الإذن بالظبط
+    let acc = 0;
+    lines.forEach((l, k) => { l.net = k === lines.length - 1 ? R(net - acc) : R(l.afterItem * (1 - volPct / 100)); acc = R(acc + l.net); l.netUnit = R(l.net / l.qty); });
+    const res = { success: true, preview: true, lines: lines, grossCover: grossCover, afterItem: afterItem, volPct: volPct, volFrom: terms.volFrom, volAmt: volAmt, net: net, qty: lines.reduce((s, l) => s + l.qty, 0) };
+    if (payload.preview) return res;
+
+    const docNo = Counter.next("SUP_RETURN", "SRT"), phaseId = Util.str(payload.phaseId), now = Util.now(), stamp = new Date().getTime();
+    const reason = Util.str(payload.reason) || "مرتجع نهائي — تصفية الحساب مع المكتبة";
+    DB_Engine.insertRecordsBatch(S.INVENTORY, lines.map((l, k) => Object.assign(this.inventoryRow_(session, phaseId, l.bookId, "OUT_SUPPLIER_RETURN", -l.qty, l.netUnit, docNo, "مرتجع نهائي للمكتبة"), { Trans_ID: "TRN-" + stamp + "-SRT" + k })));
+    DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
+      Sup_Trans_ID: "SLED-" + docNo, Supplier_ID: supplierId, Phase_ID: phaseId, Trans_Date: Util.today(), Trans_Type: "RETURN_DEBIT_NOTE",
+      Reference_ID: docNo, Debit_Amount: net, Credit_Amount: 0, Payment_Channel: "مرتجع نهائي", Document_Ref: docNo, Recorded_By: Util.actor(session),
+      Notes: "مرتجع نهائي " + res.qty + " نسخة (" + lines.length + " صنف): غلاف " + grossCover + " − خصم الأصناف = " + afterItem + " − خصم كمية " + volPct + "% (" + volAmt + ")" + (volPct !== terms.volPct ? " [معدّل: " + Util.str(payload.volumeReason) + "]" : "")
+    }]);
+    DB_Engine.insertRecordsBatch(S.DELIVERY_RETURNS, lines.map((l, k) => ({
+      Doc_ID: "DOC-" + docNo + "-" + (k + 1), Doc_Type: "SUPPLIER_RETURN", Phase_ID: phaseId, Party_ID: supplierId, Trans_Date: now, Book_ID: l.bookId,
+      Qty: l.qty, Unit_Price_Applied: l.netUnit, Total_Amount_Impact: -l.net, Return_Reason: reason + " · غلاف " + l.cover + " خصم " + l.disc + "% + كمية " + volPct + "%",
+      Handled_By: Util.actor(session), Printed_Receipt_No: docNo, Received_By: "", Res_Item_ID: ""
+    })));
+    DB_Engine.logAudit(session.userId, session.role, "Returns", "SUPPLIER_FINAL_RETURN", docNo, null, { lines: lines.map(l => [l.bookId, l.qty, l.net]), afterItem: afterItem, volPct: volPct, net: net });
+    return Object.assign(res, { preview: false, docNo: docNo, message: "تم تسجيل مرتجع نهائي " + docNo + ": " + res.qty + " نسخة بصافي " + net + " ج.م اتخصم من حساب المكتبة." });
+  },
+
   inventoryRow_: function(session, phaseId, bookId, type, qty, cost, ref, notes) {
     return {
       Trans_ID: "TRN-" + new Date().getTime() + "-" + Math.floor(Math.random() * 10000),
@@ -1064,7 +1160,8 @@ const OperationsEngine = {
       supLedger: DB_Engine.getAllRecords(S.SUP_LEDGER),
       expenses: DB_Engine.getAllRecords(S.EXPENSES),
       cashClosings: DB_Engine.getAllRecords(S.CASH_CLOSINGS),
-      stockMap: this.getStockSnapshot_(resItems)
+      stockMap: this.getStockSnapshot_(resItems),
+      returnPool: this.returnPool_(resItems), returnTerms: this.supplierReturnTerms_("")
     };
   },
 
@@ -2980,34 +3077,8 @@ const OperationsEngine = {
         return { success: true, message: "تم قبول المرتجع (" + q + " نسخة) برقم " + docNo + " وتخفيض فاتورة الموظف." };
       }
 
-      // مرتجع للمكتبة
-      const supplierId = Util.str(payload.supplierId);
-      const bId = Util.str(payload.bookId);
-      const q = parseInt(payload.qty, 10) || 0;
-      Util.require(q > 0, "أدخل الكمية.");
-      const book = DB_Engine.getAllRecords(S.BOOKS).find(b => Util.str(b.Book_ID) === bId);
-      Util.require(book, "الكتاب غير موجود.");
-      Util.require(!supplierId || Util.str(book.Supplier_ID) === supplierId, "هذا الكتاب ليس من توريد هذه المكتبة.");
-      const snap = this.getStockSnapshot_();
-      const free = snap[bId] ? snap[bId].free : 0;
-      Util.require(free >= q, "الرصيد الحر للكتاب " + free + " فقط (الباقي مخصص لموظفين).");
-      const cost = this.bookCost_(snap, bId);
-      const amount = FinancialEngine.roundCurrency(q * cost);
-      const docNo = Counter.next("SUP_RETURN", "SRT");
-      const phaseId = Util.str(payload.phaseId);
-      DB_Engine.insertRecordsBatch(S.INVENTORY, [this.inventoryRow_(session, phaseId, bId, "OUT_SUPPLIER_RETURN", -q, cost, docNo, "إرجاع للمكتبة")]);
-      DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
-        Sup_Trans_ID: "SLED-" + docNo, Supplier_ID: book.Supplier_ID, Phase_ID: phaseId, Trans_Date: Util.today(), Trans_Type: "RETURN_DEBIT_NOTE",
-        Reference_ID: docNo, Debit_Amount: amount, Credit_Amount: 0, Payment_Channel: "مرتجع بضاعة", Document_Ref: docNo,
-        Recorded_By: Util.actor(session), Notes: "مرتجع " + q + " نسخة من " + book.Book_Name + " بمتوسط تكلفة " + cost
-      }]);
-      DB_Engine.insertRecordsBatch(S.DELIVERY_RETURNS, [{
-        Doc_ID: "DOC-" + docNo, Doc_Type: "SUPPLIER_RETURN", Phase_ID: phaseId, Party_ID: book.Supplier_ID, Trans_Date: now, Book_ID: bId,
-        Qty: q, Unit_Price_Applied: cost, Total_Amount_Impact: -amount, Return_Reason: Util.str(payload.reason) || "إرجاع فائض للمكتبة",
-        Handled_By: Util.actor(session), Printed_Receipt_No: docNo, Received_By: "", Res_Item_ID: ""
-      }]);
-      DB_Engine.logAudit(session.userId, session.role, "Returns", "SUPPLIER_RETURN", docNo, null, { bookId: bId, qty: q, amount: amount });
-      return { success: true, message: "تم تسجيل إذن ارتجاع " + docNo + " بـ " + q + " نسخة وخصم " + amount + " ج.م من حساب المكتبة." };
+      // مرتجع نهائي للمكتبة (تصفية الحساب) — بسعر الغلاف − خصم المكتبة للصنف، ثم خصم الكمية على إجمالي الإذن كله
+      return this.supplierFinalReturn_(session, payload);
     });
   },
 
@@ -3285,7 +3356,9 @@ const OperationsEngine = {
     const claims = R(supLed.filter(l => l.Trans_Type === "DAMAGE_CLAIM").reduce((s, l) => s + Util.num(l.Debit_Amount), 0));
     const supReturns = R(supLed.filter(l => l.Trans_Type === "RETURN_DEBIT_NOTE").reduce((s, l) => s + Util.num(l.Debit_Amount), 0));
     const supPaid = R(supLed.filter(l => l.Trans_Type === "PAYMENT_DEBIT").reduce((s, l) => s + Util.num(l.Debit_Amount), 0));
-    const supBalance = R(purchasesNet - claims - supReturns - supPaid);
+    const supVoids = R(supLed.filter(l => l.Trans_Type === "INVOICE_VOID").reduce((s, l) => s + Util.num(l.Debit_Amount) - Util.num(l.Credit_Amount), 0));
+    // الرصيد من الدفتر نفسه (دائن − مدين) فيشمل كل الحركات (الإلغاءات وعكس المطالبات): موجب = للمكتبة، سالب = على المكتبة
+    const supBalance = R(supLed.reduce((s, l) => s + Util.num(l.Credit_Amount) - Util.num(l.Debit_Amount), 0));
     const totalExp = R(expenses.reduce((s, e) => s + Util.num(e.Amount), 0));
     const cashPays = pays.filter(p => p.Payment_Method !== "CREDIT"); // تسويات الرصيد قيود داخلية لا نقدية
     const collected = R(cashPays.filter(p => Util.num(p.Amount) > 0).reduce((s, p) => s + Util.num(p.Amount), 0));
@@ -3338,7 +3411,7 @@ const OperationsEngine = {
       generatedAt: Util.now(),
       deficitBearer: st.DEFICIT_BEARER, cashHolder: st.CASH_ACCOUNT_HOLDER,
       pnl: { billedRevenue: revenue, deliveredRevenue: deliveredRevenue, cogs: cogs, expenses: totalExp, inventoryShrink: shrink, surplus: surplus, employeeSavings: savings },
-      supplier: { purchasesNet: purchasesNet, damageClaims: claims, returns: supReturns, paid: supPaid, balance: supBalance },
+      supplier: { purchasesNet: purchasesNet, voids: supVoids, damageClaims: claims, returns: supReturns, paid: supPaid, balance: supBalance },
       cash: { collected: collected, refunds: refunds, byMethod: byMethod, supplierPaid: supPaid, expenses: totalExp, expectedCashOnHand: cashExpected },
       receivables: { total: receivables, creditsDue: creditsDue, aging: aging },
       stock: { qty: stockQty, value: stockVal, lines: stockLines },

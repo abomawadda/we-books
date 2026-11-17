@@ -2473,11 +2473,11 @@ on("phaseDel", id => {
 Router.add("/a/suppliers", view => {
   const d = A(), bal = supplierBalances(), mainId = (d.suppliers[0] || {}).Supplier_ID;
   view.innerHTML = UI.pageHead("المكتبات المتعاقدة", "كل الكتب تتبع المكتبة الرئيسية (أول مكتبة مسجلة) · خصم الكمية يُطبق على إجمالي الفاتورة بعد خصومات الأصناف", lockedBtn("SAVE_SUPPLIER", `<button class="btn btn-primary btn-sm" data-act="supplierForm">${ic("plus")} مكتبة جديدة</button>`))
-    + (d.suppliers.length ? `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">${d.suppliers.map(s => { const x = bal[s.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 }; const due = x.inv - x.claim - x.ret - x.paid;
+    + (d.suppliers.length ? `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">${d.suppliers.map(s => { const x = bal[s.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0, due: 0 }; const due = x.due;
       const isMain = s.Supplier_ID === mainId, hasMoves = !!bal[s.Supplier_ID];
       return `<article class="card card-pad ${isMain ? "ring-2 ring-brand-400" : ""}"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl">${ic("store")}</span>
         <div class="min-w-0 flex-1"><h3 class="font-bold text-slate-900 truncate">${esc(s.Supplier_Name)}</h3><div class="text-[12px] text-slate-500 num">${esc(s.Supplier_ID)}${s.Phone ? " · " + esc(s.Phone) : ""}</div></div><span class="pill pill-brand">خصم فاتورة التوريد ${fmt(s.Volume_Discount_Pct !== undefined && s.Volume_Discount_Pct !== "" ? s.Volume_Discount_Pct : 3)}%</span></div>
-        <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat("المستحق لها", `<span class="${due > 0 ? "text-rose-600" : ""}">${fmt(due)}</span>`)}</div>
+        <div class="grid grid-cols-3 gap-2 mt-4">${UI.stat("الكتب", fmt(d.books.filter(b => b.Supplier_ID === s.Supplier_ID).length))}${UI.stat("المدفوع", fmt(x.paid))}${UI.stat(Math.abs(due) < 0.005 ? "الرصيد" : due > 0 ? "مستحق لها" : "مستحق عليها", `<span class="${due > 0.004 ? "text-rose-600" : due < -0.004 ? "text-emerald-600" : ""}">${fmt(Math.abs(due))}</span>`)}</div>
         <div class="flex items-center justify-between mt-4">${isMain ? `<span class="pill pill-brand">${ic("badge-check")} المكتبة الرئيسية</span>` : "<span></span>"}<span class="flex items-center gap-1.5">${lockedBtn("SAVE_SUPPLIER", `<button class="act-ic act-ic-edit" data-act="supplierForm" data-id="${esc(s.Supplier_ID)}" title="تعديل بيانات المكتبة" aria-label="تعديل بيانات المكتبة">${ic("pencil")}</button>`)}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" title="حذف المكتبة" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</span></div></article>`; }).join("")}</div>`
       : `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.")}</div>`);
 });
@@ -2498,11 +2498,27 @@ on("supplierDel", id => {
   const extra = isMain ? (next ? `\nهذه هي المكتبة الرئيسية: ستصبح «${next.Supplier_Name}» هي الرئيسية وتنتقل إليها كل الكتب.` : "\nهذه هي المكتبة الرئيسية الوحيدة.") : "";
   return act("DELETE_SUPPLIER", { supplierId: id }, { title: "حذف مكتبة", message: `سيتم حذف المكتبة «${s.Supplier_Name || id}» نهائياً. الحذف متاح فقط لمكتبة بلا طلبات توريد أو فواتير أو حركات حساب.${extra}\nمتابعة؟`, ok: "حذف", tone: "danger" });
 });
+/** أرصدة حساب المكتبة. الرصيد = مجموع الدائن − مجموع المدين: موجب = مستحق للمكتبة (علينا)، سالب = مستحق على المكتبة (لنا) */
 function supplierBalances() {
   const out = {};
-  A().supLedger.forEach(l => { const x = out[l.Supplier_ID] = out[l.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 };
-    if (l.Trans_Type === "INVOICE_CREDIT") x.inv += n(l.Credit_Amount); else if (l.Trans_Type === "DAMAGE_CLAIM") x.claim += n(l.Debit_Amount); else if (l.Trans_Type === "RETURN_DEBIT_NOTE") x.ret += n(l.Debit_Amount); else x.paid += n(l.Debit_Amount); });
+  A().supLedger.forEach(l => { const x = out[l.Supplier_ID] = out[l.Supplier_ID] || { inv: 0, voids: 0, claim: 0, ret: 0, paid: 0, other: 0, cr: 0, dr: 0 };
+    const c = n(l.Credit_Amount), d = n(l.Debit_Amount); x.cr += c; x.dr += d;
+    if (l.Trans_Type === "INVOICE_CREDIT") x.inv += c - d;
+    else if (l.Trans_Type === "INVOICE_VOID") x.voids += d - c;
+    else if (l.Trans_Type === "DAMAGE_CLAIM" || l.Trans_Type === "DAMAGE_CLAIM_VOID") x.claim += d - c;
+    else if (l.Trans_Type === "RETURN_DEBIT_NOTE") x.ret += d - c;
+    else if (l.Trans_Type === "PAYMENT_DEBIT") x.paid += d - c;
+    else x.other += d - c; });
+  Object.values(out).forEach(x => x.due = Math.round((x.cr - x.dr) * 100) / 100);
   return out;
+}
+/** عرض رصيد بالاتجاه: لها (علينا ندفع) / عليها (لنا عندها) */
+function supDue(v, big) {
+  const a = Math.abs(n(v)), z = a < 0.005;
+  const t = z ? "الحساب متصفّي" : v > 0 ? "مستحق للمكتبة (علينا)" : "مستحق على المكتبة (لنا)";
+  const tone = z ? "text-slate-500" : v > 0 ? "text-rose-600" : "text-emerald-600";
+  return big ? `<div class="text-[11.5px] font-semibold ${tone}">${t}</div><div class="text-[22px] font-bold num ${tone}">${fmt(a)}</div>`
+    : `<span class="num font-bold ${tone}">${fmt(a)}</span> <span class="text-[10.5px] ${tone}">${z ? "" : v > 0 ? "لها" : "عليها"}</span>`;
 }
 
 // ============================================================ الموظفون
@@ -3371,17 +3387,38 @@ on("closeDay", async () => {
 
 // ============================================================ حساب المكتبة
 Router.add("/a/supplier", view => {
-  const d = A(), { s, b } = maps(), bal = supplierBalances();
+  const d = A(), { s, b } = maps(), bal = supplierBalances(), pool = d.returnPool || {}, phN = id => (d.phases.find(p => p.Phase_ID === id) || {}).Phase_Name || id;
   let run = 0;
+  const poolRows = Object.keys(pool).filter(k => pool[k].free > 0 || pool[k].empReturned > 0).map(k => Object.assign({ id: k }, pool[k]));
+  const tot = poolRows.reduce((a, x) => (a.free += x.free, a.merge += x.mergeQty, a.ret += x.returnable, a.emp += x.empReturned, a), { free: 0, merge: 0, ret: 0, emp: 0 });
+  const supRets = {}; d.deliveryReturns.filter(r => r.Doc_Type === "SUPPLIER_RETURN").forEach(r => { const k = r.Printed_Receipt_No, x = supRets[k] = supRets[k] || { no: k, date: r.Trans_Date, qty: 0, amt: 0, lines: 0 }; x.qty += n(r.Qty); x.amt += -n(r.Total_Amount_Impact); x.lines++; });
+  const empRets = d.deliveryReturns.filter(r => r.Doc_Type === "EMP_RETURN");
   view.innerHTML = UI.pageHead("حساب المكتبة", "الفواتير والمطالبات والمرتجعات والمدفوعات",
-    lockedBtn("RECORD_BOOK_RETURN", `<button class="btn btn-outline btn-sm" data-act="supReturn">${ic("undo-2")} إرجاع كتب للمكتبة</button>`) + lockedBtn("RECORD_SUPPLIER_PAYMENT", `<button class="btn btn-primary btn-sm" data-act="paySup">${ic("landmark")} دفعة للمكتبة</button>`))
-  + `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 mb-4">${Object.keys(bal).length ? Object.keys(bal).map(k => { const x = bal[k], due = x.inv - x.claim - x.ret - x.paid;
-      return `<article class="card card-pad"><div class="flex items-center justify-between"><h3 class="font-bold text-slate-900 flex items-center gap-2">${ic("store", "text-brand-600")} ${esc((s[k] || {}).Supplier_Name || k)}</h3><div class="text-left"><div class="text-[11px] text-slate-500">المستحق لها</div><div class="text-xl font-bold num ${due > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(due)}</div></div></div>
-      <div class="grid grid-cols-4 gap-2 mt-3">${UI.stat("فواتير", fmt(x.inv))}${UI.stat("تالف", fmt(x.claim))}${UI.stat("مرتجعات", fmt(x.ret))}${UI.stat("مدفوع", fmt(x.paid))}</div></article>`; }).join("") : `<div class="card md:col-span-2">${UI.empty("landmark", "لا حركات على حساب المكتبة بعد")}</div>`}</div>`
-  + UI.section(`${ic("file-text", "text-brand-600")} كشف الحساب`, "", UI.table([
-    { t: "التاريخ", cls: "num", v: l => esc(day(l.Trans_Date)) }, { t: "المكتبة", v: l => esc((s[l.Supplier_ID] || {}).Supplier_Name || l.Supplier_ID) }, { t: "البيان", v: "Notes" }, { t: "المرجع", v: "Document_Ref" },
-    { t: "مدين", cls: "num", v: l => n(l.Debit_Amount) ? fmt(l.Debit_Amount) : "" }, { t: "دائن", cls: "num", v: l => n(l.Credit_Amount) ? fmt(l.Credit_Amount) : "" }, { t: "الرصيد", cls: "num", v: l => `<b>${fmt(l._bal)}</b>` }
-  ], d.supLedger.map(l => { run += n(l.Credit_Amount) - n(l.Debit_Amount); return Object.assign({}, l, { _bal: run }); }).reverse(), { maxH: 560, emptyIcon: "file-text", empty: "لا حركات" }));
+    lockedBtn("RECORD_BOOK_RETURN", `<button class="btn btn-outline btn-sm" data-act="supReturn">${ic("undo-2")} مرتجع نهائي للمكتبة</button>`) + lockedBtn("RECORD_SUPPLIER_PAYMENT", `<button class="btn btn-primary btn-sm" data-act="paySup">${ic("landmark")} دفعة للمكتبة</button>`))
+  + `<div class="grid gap-3 sm:gap-4 md:grid-cols-2 mb-4">${Object.keys(bal).length ? Object.keys(bal).map(k => { const x = bal[k];
+      const row = (t, v, sign, tone) => `<div class="flex items-center justify-between py-1.5 text-[13px]"><span class="text-slate-600">${t}</span><b class="num ${tone}">${sign} ${fmt(Math.abs(v))}</b></div>`;
+      return `<article class="card card-pad"><div class="flex items-start justify-between gap-3"><h3 class="font-bold text-slate-900 flex items-center gap-2">${ic("store", "text-brand-600")} ${esc((s[k] || {}).Supplier_Name || k)}</h3><div class="text-left">${supDue(x.due, 1)}</div></div>
+      <div class="mt-3 rounded-2xl bg-slate-50 px-3.5 py-1.5 divide-y divide-slate-200/70">
+        ${row("صافي فواتير التوريد", x.inv, "+", "text-rose-600")}${x.voids ? row("فواتير ملغاة", x.voids, "−", "text-emerald-600") : ""}
+        ${row("مطالبات تالف", x.claim, "−", "text-emerald-600")}${row("مرتجع نهائي للمكتبة", x.ret, "−", "text-emerald-600")}${row("مدفوع للمكتبة", x.paid, "−", "text-emerald-600")}${x.other ? row("حركات أخرى", x.other, "−", "text-emerald-600") : ""}
+        <div class="flex items-center justify-between py-2 text-[13.5px]"><b>الرصيد</b><span>${supDue(x.due)}</span></div></div>
+      <p class="text-[11px] text-slate-400 mt-2">${ic("info", "inline -mt-0.5 !w-3 !h-3")} <span class="text-rose-600">أحمر</span> = علينا للمكتبة · <span class="text-emerald-600">أخضر</span> = ينزل من حسابها أو لنا عندها</p></article>`; }).join("") : `<div class="card md:col-span-2">${UI.empty("landmark", "لا حركات على حساب المكتبة بعد")}</div>`}</div>`
+  + UI.section(`${ic("undo-2", "text-brand-600")} حساب المرتجعات`, "مرتجع الموظف يرجع للمخزن ويتدمج في الحجوزات الجاية · المرتجع النهائي للمكتبة بس للي محدش حجزه", `
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">${UI.stat("رجّعها موظفين (إجمالي)", fmt(tot.emp))}${UI.stat("حر بالمخزن", fmt(tot.free))}${UI.stat("هتتدمج في حجوزات", fmt(tot.merge))}${UI.stat("متاح لمرتجع نهائي", fmt(tot.ret))}</div>
+    ${poolRows.length ? UI.table([
+      { t: "الكتاب", v: x => `<b>${esc(bookName(b, x.id))}</b>` },
+      { t: "رجّعها موظفين", cls: "num", v: x => fmt(x.empReturned) }, { t: "حر بالمخزن", cls: "num", v: x => `<b>${fmt(x.free)}</b>` },
+      { t: "هتتدمج", v: x => x.mergeQty ? Object.keys(x.byPhase).map(p => `<span class="pill pill-blue" style="white-space:normal">${ic("git-merge")} ${fmt(Math.min(x.byPhase[p], x.free))} في ${esc(phN(p))} — تتخصم من طلبية المكتبة</span>`).join(" ") : `<span class="text-slate-400 text-[12px]">مفيش حجز عليه</span>` },
+      { t: "مرتجع نهائي متاح", cls: "num", v: x => x.returnable ? `<b class="text-amber-700">${fmt(x.returnable)}</b>` : `<span class="text-slate-400">0</span>` }
+    ], poolRows, { maxH: 420 }) : UI.empty("undo-2", "مفيش كتب مرتجعة أو فائضة في المخزن")}
+    <div class="grid gap-3 md:grid-cols-2 mt-3">
+      <div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="font-bold text-[13.5px] mb-1">${ic("user", "inline -mt-0.5 text-brand-600")} مرتجعات الموظفين</div><div class="text-[12.5px] text-slate-600">${fmt(empRets.length)} إذن · ${fmt(sum(empRets, "Qty"))} نسخة · اتخصم من فواتيرهم <b class="num">${fmt(Math.abs(sum(empRets, "Total_Amount_Impact")))}</b> ج.م — الكتب رجعت المخزن وبتتدمج في المراحل الجاية.</div></div>
+      <div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="font-bold text-[13.5px] mb-1">${ic("store", "inline -mt-0.5 text-brand-600")} المرتجع النهائي للمكتبة</div>${Object.keys(supRets).length ? `<ul class="text-[12.5px] divide-y divide-slate-100">${Object.values(supRets).map(x => `<li class="py-1.5 flex justify-between gap-2"><span><b class="num">${esc(x.no)}</b> · <span class="num">${esc(day(x.date))}</span> · ${fmt(x.qty)} نسخة</span><b class="num text-emerald-600">${fmt(x.amt)}</b></li>`).join("")}</ul>` : `<div class="text-[12.5px] text-slate-500">لسه ما اترجعش حاجة للمكتبة. المرتجع النهائي بيبقى في آخر المبادرة لتصفية الحساب.</div>`}</div>
+    </div>`)
+  + `<div class="h-4"></div>` + UI.section(`${ic("file-text", "text-brand-600")} كشف الحساب`, "مدين = ينزل من حساب المكتبة · دائن = يزوّد اللي علينا", UI.table([
+    { t: "التاريخ", cls: "num", v: l => esc(day(l.Trans_Date)) }, { t: "البيان", v: "Notes" }, { t: "المرجع", v: "Document_Ref" },
+    { t: "مدين", cls: "num", v: l => n(l.Debit_Amount) ? `<span class="text-emerald-600">${fmt(l.Debit_Amount)}</span>` : "" }, { t: "دائن", cls: "num", v: l => n(l.Credit_Amount) ? `<span class="text-rose-600">${fmt(l.Credit_Amount)}</span>` : "" }, { t: "الرصيد", cls: "num", v: l => supDue(l._bal) }
+  ], d.supLedger.map(l => { run = Math.round((run + n(l.Credit_Amount) - n(l.Debit_Amount)) * 100) / 100; return Object.assign({}, l, { _bal: run }); }).reverse(), { maxH: 560, emptyIcon: "file-text", empty: "لا حركات" }));
 });
 on("paySup", async () => {
   const v = await UI.form({ title: "دفعة للمكتبة", fields: [
@@ -3391,11 +3428,26 @@ on("paySup", async () => {
   if (v) await act("RECORD_SUPPLIER_PAYMENT", Object.assign(v, { phaseId: APP.phaseId }));
 });
 on("supReturn", async () => {
-  const st = A().stockMap || {};
-  const v = await UI.form({ title: "إرجاع كتب للمكتبة", intro: "من الرصيد الحر فقط (غير المخصص لموظفين).", fields: [
-    { name: "bookId", label: "الكتاب", type: "select", options: A().books.filter(b => st[b.Book_ID] && st[b.Book_ID].free > 0).map(b => [b.Book_ID, `${b.Book_Name} — حر ${st[b.Book_ID].free}`]) },
-    { name: "qty", label: "العدد", type: "number", min: 1, required: true }], ok: "تسجيل إذن الارتجاع", icon: "undo-2" });
-  if (v) { if (!v.bookId) return toast("لا يوجد رصيد حر للإرجاع", "warning"); await act("RECORD_BOOK_RETURN", { returnType: "SUPPLIER_RETURN", bookId: v.bookId, qty: v.qty, phaseId: APP.phaseId }); }
+  const d = A(), { b } = maps(), pool = d.returnPool || {}, ids = Object.keys(pool).filter(k => pool[k].returnable > 0);
+  if (!ids.length) return toast("مفيش كتب متاحة لمرتجع نهائي — كل الرصيد الحر محجوز لموظفين وهيتدمج في المراحل الجاية", "warning");
+  const terms = d.returnTerms || {};
+  const v = await UI.form({ title: "مرتجع نهائي للمكتبة", intro: "للكتب اللي محدش حجزها بس. الحساب: سعر الغلاف − خصم المكتبة لكل صنف، وبعدين خصم الكمية على إجمالي الإذن كله (زي الفاتورة الأصلية).", fields: [
+    ...ids.map(k => ({ name: "q_" + k, label: `${bookName(b, k)} — متاح ${pool[k].returnable}`, type: "number", min: 0, max: pool[k].returnable, value: pool[k].returnable, cols: 1 })),
+    { name: "volumePct", label: `خصم الكمية % (من ${terms.volFrom ? "فاتورة " + terms.volFrom : "آخر فاتورة"})`, type: "number", value: terms.volPct || 0, cols: 1 },
+    { name: "volumeReason", label: "سبب تعديل خصم الكمية (لو غيّرته)", cols: 1 },
+    { name: "reason", label: "ملاحظات الإذن", value: "مرتجع نهائي — تصفية الحساب مع المكتبة" }], ok: "احسب المرتجع", icon: "calculator" });
+  if (!v) return;
+  const lines = ids.map(k => ({ bookId: k, qty: parseInt(v["q_" + k], 10) || 0 })).filter(l => l.qty > 0);
+  if (!lines.length) return toast("اكتب كمية لكتاب واحد على الأقل", "warning");
+  const base = { returnType: "SUPPLIER_RETURN", lines, phaseId: APP.phaseId, volumePct: v.volumePct, volumeReason: v.volumeReason, reason: v.reason };
+  const p = await call("RECORD_BOOK_RETURN", Object.assign({ preview: true }, base), { block: true });
+  if (!p.success) return toast(p.message || "تعذر الحساب", "danger");
+  const row = (t, x, cls) => `<div class="flex justify-between py-1 ${cls || ""}"><span>${t}</span><b class="num">${x}</b></div>`;
+  const ok = await UI.form({ title: "راجع المرتجع قبل التسجيل", fields: [{ name: "_p", type: "html", html: `<div class="text-[12.5px]">
+    <div class="max-h-60 overflow-auto rounded-xl ring-1 ring-slate-200 divide-y divide-slate-100">${p.lines.map(l => `<div class="px-3 py-2"><div class="font-semibold">${esc(bookName(b, l.bookId))}</div><div class="text-slate-500 num">${l.qty} × (غلاف ${fmt(l.cover)} − ${l.disc}%) = ${fmt(l.afterItem)} <span class="text-[11px]">· ${esc(l.src)}</span></div></div>`).join("")}</div>
+    <div class="mt-3 rounded-xl bg-slate-50 px-3 py-2">${row("إجمالي الغلاف", fmt(p.grossCover))}${row("بعد خصم الأصناف", fmt(p.afterItem))}${row(`(−) خصم الكمية ${p.volPct}% على الإجمالي`, fmt(p.volAmt))}${row("صافي المرتجع (يتخصم من حساب المكتبة)", moneyTxt(p.net), "text-[14px] text-emerald-700 border-t border-slate-200 mt-1 pt-2")}</div>
+    <p class="text-[11.5px] text-slate-500 mt-2">${p.qty} نسخة في إذن واحد. التسجيل نهائي: الكتب تخرج من المخزن والقيمة تنزل من المستحق للمكتبة.</p></div>` }], ok: "تسجيل المرتجع النهائي", icon: "undo-2" });
+  if (ok) await act("RECORD_BOOK_RETURN", base);
 });
 
 // ============================================================ المصروفات والمخزن
