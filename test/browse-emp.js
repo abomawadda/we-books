@@ -59,9 +59,12 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.evaluate(() => ACTIONS.cartStep('pay')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-2');
     await p.evaluate(() => ACTIONS.cartStep('confirm')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-3');
     await p.evaluate(() => { APP.emp.employee.kids = []; Emp.filter.grade = ''; Emp.ben = ''; Emp.gsel = []; Router.go('/e/books'); }); await p.waitForTimeout(600);
-    await p.evaluate(() => { const gs = [...document.querySelectorAll('[data-act="gpSel"]')].slice(0, 2); gs[0].click(); }); await p.waitForTimeout(300); await p.evaluate(() => { const g = [...document.querySelectorAll('[data-act="gpSel"]')][1]; if (g) g.click(); }); await p.waitForTimeout(400);
-    await p.evaluate(() => scrollTo(0, 400)); await p.waitForTimeout(300); await shot('grades-multi');
-    await p.evaluate(() => ACTIONS.gpStart()); await p.waitForTimeout(700); await shot('grades-start');
+    await shot('grades-page');
+    await p.evaluate(() => ACTIONS.gbOpen()); await p.waitForTimeout(500); await shot('gb-1');
+    await p.evaluate(() => { const b = document.querySelector('[data-act="gbStage"]'); b && b.click(); }); await p.waitForTimeout(300);
+    await p.evaluate(() => { const b = document.querySelector('[data-act="gbGrade"]'); b && b.click(); }); await p.waitForTimeout(300); await shot('gb-2');
+    await p.evaluate(() => { const b = document.querySelector('[data-act="gbType"]'); b && b.click(); }); await p.waitForTimeout(400); await shot('gb-3');
+    await p.evaluate(() => ACTIONS.gbDone()); await p.waitForTimeout(900); await shot('gb-start');
     await b.close(); return;
   }
   for (const id of ['BK-101', 'BK-201']) { const el = await p.$(`[data-act="cartInc"][data-id="${id}"]`); if (el) { await el.click(); await p.waitForTimeout(150); } }

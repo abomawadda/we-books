@@ -768,15 +768,13 @@ function gradePicker() {
       <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
     : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
     <h2 class="font-display font-bold text-slate-800 mb-1 flex items-center gap-2">${ic("graduation-cap", "text-brand-600")} ${ks.length ? "أو اختر صفاً آخر" : "اختر صف ابنك"}</h2>
-    <p class="text-[13px] text-slate-500 mb-4">${Emp.open() ? gTxt("اضغط على الصف لعرض كتبه — أو علّم ✓ على أكتر من صف ونحجز لهم صف صف كأنهم أولادك.", "اضغطي على الصف لعرض كتبه — أو علّمي ✓ على أكتر من صف ونحجز لهم صف صف كأنهم أولادك.") : "نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر."}</p>
+    <p class="text-[13px] text-slate-500 mb-4">نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر.</p>
+    ${Emp.open() ? `<button type="button" class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 text-white shadow-soft active:scale-[.99] transition" style="background:linear-gradient(135deg,#552c83,#2e1650)" data-act="gbOpen"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[24px] shrink-0">📚</span><span class="flex-1"><b class="block text-[15px]">احجز بالصف الدراسي خطوة بخطوة</b><span class="block text-[12px] text-brand-200">المرحلة ← الصف ← نوع المدرسة — ${gTxt("وتقدر تضيف", "وتقدري تضيفي")} أكتر من صف</span></span>${ic("chevron-left")}</button>` : ""}
     ${stages.map(s => `<section class="mb-5"><div class="text-[13px] font-bold text-brand-700 mb-2">${esc(s)}</div>
       <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => { const on = (Emp.gsel || []).includes(g); return `<div class="relative"><button class="w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 ${on ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200 hover:ring-brand-300"}" data-act="fGrade" data-id="${esc(g)}">
         <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>
-        ${Emp.open() ? `<button type="button" class="absolute -top-1.5 -left-1.5 w-7 h-7 rounded-full flex items-center justify-center shadow-soft ring-2 ring-white ${on ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-400"}" data-act="gpSel" data-id="${esc(g)}" aria-label="اختيار ${esc(gradeShort(g))}" aria-pressed="${on}">${ic(on ? "check" : "plus", "!w-3.5 !h-3.5")}</button>` : ""}</div>`; }).join("")}</div></section>`).join("")}
-    ${(Emp.gsel || []).length ? `<div class="fixed inset-x-3 z-30 max-w-xl mx-auto animate-pop-in" style="bottom:calc(${Emp.totals().count ? "10.5" : "5.5"}rem + env(safe-area-inset-bottom))"><div class="rounded-2xl bg-brand-800 text-white p-3 flex items-center gap-3 shadow-glow">
-      <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14px]">${Emp.gsel.length === 1 ? "صف واحد" : Emp.gsel.length === 2 ? "صفين" : Emp.gsel.length + " صفوف"} مختارة</b><span class="block text-[11.5px] text-brand-200 truncate">${Emp.gsel.map(gradeShort).join(" · ")}</span></span>
-      <button type="button" class="text-[12px] text-brand-200 px-2" data-act="gpClear">مسح</button>
-      <button type="button" class="btn btn-sm !bg-gold-400 !text-brand-950 shrink-0" data-act="gpStart">احجز صف صف ←</button></div></div>` : ""}`;
+</div>`; }).join("")}</div></section>`).join("")}
+`;
 }
 // ============================================================ جهّز الشنطة: كتاب لكل مادة بضغطة
 const BAG = { rows: [], m: null };
@@ -874,8 +872,8 @@ function familyPanel() {
       ${on ? `<span class="mt-1.5 inline-flex items-center gap-1 text-[10.5px] font-bold text-gold-300">${ic("check", "!w-3 !h-3")} بتحجز له دلوقتي</span>` : `<span class="mt-1.5 inline-block text-[10.5px] font-semibold ${k.rel ? "text-sky-700" : "text-brand-700"}">اضغط للحجز ←</span>`}</button>`; };
   if (!ks.length) return `<section class="rounded-3xl ring-1 ring-gold-200 p-4 mb-3 flex items-center gap-3" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)">
       <span class="w-12 h-12 rounded-2xl bg-white/70 flex items-center justify-center text-[26px] shrink-0">👦👧</span>
-      <div class="flex-1 min-w-0"><b class="block text-brand-950 text-[15px]">أبنائي</b><span class="block text-[12px] text-brand-900/75 leading-relaxed">${gTxt("سجّل أولادك مرة واحدة ونجهّز كتب كل واحد بضغطة — أو اختار الصف مباشرة تحت", "سجّلي أولادك مرة واحدة ونجهّز كتب كل واحد بضغطة — أو اختاري الصف مباشرة تحت")}</span></div>
-      <div class="flex flex-col gap-1.5 shrink-0">${act("kidsEdit", "plus", "إضافة", "bg-brand-700 text-white ring-brand-700")}${ro ? act("addRel", "users", "قريب", "bg-white text-sky-700 ring-sky-200") : ""}</div></section>`;
+      <div class="flex-1 min-w-0"><b class="block text-brand-950 text-[15px]">أبنائي</b><span class="block text-[12px] text-brand-900/75 leading-relaxed">${gTxt("سجّل أولادك مرة واحدة — أو احجز «بالصف» خطوة بخطوة", "سجّلي أولادك مرة واحدة — أو احجزي «بالصف» خطوة بخطوة")}</span></div>
+      <div class="flex flex-col gap-1.5 shrink-0">${act("kidsEdit", "plus", "أبنائي", "bg-brand-700 text-white ring-brand-700")}${act("gbOpen", "graduation-cap", "بالصف", "bg-white text-brand-800 ring-brand-200")}${ro ? act("addRel", "users", "قريب", "bg-white text-sky-700 ring-sky-200") : ""}</div></section>`;
   const nk = ks.filter(k => !k.rel).length, nr = ks.length - nk;
   return `<section class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs p-3.5 mb-3">
     <div class="flex items-center justify-between gap-2">
@@ -1151,7 +1149,7 @@ const wzClear = () => { Object.assign(WZ, { step: "family", i: 0, sel: null, tem
 /** أفراد الرحلة: المختارون من «أبنائي وأقاربي» + صفوف أُضيفت بدون تسجيل */
 function wzMembers() { const ks = myKids(), sel = WZ.sel || ks.map((_, i) => i); return sel.filter(i => ks[i]).map(i => Object.assign({ _ix: i }, ks[i])).concat(WZ.temp.map(t => Object.assign({ _temp: true }, t))); }
 /** حالة كل فرد (اتحجز/مؤجل/مش محتاج) بمفتاح ثابت للفرد نفسه — لا تتلخبط لو اتغير ترتيب الأفراد أو اتضاف/اتشال حد */
-const wzKey = m => !m ? "" : m._temp ? "g:" + m.grade : (kidBen(m) || "k:" + m.grade + "|" + (m.name || "") + "|" + (m.gender || ""));
+const wzKey = m => !m ? "" : m._temp ? "g:" + m.grade + "|" + (m.type || "") + "|" + (m.track || "") : (kidBen(m) || "k:" + m.grade + "|" + (m.name || "") + "|" + (m.gender || ""));
 const wzSt = (kind, idx) => !!(WZ[kind] || {})[wzKey(wzMembers()[+idx])];
 const wzSet = (kind, idx, on) => { const k = wzKey(wzMembers()[+idx]); if (!k) return; WZ[kind] = WZ[kind] || {}; if (on) WZ[kind][k] = true; else delete WZ[kind][k]; };
 const wzName = (m, i) => m._temp ? gradeTitle(m.grade) : kidName(m, m._ix);
@@ -1358,10 +1356,67 @@ on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length)
 on("wzHideGuide", () => { wzMarkGuideOff(); WZ.forceGuide = false; Shell.rerender(); });
 on("wzShowGuide", () => { WZ.guideStep = 0; WZ.forceGuide = true; Shell.rerender(); });
 on("wzGuideStep", v => { WZ.guideStep = +v || 0; Shell.rerender(); });
-on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { WZ.skip = true; Shell.rerender(); } else { Shell.rerender(); } });
+on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { Shell.rerender(); gbOpen(); } else { Shell.rerender(); } });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
-on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
+on("wzSkip", () => gbOpen());
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
+
+// ================================================================ الحجز بالصف الدراسي — نفس أسلوب «أبنائي»: محادثة خطوة بخطوة
+// المرحلة ← الصف ← نوع المدرسة ← الشعبة (لو فيه) ← «خلاص كده ولا هتضيف صف تاني؟» ← ابدأ الحجز (لكل صف: الشنطة/السلسلة/بنفسي)
+const GB = { list: [], i: 0, m: null };
+const gbBlank = () => ({ _stage: "", grade: "", type: "", track: "", _typeOk: false, _trackOk: false });
+function gbHTML() {
+  const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), k = GB.list[GB.i] || gbBlank();
+  const st = k._stage || ((cat.grades || []).find(g => g.label === k.grade) || {}).stage || "";
+  const tracks = k.grade ? gradeTracks(k.grade) : [], typeDone = !!(k.grade && k._typeOk), trackDone = typeDone && (!tracks.length || k._trackOk);
+  const types = [["حكومي", "building-2", "عربي"], ["لغات", "graduation-cap", "تجريبي / لغات"], ["أزهر", "book-marked", "معاهد أزهرية"], ["", "layout-grid", "اعرض الكل"]];
+  const ready = GB.list.filter(x => x.grade && x._typeOk && (!gradeTracks(x.grade).length || x._trackOk));
+  const bubble = t => `<div class="flex items-start gap-2"><span class="w-8 h-8 rounded-full bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("sparkles", "!w-4 !h-4")}</span><div class="rounded-2xl rounded-tr-sm bg-brand-50 ring-1 ring-brand-100 px-3.5 py-2.5 text-[13.5px] text-brand-950 leading-relaxed">${t}</div></div>`;
+  const steps = [
+    { id: "stage", t: "المرحلة", q: "في أي مرحلة دراسية؟", done: !!st, v: esc(st), body: `<div class="grid grid-cols-2 gap-2">${stages.map(x => `<button class="rounded-2xl px-3 py-3 text-[13.5px] font-bold ring-1 bg-white text-slate-700 ring-slate-200 active:scale-95 transition" data-act="gbStage" data-id="${esc(x)}">${esc(x.replace("المرحلة ", ""))}</button>`).join("")}</div>` },
+    { id: "grade", t: "الصف", q: "في سنة كام؟", done: !!k.grade, v: esc(gradeTitle(k.grade || "")), body: `<div class="grid grid-cols-3 gap-2">${(cat.grades || []).filter(g => g.stage === st).map(g => `<button class="h-12 rounded-xl text-[14px] font-bold ring-1 bg-white text-slate-700 ring-slate-200 active:scale-95 transition" data-act="gbGrade" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>` },
+    { id: "type", t: "نوع المدرسة", q: "نوع المدرسة إيه؟", done: typeDone, v: esc(k.type || "كل المدارس"), body: `<div class="grid grid-cols-2 gap-2">${types.map(t => `<button class="rounded-2xl p-2.5 text-right ring-1 flex items-center gap-2 bg-white ring-slate-200 active:scale-95 transition" data-act="gbType" data-id="${esc(t[0])}"><span class="w-8 h-8 rounded-lg flex items-center justify-center ${t[0] ? (SCHOOL_TONE[t[0]] || "") : "bg-slate-100 text-slate-500"}">${ic(t[1])}</span><span class="leading-tight"><b class="block text-[13.5px] text-slate-800">${esc(t[0] || "لا أعرف")}</b><span class="block text-[11px] text-slate-500">${esc(t[2])}</span></span></button>`).join("")}</div>` }]
+    .concat(tracks.length ? [{ id: "track", t: "الشعبة", q: "الشعبة إيه؟", done: trackDone, v: esc(k.track || "لسه مش محددة"), body: `<div class="grid grid-cols-2 gap-2">${tracks.concat([""]).map(t => `<button class="rounded-2xl px-3 py-2.5 text-[13px] font-bold ring-1 text-right bg-white text-slate-700 ring-slate-200 active:scale-95 transition" data-act="gbTrack" data-id="${esc(t)}">${t ? esc(t) : "لسه مش عارف"}</button>`).join("")}</div>` }] : []);
+  const curIx = steps.findIndex(x => !x.done), cur = steps[curIx], done = curIx < 0;
+  return `${bubble(GB.list.length > 1 ? `تمام 👌 ${gTxt("كمّل", "كمّلي")} بيانات الصف ده` : `${gTxt("أهلاً بيك", "أهلاً بيكِ")}! هنحجز <b>بالصف الدراسي</b> 📚 — ${gTxt("قولّي", "قوليلي")} الصف ونوع المدرسة، ونجهّز كتبه. ${gTxt("تقدر تضيف", "تقدري تضيفي")} أكتر من صف.`)}
+  ${GB.list.length > 1 ? `<div class="flex gap-2 overflow-x-auto mt-3 pb-1" style="scrollbar-width:none">${GB.list.map((x, i) => `<button class="shrink-0 rounded-xl px-3 h-9 text-[12.5px] font-bold ring-1 ${i === GB.i ? "bg-brand-700 text-white ring-brand-700" : x.grade ? "bg-gold-50 ring-gold-200 text-brand-900" : "bg-white ring-slate-200 text-slate-500"}" data-act="gbPick" data-id="${i}">📚 ${x.grade ? esc(gradeShort(x.grade)) : "صف " + (i + 1)}</button>`).join("")}</div>` : ""}
+  <div class="rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs p-4 mt-3 space-y-3">
+    <div class="flex items-center justify-between"><b class="text-[14.5px] text-slate-900">${GB.list.length > 1 ? "الصف " + (GB.i + 1) : "الصف الدراسي"}</b>${!done ? `<span class="text-[11.5px] font-semibold text-slate-500">خطوة <b class="num text-brand-700">${curIx + 1}</b> من <span class="num">${steps.length}</span></span>` : `<span class="text-[11.5px] font-bold text-emerald-700">${ic("circle-check", "inline -mt-0.5")} جاهز</span>`}</div>
+    <div class="flex gap-1">${steps.map((x, i) => `<span class="h-1.5 flex-1 rounded-full ${x.done ? "bg-emerald-500" : i === curIx ? "bg-brand-600" : "bg-slate-200"}"></span>`).join("")}</div>
+    ${steps.filter(x => x.done).map(x => `<div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="w-6 h-6 shrink-0 rounded-full bg-emerald-500 text-white flex items-center justify-center">${ic("check", "!w-3.5 !h-3.5")}</span><span class="min-w-0 flex-1 leading-tight"><span class="block text-[10.5px] text-slate-500">${x.t}</span><span class="block text-[13px] font-bold text-slate-800 truncate">${x.v}</span></span><button type="button" class="text-[12px] font-semibold text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50" data-act="gbGo" data-id="${x.id}">تغيير</button></div>`).join("")}
+    ${cur ? `<div class="animate-pop-in rounded-2xl ring-2 ring-brand-100 bg-brand-50/30 p-3.5 space-y-3"><div class="text-[14px] font-bold text-slate-900">${cur.q}</div>${cur.body}</div>` : ""}
+  </div>
+  ${done ? `<div class="mt-3 space-y-3 animate-pop-in">${bubble(`${esc(gradeTitle(k.grade))}${k.type ? " · مدارس " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""} — ${kidAvail(k) ? `جاهز له <b class="num">${kidAvail(k)}</b> كتاب بخصم العاملين` : "نعرض كتبه أول ما تتسعّر"} ✅<br><b>خلاص كده ولا ${gTxt("هتضيف", "هتضيفي")} صف تاني؟</b>`)}
+    <div class="grid grid-cols-2 gap-2"><button class="btn btn-outline justify-center" data-act="gbAdd">${ic("plus")} صف تاني</button><button class="btn btn-primary justify-center" data-act="gbDone">${ic("check")} خلاص — ابدأ</button></div></div>` : ""}
+  ${GB.list.length > 1 ? `<button class="btn btn-ghost btn-sm text-rose-600 mt-2" data-act="gbDel">${ic("x")} شيل الصف ده</button>` : ""}`;
+}
+const gbRender = () => { if (GB.m && GB.m.body) GB.m.body.innerHTML = gbHTML(); };
+function gbOpen() {
+  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
+  GB.list = [gbBlank()]; GB.i = 0;
+  GB.m = UI.open(gbHTML(), { title: "📚 الحجز بالصف الدراسي", sub: "خطوة بخطوة — ولكل صف كتبه" });
+}
+on("gbOpen", () => gbOpen());
+on("gbStage", v => { const k = GB.list[GB.i]; k._stage = v; if (k.grade && !(APP.emp.catalog.grades || []).some(g => g.label === k.grade && g.stage === v)) Object.assign(k, { grade: "", _typeOk: false, _trackOk: false, track: "" }); gbRender(); });
+on("gbGrade", v => { const k = GB.list[GB.i]; k.grade = v; k._typeOk = false; k._trackOk = false; if (!gradeTracks(v).includes(k.track)) k.track = ""; gbRender(); });
+on("gbType", v => { const k = GB.list[GB.i]; k.type = v; k._typeOk = true; gbRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("gbTrack", v => { const k = GB.list[GB.i]; k.track = v; k._trackOk = true; gbRender(); if (navigator.vibrate) navigator.vibrate(8); });
+on("gbGo", v => { const k = GB.list[GB.i]; if (v === "stage") Object.assign(k, { _stage: "", grade: "", _typeOk: false, _trackOk: false, track: "" });
+  if (v === "grade") Object.assign(k, { _stage: k._stage || ((APP.emp.catalog.grades || []).find(g => g.label === k.grade) || {}).stage || "", grade: "", _typeOk: false, _trackOk: false, track: "" });
+  if (v === "type") { k._typeOk = false; k._trackOk = false; } if (v === "track") k._trackOk = false; gbRender(); });
+on("gbAdd", () => { GB.list.push(gbBlank()); GB.i = GB.list.length - 1; gbRender(); });
+on("gbPick", v => { GB.i = +v; gbRender(); });
+on("gbDel", () => { GB.list.splice(GB.i, 1); if (!GB.list.length) GB.list.push(gbBlank()); GB.i = Math.max(0, GB.i - 1); gbRender(); });
+on("gbDone", () => {
+  const ok = GB.list.filter(x => x.grade && x._typeOk && (!gradeTracks(x.grade).length || x._trackOk)); if (!ok.length) return;
+  const go = gradeOrder(); ok.sort((a, b) => (go[a.grade] ?? 99) - (go[b.grade] ?? 99));
+  ok.forEach(x => { if (!WZ.temp.some(t => t.grade === x.grade && (t.type || "") === (x.type || "") && (t.track || "") === (x.track || ""))) WZ.temp.push({ name: "", grade: x.grade, type: x.type || "", track: x.track || "" }); });
+  WZ.skip = false; WZ.mode = {}; WZ.pub = {}; BAG._for = ""; Emp.bookMode = ""; wzSave();
+  if (GB.m) GB.m.close(); GB.m = null;
+  const first = ok[0], i = wzMembers().findIndex(m => m._temp && m.grade === first.grade && (m.type || "") === (first.type || ""));
+  toast(ok.length > 1 ? `هنحجز لكل صف لوحده — نبدأ بـ ${gradeShort(first.grade)} 📚` : `يلا نحجز كتب ${gradeShort(first.grade)} 📚`, "info");
+  setTimeout(() => wzGo("member", i >= 0 ? i : 0), 250);
+});
 // اختيار أكتر من صف (بدون تسجيل أبناء) ← الحجز لهم صف صف في المعالج كأنهم أولاد
 on("gpSel", g => { Emp.gsel = Emp.gsel || []; Emp.gsel = Emp.gsel.includes(g) ? Emp.gsel.filter(x => x !== g) : Emp.gsel.concat(g); if (navigator.vibrate) navigator.vibrate(6); if (Router.current === "/e/books") renderBookGrid(); else Shell.rerender(); });
 on("gpClear", () => { Emp.gsel = []; renderBookGrid(); });
