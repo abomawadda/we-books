@@ -90,7 +90,7 @@ const po101 = po.snapshot.find(p => p.Book_ID === 'BK-101');
 assert.deepStrictEqual([po101.Total_Requested_Qty, po101.Carryover_Stock_Qty, po101.Net_Order_To_Supplier_Qty], [5, 1, 4]);
 
 // 4) فاتورة ناقصة: BK-101 طلبنا 4، وصل 2 سليم + 1 تالف، BK-201 لم يُطبع
-const inv = ok(api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'N-100', invoiceDate: '2027-01-05', volumeDiscountPct: 5,
+const inv = ok(api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'N-100', invoiceDate: '2027-01-02', volumeDiscountPct: 5,
   items: [{ bookId: 'BK-101', orderedQty: 4, receivedQty: 2, damagedQty: 1, coverPrice: 135, itemDiscPct: 20 }, { bookId: 'BK-201', orderedQty: 1, receivedQty: 0, coverPrice: 150, itemDiscPct: 20, notPrinted: true }] }, store), 'sup inv');
 // 3 مفوترة × 108 = 324؛ خصم كمية 5% = 16.2 ⇒ 307.8؛ مطالبة تالف 102.6
 assert.strictEqual(inv.invoiceHeader.Net_Payable_Amount, 307.8);
@@ -450,7 +450,7 @@ const auto3Inv = ok(api('SUBMIT_SUPPLIER_INVOICE', {
   supplierId: mainSupId,
   phaseId: 'PH-01',
   supplierInvoiceNo: 'INV-AUTO-3',
-  invoiceDate: '2027-01-10',
+  invoiceDate: '2027-01-02',
   items: [{ bookId: 'P1-001', orderedQty: 5, receivedQty: 5, coverPrice: 110, itemDiscPct: 20 }]
 }, store), 'invoice with default 3% volume discount');
 // 5 × 88 = 440; 3% خصم كمية على إجمالي الفاتورة = 13.2; الصافي = 426.8
@@ -467,7 +467,7 @@ const customVolInv = ok(api('SUBMIT_SUPPLIER_INVOICE', {
   supplierId: mainSupId,
   phaseId: 'PH-01',
   supplierInvoiceNo: 'INV-CUSTOM-45',
-  invoiceDate: '2027-01-11',
+  invoiceDate: '2027-01-02',
   volumeDiscountPct: 4.5,
   items: [{ bookId: 'P2-001', orderedQty: 10, receivedQty: 10, coverPrice: 110, itemDiscPct: 20 }]
 }, store), 'invoice with custom 4.5% volume discount');
@@ -524,7 +524,7 @@ passed++;
 
 // 13. عكس فاتورة توريد + تحديث سعر الكتالوج عند اختلاف السعر
 const freeInv = ok(api("SUBMIT_SUPPLIER_INVOICE", {
-  supplierId: mainSupId, phaseId: "PH-01", supplierInvoiceNo: "SINV-VOID-TEST", invoiceDate: "2027-01-12", volumeDiscountPct: 3,
+  supplierId: mainSupId, phaseId: "PH-01", supplierInvoiceNo: "SINV-VOID-TEST", invoiceDate: "2027-01-02", volumeDiscountPct: 3,
   items: [{ bookId: "BK-101", orderedQty: 0, receivedQty: 2, damagedQty: 0, coverPrice: 200, itemDiscPct: 20, updateCatalogPrice: true }]
 }, store), "submit inv for void");
 const dash1 = ok(api("GET_ADMIN_DASHBOARD_DATA", {}, store), "dash after catalog update");

@@ -26,7 +26,7 @@ sub('1005', [{ bookId: 'BK-201', qty: 1 }, { bookId: 'BK-202', qty: 1 }]);
 if (!process.env.OPEN) {
 at(2027, 1, 2, 9);
 const po = api('GENERATE_PO_SNAPSHOT', { phaseId: 'PH-01' }, coord);
-api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'NOOR-1', invoiceDate: '2027-01-05', volumeDiscountPct: 5,
+api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'NOOR-1', invoiceDate: '2027-01-02', volumeDiscountPct: 5,
   items: po.snapshot.map(p => p.Book_ID === 'BK-201' ? { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: 0, coverPrice: 150, itemDiscPct: 20, notPrinted: true } : { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: p.Net_Order_To_Supplier_Qty, coverPrice: 0, itemDiscPct: 20 }) }, store);
 api('RUN_ALLOCATION_ENGINE', { phaseId: 'PH-01' }, coord);
 at(2027, 1, 7, 10);

@@ -116,8 +116,9 @@ function itemStage(i) {
   const bk = (Emp.bookMap && Emp.bookMap()[i.Book_ID]) || {};
   if (bk.Book_Status === "Not_Yet_Printed") return { step: 1, label: "لم يُطبع من الناشر بعد", tone: "amber", icon: "clock" };
   if (["Delivering", "Completed"].includes(st)) return { step: 2, label: "بانتظار وصول كمية إضافية", tone: "amber", icon: "hourglass" };
-  if (st === "Receiving") return { step: 2, label: "جاري الشحن", tone: "blue", icon: "truck" };
-  if (["Closed", "Ordered"].includes(st)) return { step: 1, label: "جاري التجهيز", tone: "blue", icon: "boxes" };
+  if (st === "Receiving") return { step: 2, label: "وصلت الشحنة — جاري الفرز والتخصيص", tone: "blue", icon: "boxes" };
+  if (st === "Ordered") return { step: 2, label: "اتبعت للمكتبة — جاري التجهيز والشحن", tone: "blue", icon: "truck" };
+  if (st === "Closed") return { step: 1, label: "الحجز اتقفل — جاري تجميع الطلبات", tone: "blue", icon: "boxes" };
   return { step: 0, label: "تم الحجز", tone: "brand", icon: "notebook-pen" };
 }
 const stagePill = g => `<span class="pill pill-${g.tone}">${ic(g.icon)} ${esc(g.label)}</span>`;

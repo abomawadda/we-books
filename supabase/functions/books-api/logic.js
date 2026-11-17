@@ -1267,6 +1267,11 @@ const OperationsEngine = {
       Util.require(Util.str(payload.phaseName), "أدخل اسم المرحلة.");
       const st = Util.str(payload.startDate), en = Util.str(payload.endDate);
       if (st && en) Util.require(st <= en, "تاريخ نهاية الحجز يجب أن يكون بعد البداية.");
+      const d10 = v => Util.str(v).slice(0, 10), today = Util.today(), dlv = d10(payload.deliveryStartDate || (existing ? existing.Delivery_Start_Date : ""));
+      if (!existing && en) Util.require(d10(en) >= today, "نهاية الحجز لازم تكون النهارده أو بعد كده — مينفعش مرحلة جديدة تبدأ مقفولة.");
+      if (dlv && en) Util.require(dlv >= d10(en), "بداية التسليم لازم تكون بعد قفل الحجز (" + d10(en) + ") — الكتب بتتوزع بعد ما الحجز يقفل.");
+      if (st && en) { const clash = phases.find(p => Util.str(p.Phase_ID) !== pId && p.Start_DateTime && p.End_DateTime && d10(st) <= d10(p.End_DateTime) && d10(en) >= d10(p.Start_DateTime) && ["Open", "Scheduled", "Draft", ""].indexOf(Util.str(p.Phase_Status)) !== -1); // التداخل يُمنع بين مرحلتين حجزهما مفتوح بس
+        Util.require(!clash, "فترة الحجز متداخلة مع «" + (clash && clash.Phase_Name) + "» (" + (clash && d10(clash.Start_DateTime)) + " ← " + (clash && d10(clash.End_DateTime)) + ") — خلي كل مرحلة في فترة لوحدها."); }
       const obj = {
         Phase_ID: pId, Phase_Name: payload.phaseName,
         Start_DateTime: st.length === 10 ? st + " 00:00:00" : st,
@@ -1373,7 +1378,12 @@ const OperationsEngine = {
       let row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PO_TRACKING");
       if (!row) { row = { Setting_Key: "PO_TRACKING", Setting_Value: "{}", Data_Type: "JSON", Description: "متابعة طلبات التوريد (الإرسال/الحالة/الاستلام)" }; DB_Engine.insertRecordsBatch(S.SETTINGS, [row]); }
       let all = {}; try { all = JSON.parse(row.Setting_Value || "{}") || {}; } catch (e) { all = {}; }
-      const cur = all[key] || { log: [] }, clip = (v, n) => Util.str(v).slice(0, n);
+      const cur = all[key] || { log: [] }, clip = (v, n) => Util.str(v).slice(0, n), td = Util.today();
+      const sa = clip(payload.sentAt, 10) || cur.sentAt || "", ea = clip(payload.expectedAt, 10), ra = clip(payload.receivedAt, 10);
+      if (sa) Util.require(sa <= td, "تاريخ الإرسال مينفعش يكون في المستقبل.");
+      if (sa && ea) Util.require(ea >= sa, "الموعد المتوقع لازم يكون بعد تاريخ الإرسال.");
+      if (ra) { Util.require(ra <= td, "تاريخ الاستلام مينفعش يكون في المستقبل."); if (sa) Util.require(ra >= sa, "تاريخ الاستلام لازم يكون بعد تاريخ الإرسال."); }
+      if (["partial", "received"].indexOf(status) !== -1) Util.require(sa, "سجّل تاريخ الإرسال الأول.");
       const next = Object.assign({}, cur, {
         status: status, sentAt: clip(payload.sentAt, 10) || cur.sentAt || "", sentVia: clip(payload.sentVia, 40) || cur.sentVia || "",
         expectedAt: clip(payload.expectedAt, 10), receivedAt: clip(payload.receivedAt, 10), method: clip(payload.method, 40), carrier: clip(payload.carrier, 80),
@@ -2175,6 +2185,7 @@ const OperationsEngine = {
         : (supplier.Volume_Discount_Pct !== undefined && supplier.Volume_Discount_Pct !== "" ? Util.num(supplier.Volume_Discount_Pct) : 3);
       const supInvId = "SINV-" + phaseId + "-" + new Date().getTime();
       const invDate = Util.str(payload.invoiceDate) || Util.today();
+      Util.require(invDate.slice(0, 10) <= Util.today(), "تاريخ فاتورة المكتبة مينفعش يكون في المستقبل.");
 
       let gross = 0, afterFirst = 0, damagedAfterFirst = 0, invoicedUnits = 0;
       const lines = [], stockIn = [];
@@ -2748,7 +2759,7 @@ const OperationsEngine = {
       const old = oldInvMap[invId];
       const paid = FinancialEngine.roundCurrency(payments.filter(p => Util.str(p.Emp_Inv_ID) === invId).reduce((s, p) => s + Util.num(p.Amount), 0));
       if (net === 0 && paid === 0 && (!old || h.Res_Status === "Cancelled")) return; // فاتورة محذوفة أو بلا قيمة
-      const base = (old && old.Plan_Base_Date) || phase.Delivery_Start_Date || today;
+      const dsd = Util.str(phase.Delivery_Start_Date).slice(0, 10), base = (old && old.Plan_Base_Date) || (dsd && dsd > today ? dsd : today);
       const isInst = h.Payment_Method_Selected === "INSTALLMENT";
       const plan = isInst
         ? FinancialEngine.calculateInstallmentPlan(net, h.Down_Payment_Type, h.Down_Payment_Input, h.Installment_Count || 1, base)
@@ -3188,7 +3199,7 @@ const OperationsEngine = {
       Util.require(Util.str(payload.docRef), "أدخل رقم إيصال استلام المكتبة أو رقم التحويل.");
       const no = Counter.next("SUP_PAYMENT", "SPY");
       DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
-        Sup_Trans_ID: no, Supplier_ID: supplierId, Phase_ID: Util.str(payload.phaseId), Trans_Date: Util.str(payload.date) || Util.today(),
+        Sup_Trans_ID: no, Supplier_ID: supplierId, Phase_ID: Util.str(payload.phaseId), Trans_Date: (Util.str(payload.date) && Util.str(payload.date).slice(0, 10) <= Util.today() ? Util.str(payload.date) : Util.today()),
         Trans_Type: "PAYMENT_DEBIT", Reference_ID: Util.str(payload.docRef), Debit_Amount: amount, Credit_Amount: 0,
         Payment_Channel: Util.str(payload.channel) || "نقدي/تحويل", Document_Ref: Util.str(payload.docRef),
         Recorded_By: Util.actor(session), Notes: Util.str(payload.notes) || "دفعة للمكتبة"
@@ -3209,7 +3220,7 @@ const OperationsEngine = {
       if (cat === "أخرى") Util.require(Util.str(payload.notes), "اكتب وصف المصروف في الملاحظات.");
       const no = Counter.next("EXPENSE", "EXP");
       const rec = {
-        Expense_ID: no, Expense_Date: Util.str(payload.date) || Util.today(), Phase_ID: Util.str(payload.phaseId), Expense_Category: cat,
+        Expense_ID: no, Expense_Date: (Util.str(payload.date) && Util.str(payload.date).slice(0, 10) <= Util.today() ? Util.str(payload.date) : Util.today()), Phase_ID: Util.str(payload.phaseId), Expense_Category: cat,
         Amount: amount, Beneficiary_Name: Util.str(payload.beneficiary), Allocation_Method: "BY_VALUE",
         Receipt_Doc_No: Util.str(payload.docNo) || "-", Recorded_By: Util.actor(session), Notes: Util.str(payload.notes)
       };
