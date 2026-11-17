@@ -2760,8 +2760,8 @@ Router.add("/a/receive", view => {
         </div>
         <span class="si-var"></span>
       </div></article>`; }).join("")}</div>
-    <div id="siNoMatch" class="card hidden">${UI.empty("filter", "لا توجد كتب تطابق التصفية الحالية", `<button type="button" class="btn btn-outline btn-sm" data-act="siResetFilters">إظهار كل الكتب</button>`)}</div>`
-    : `<div class="card">${UI.empty("truck", "لا توجد كتب مطلوبة بأمر توريد لهذه المكتبة في المرحلة الحالية", `<button class="btn btn-outline btn-sm" data-go="/a/po">${ic("file-text")} الانتقال لأمر التوريد</button>`)}</div>`}
+    <div id="siNoMatch" class="card hidden">${UI.empty("filter", "لا توجد كتب تطابق التصفية الحالية", "غيّر التصفية أو امسحها.", `<button type="button" class="btn btn-outline btn-sm mt-4" data-act="siResetFilters">إظهار كل الكتب</button>`)}</div>`
+    : `<div class="card">${UI.empty("truck", "لا توجد كتب مطلوبة بأمر توريد لهذه المكتبة في المرحلة الحالية", "جمّد طلب التوريد الأول من «الحصر وطلب التوريد»، وبعدها سجّل فاتورة المكتبة هنا.", `<button class="btn btn-outline btn-sm mt-4" data-go="/a/po">${ic("file-text")} الانتقال لأمر التوريد</button>`)}</div>`}
   <div class="sticky bottom-[calc(4.3rem+env(safe-area-inset-bottom))] md:bottom-4 z-20 mt-4">
     <div class="card p-3.5 sm:p-4 shadow-lift flex flex-wrap items-center gap-x-6 gap-y-2 bg-white/95 backdrop-blur-sm ring-1 ring-brand-200">
       <div class="text-[13px] text-slate-600">بعد خصم الأصناف: <b id="siAfter" class="num text-slate-900 font-bold"></b></div>
