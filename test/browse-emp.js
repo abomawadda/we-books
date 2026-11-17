@@ -44,6 +44,8 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   if (process.env.BETWEEN) {
     await p.evaluate(() => { APP.emp.employee.kids = [{ name: 'محمد', gender: 'b', grade: 'الصف الأول الإعدادي', type: '' }, { name: 'مودة', gender: 'g', grade: 'الصف الرابع الابتدائي', type: '' }]; Object.assign(APP.emp.activePhase, { Booking_Open: false, Phase_Status: 'Delivering', Effective_Status: 'Delivering', Phase_Name: 'حجز الترم الثاني ٢٠٢٧' }); location.hash = '#/e/books'; Router.render(); });
     await p.waitForTimeout(700); await p.screenshot({ path: path.join(OUT, PFX + '-between.png'), fullPage: true });
+    await p.evaluate(() => { document.querySelector('details') && (document.querySelector('details').open = true); }); await p.waitForTimeout(300); await p.screenshot({ path: path.join(OUT, PFX + '-between-browse.png'), fullPage: true });
+    await p.evaluate(() => { APP.cart[Object.keys(APP.cart)[0] || 'x'] = 1; ACTIONS.fGrade(APP.emp.books[0].Grade); }); await p.waitForTimeout(600); await p.screenshot({ path: path.join(OUT, PFX + '-between-grade.png'), fullPage: true });
   }
   if (process.env.FAMILY) {
     await p.evaluate(() => { const gs = [...new Set(APP.emp.books.map(b => b.Grade))]; APP.emp.employee.kids = [{ name: 'محمد', gender: 'b', grade: gs[0], type: '' }, { name: 'مريم', gender: 'g', grade: gs[1] || gs[0], type: '' }, { name: 'يوسف', gender: 'b', grade: gs[0], type: '', rel: 'ابن أخ' }]; Shell.rerender(); });
