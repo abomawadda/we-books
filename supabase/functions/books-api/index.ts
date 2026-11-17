@@ -317,7 +317,11 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
       const [c] = await sql`select count(*)::int as n, coalesce(sum((data->>'Requested_Qty')::numeric),0)::int as q from books.records where tbl = '08_Reservations_Items' and data->>'Res_ID' = ${ref} and coalesce(data->>'Allocation_Status','') not like 'Cancelled%'`;
       fields = [['نوع المستند', 'طلب حجز كتب'], ['الحالة', ST[h.Res_Status] || h.Res_Status || 'مؤكد'], ['العضو', await emp(h.Emp_ID)], ['المرحلة', await phase(h.Phase_ID)], ['عدد النسخ', c?.q || 0], ['آخر تعديل', d10(h.Last_Modified_At || h.Created_At)]]; }
     else if ((r = await one('14_Delivery_And_Returns', 'Printed_Receipt_No')).length) { const q = r.reduce((a: number, x: any) => a + Number(x.Qty || 0), 0);
-      fields = [['نوع المستند', ({ EMP_RETURN: 'إذن مرتجع', EMP_EXCHANGE: 'إذن استبدال كتب', SUPPLIER_RETURN: 'إذن مرتجع للمكتبة' } as any)[String(r[0].Doc_Type)] || 'إذن تسليم كتب'], ['العضو', await emp(r[0].Party_ID)], ['عدد النسخ', q], ['التاريخ', d10(r[0].Trans_Date)]]; }
+      fields = [['نوع المستند', ({ EMP_RETURN: 'إذن مرتجع', EMP_EXCHANGE: 'إذن استبدال كتب', SUPPLIER_RETURN: 'إذن مرتجع نهائي للمكتبة' } as any)[String(r[0].Doc_Type)] || 'إذن تسليم كتب'],
+        r[0].Doc_Type === 'SUPPLIER_RETURN'
+          ? ['المكتبة', ((await sql`select data->>'Supplier_Name' as n from books.records where tbl = '04_Suppliers' and data->>'Supplier_ID' = ${String(r[0].Party_ID)} limit 1`)[0] || {}).n || '']
+          : ['العضو', await emp(r[0].Party_ID)],
+        ['عدد النسخ', q], ...(r[0].Doc_Type === 'SUPPLIER_RETURN' ? [['صافي المرتجع', money(-r.reduce((a: number, x: any) => a + Number(x.Total_Amount_Impact || 0), 0))]] : []), ['التاريخ', d10(r[0].Trans_Date)]]; }
     else { const m = ref.match(/^PO-(PH-\d+)-(.+)$/);
       if (m) { const [c] = await sql`select count(*)::int as n, coalesce(sum((data->>'Net_Order_To_Supplier_Qty')::numeric),0)::int as q, max(data->>'Frozen_At') as f from books.records where tbl = '10_Purchase_Orders_Snapshot' and data->>'Phase_ID' = ${m[1]} and data->>'Supplier_ID' = ${m[2]}`;
         if (c && c.n) fields = [['نوع المستند', 'طلب توريد كتب'], ['المرحلة', await phase(m[1])], ['الأصناف', c.n], ['إجمالي النسخ', c.q], ['تاريخ التجميد', d10(c.f)]]; } }
