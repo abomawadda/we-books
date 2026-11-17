@@ -594,7 +594,6 @@ function negData() {
     o.q += q; o.cover += q * n(bk.Cover_Price); o.disc += q * n(bk.Cover_Price) * n(bk.Supplier_Discount_Pct) / 100; o.titles.add(i.Book_ID); });
   return Object.entries(by).map(([p, o]) => ({ p, q: o.q, cover: o.cover, pct: o.cover ? o.disc / o.cover * 100 : 0, titles: o.titles.size })).sort((a, c) => c.q - a.q);
 }
-on("negExtra", () => {});
 Router.add("/a/negotiate", view => {
   const rows = negData(), tq = rows.reduce((s, r) => s + r.q, 0), tc = rows.reduce((s, r) => s + r.cover, 0), gain = tc * NEG.extra / 100;
   view.innerHTML = `${UI.pageHead("التفاوض مع المكتبة", `قوة الشراء الجماعي في «${esc(phaseObj().Phase_Name || "")}» — قبل طلب التوريد`, `<button class="btn btn-primary btn-sm" data-act="negPrint">${ic("printer")} خطاب طلب خصم</button>`)}
@@ -724,3 +723,94 @@ const poTrackCards = phaseId => { const { s } = maps(), sups = [...new Set(A().p
   return sups.map(id => poTrackCard(phaseId, id, (s[id] || {}).Supplier_Name || id)).join(""); };
 _wrapA("/a/po", view => { const h = poTrackCards(APP.phaseId); if (!h) return; const head = view.firstElementChild; head ? head.insertAdjacentHTML("afterend", h) : view.insertAdjacentHTML("afterbegin", h); });
 _wrapA("/a/receive", view => { const h = poTrackCards(APP.phaseId); if (!h) return; const head = view.firstElementChild; head ? head.insertAdjacentHTML("afterend", h) : view.insertAdjacentHTML("afterbegin", h); });
+
+// ================================================================ المراحل والمكتبة — إعادة تصميم (17 نوفمبر 2026)
+// المراحل: بطاقة «المرحلة الحالية» كبيرة بخط سير (الحجز ← التوريد ← الاستلام ← التسليم ← مكتملة) + عدّاد أيام ومؤشرات، والباقي قائمة مختصرة.
+const PH_FLOW = [["Open", "calendar-check", "الحجز"], ["Ordered", "send", "التوريد"], ["Receiving", "package-check", "الاستلام"], ["Delivering", "hand-coins", "التسليم"], ["Completed", "badge-check", "مكتملة"]];
+const phFlowIx = st => ({ Draft: -1, Scheduled: -1, Open: 0, Closed: 0, Ordered: 1, Receiving: 2, Delivering: 3, Completed: 4 })[st] ?? -1;
+const phDaysTo = dt => { if (!dt) return null; const d = new Date(String(dt).replace(" ", "T")); return isNaN(d) ? null : Math.ceil((d - Date.now()) / 864e5); };
+function phStats(p) {
+  const d = A(), its = d.resItems.filter(i => i.Phase_ID === p.Phase_ID && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
+  const invs = (d.empInvoices || []).filter(i => i.Phase_ID === p.Phase_ID);
+  return { emps: new Set(its.map(i => i.Emp_ID)).size, copies: sum(its, "Requested_Qty"), deliv: sum(its, "Delivered_Qty"),
+    net: invs.reduce((a, i) => a + n(i.Net_Final_Invoice_Amount), 0), paid: invs.reduce((a, i) => a + n(i.Total_Paid_Amount), 0), any: its.length > 0 };
+}
+function phFlow(st) {
+  const k = phFlowIx(st);
+  return `<ol class="flex items-start mt-4">${PH_FLOW.map((x, i) => { const done = i < k, cur = i === k;
+    return `<li class="flex-1 flex flex-col items-center text-center relative">${i < PH_FLOW.length - 1 ? `<span class="absolute top-[15px] h-0.5 rounded-full ${done ? "bg-emerald-400" : "bg-white/25"}" style="inset-inline-start:calc(50% + 17px);inset-inline-end:calc(-50% + 17px)"></span>` : ""}
+      <span class="relative z-[1] w-8 h-8 rounded-xl flex items-center justify-center ${done ? "bg-emerald-400 text-white" : cur ? "bg-gold-400 text-brand-950 ring-4 ring-white/20" : "bg-white/10 text-white/50"}">${ic(done ? "check" : x[1], "!w-4 !h-4")}</span>
+      <span class="mt-1 text-[10.5px] font-bold ${cur ? "text-gold-300" : done ? "text-emerald-200" : "text-white/50"}">${x[2]}</span></li>`; }).join("")}</ol>`;
+}
+function phHero(p) {
+  const st = p.Effective_Status || p.Phase_Status, s = phStats(p), toEnd = phDaysTo(p.End_DateTime), toStart = phDaysTo(p.Start_DateTime);
+  const start = new Date(String(p.Start_DateTime || "").replace(" ", "T")), end = new Date(String(p.End_DateTime || "").replace(" ", "T"));
+  const pct = !isNaN(start) && !isNaN(end) && end > start ? Math.max(0, Math.min(100, Math.round((Date.now() - start) / (end - start) * 100))) : 0;
+  const clock = st === "Scheduled" && toStart !== null ? `يبدأ الحجز بعد <b class="num">${toStart}</b> يوم` : st === "Open" && toEnd !== null ? (toEnd <= 0 ? "<b>النهارده آخر يوم حجز</b>" : `باقي <b class="num">${toEnd}</b> يوم على قفل الحجز`) : esc(ar(st));
+  return `<section class="rounded-3xl p-4 sm:p-5 text-white shadow-soft mb-4 relative overflow-hidden" style="background:linear-gradient(135deg,#552c83,#2e1650)">
+    <span class="absolute -left-10 -top-10 w-40 h-40 rounded-full bg-white/5"></span>
+    <div class="relative flex items-start justify-between gap-2"><div class="min-w-0"><div class="text-[11.5px] text-brand-200 flex items-center gap-1.5"><span class="num">${esc(p.Phase_ID)}</span> · المرحلة المعروضة</div><h2 class="font-display font-bold text-[20px] leading-tight truncate">${esc(p.Phase_Name)}</h2></div>${pill(st)}</div>
+    <div class="relative text-[12.5px] text-brand-100 mt-2">${ic("clock", "inline -mt-0.5")} ${clock}</div>
+    ${st === "Open" || st === "Scheduled" ? `<div class="relative mt-2 h-1.5 rounded-full bg-white/15 overflow-hidden"><span class="block h-full bg-gold-400 rounded-full" style="width:${pct}%"></span></div>` : ""}
+    <div class="relative">${phFlow(st)}</div>
+    <div class="relative grid grid-cols-4 gap-1.5 mt-4">${[["موظف", fmt(s.emps)], ["نسخة", fmt(s.copies)], ["استلم", fmt(s.deliv)], ["محصّل", fmt(s.paid)]].map(x => `<div class="rounded-xl bg-white/10 px-2 py-2 text-center"><div class="font-bold num text-[15px]">${x[1]}</div><div class="text-[10.5px] text-brand-200">${x[0]}</div></div>`).join("")}</div>
+    <div class="relative grid grid-cols-3 gap-1.5 mt-3 text-[11.5px]">${[["يبدأ الحجز", day(p.Start_DateTime) || "—"], ["يقفل الحجز", day(p.End_DateTime) || "—"], ["يبدأ التسليم", day(p.Delivery_Start_Date) || "—"]].map(x => `<div class="rounded-xl bg-black/15 px-2.5 py-1.5"><div class="text-brand-200 text-[10.5px]">${x[0]}</div><div class="font-semibold num truncate">${esc(x[1])}</div></div>`).join("")}</div>
+    <div class="relative text-[11.5px] text-brand-200 mt-2">${ic("graduation-cap", "inline -mt-0.5")} ${p.Allowed_Grades === "ALL" || !p.Allowed_Grades ? "متاحة لكل الصفوف" : "متاحة لـ " + String(p.Allowed_Grades).split(/[,،]/).length + " صف"}</div>
+    <div class="relative flex flex-wrap gap-2 mt-4">${lockedBtn("SAVE_PHASE", `<button class="btn btn-sm !bg-white !text-brand-800" data-act="phaseForm" data-id="${esc(p.Phase_ID)}">${ic("pencil")} تعديل المواعيد</button>`)}<a href="#/a/dash" class="btn btn-sm !bg-white/15 !text-white">${ic("layout-dashboard")} لوحة القيادة</a>${s.any ? "" : lockedBtn("DELETE_PHASE", `<button class="btn btn-sm !bg-rose-500/20 !text-rose-100" data-act="phaseDel" data-id="${esc(p.Phase_ID)}">${ic("trash-2")} حذف</button>`)}</div>
+  </section>`;
+}
+Router.add("/a/phases", view => {
+  const d = A(), cur = d.phases.find(p => p.Phase_ID === APP.phaseId) || d.phases[d.phases.length - 1], others = d.phases.filter(p => p !== cur).slice().reverse();
+  const add = lockedBtn("SAVE_PHASE", `<button class="btn btn-primary btn-sm" data-act="phaseForm">${ic("plus")} مرحلة جديدة</button>`);
+  if (!d.phases.length) { view.innerHTML = UI.pageHead("المراحل", "كل مرحلة = فترة حجز + توريد + تسليم") + `<section class="card p-6 text-center">
+      <div class="mx-auto w-16 h-16 rounded-3xl bg-brand-50 text-brand-700 flex items-center justify-center">${ic("calendar-range", "!w-8 !h-8")}</div>
+      <h2 class="font-display font-bold text-[19px] text-slate-900 mt-4">ابدأ أول مرحلة حجز</h2>
+      <p class="text-[13px] text-slate-500 mt-1.5 max-w-sm mx-auto leading-relaxed">حدّد اسم المرحلة ومواعيد الحجز والتسليم، وأول ما ييجي ميعاد البداية الموظفين يقدروا يحجزوا على طول.</p>
+      <ol class="mt-5 grid gap-2 text-right max-w-sm mx-auto text-[12.5px]">${PH_FLOW.map((x, i) => `<li class="flex items-center gap-2.5 rounded-xl bg-slate-50 px-3 py-2"><span class="w-7 h-7 rounded-lg bg-white text-brand-700 flex items-center justify-center">${ic(x[1], "!w-4 !h-4")}</span><b class="text-slate-800">${i + 1}. ${x[2]}</b></li>`).join("")}</ol>
+      <div class="mt-5">${lockedBtn("SAVE_PHASE", `<button class="btn btn-primary btn-lg" data-act="phaseForm">${ic("plus")} إنشاء أول مرحلة</button>`)}</div></section>`; return; }
+  view.innerHTML = UI.pageHead("المراحل", `${d.phases.length} ${d.phases.length > 2 ? "مراحل" : d.phases.length === 2 ? "مرحلتين" : "مرحلة"} · الحجز ← التوريد ← الاستلام ← التسليم`, add) + phHero(cur)
+    + (others.length ? `<h3 class="font-bold text-slate-800 text-[14px] mb-2">مراحل تانية</h3><div class="grid gap-2.5 md:grid-cols-2">${others.map(p => { const st = p.Effective_Status || p.Phase_Status, s = phStats(p), k = phFlowIx(st);
+      return `<article class="card p-3.5"><div class="flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">${ic((PH_FLOW[Math.max(0, k)] || PH_FLOW[0])[1])}</span>
+        <div class="min-w-0 flex-1"><b class="block text-[14px] text-slate-900 truncate">${esc(p.Phase_Name)}</b><span class="block text-[11.5px] text-slate-500 num">${esc(p.Phase_ID)} · ${esc(day(p.Start_DateTime))} ← ${esc(day(p.End_DateTime))}</span></div>${pill(st)}</div>
+        <div class="flex gap-1 mt-3">${PH_FLOW.map((x, i) => `<span class="h-1.5 flex-1 rounded-full ${i < k ? "bg-emerald-400" : i === k ? "bg-brand-600" : "bg-slate-200"}"></span>`).join("")}</div>
+        <div class="flex items-center justify-between mt-3 text-[12px] text-slate-500"><span>${fmt(s.emps)} موظف · ${fmt(s.copies)} نسخة · ${fmt(s.paid)} ج.م محصّل</span>
+          <span class="flex items-center gap-1.5"><button class="btn btn-soft btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">فتح</button>${lockedBtn("SAVE_PHASE", `<button class="act-ic act-ic-edit" data-act="phaseForm" data-id="${esc(p.Phase_ID)}" aria-label="تعديل المرحلة">${ic("pencil")}</button>`)}${s.any ? "" : lockedBtn("DELETE_PHASE", `<button class="act-ic act-ic-del" data-act="phaseDel" data-id="${esc(p.Phase_ID)}" aria-label="حذف المرحلة">${ic("trash-2")}</button>`)}</span></div></article>`; }).join("")}</div>` : "");
+});
+
+// المكتبة: بطاقة هوية + كشف حساب مبسّط (فواتير/خصومات/مرتجعات/مدفوع/مستحق) + تواصل سريع + الشروط
+Router.add("/a/suppliers", view => {
+  const d = A(), bal = supplierBalances(), mainId = (d.suppliers[0] || {}).Supplier_ID;
+  const add = lockedBtn("SAVE_SUPPLIER", `<button class="btn btn-primary btn-sm" data-act="supplierForm">${ic("plus")} مكتبة جديدة</button>`);
+  if (!d.suppliers.length) { view.innerHTML = UI.pageHead("المكتبة", "المكتبة المتعاقدة اللي بنورّد منها") + `<div class="card">${UI.empty("store", "لا توجد مكتبات", "أضف المكتبة المتعاقدة أولاً لربط الكتب بها.", add)}</div>`; return; }
+  view.innerHTML = UI.pageHead(d.suppliers.length > 1 ? "المكتبات المتعاقدة" : "المكتبة المتعاقدة", "كل الكتب تتبع المكتبة الرئيسية · خصم الكمية على إجمالي فاتورة التوريد", add)
+    + `<div class="grid gap-4 md:grid-cols-2">${d.suppliers.map(s => { const x = bal[s.Supplier_ID] || { inv: 0, claim: 0, ret: 0, paid: 0 }, due = x.inv - x.claim - x.ret - x.paid, isMain = s.Supplier_ID === mainId, hasMoves = !!bal[s.Supplier_ID];
+      const books = d.books.filter(b => b.Supplier_ID === s.Supplier_ID), priced = books.filter(b => n(b.Emp_Selling_Price) > 0).length, pubs = new Set(books.map(b => b.Publisher)).size;
+      const paidPct = x.inv - x.claim - x.ret > 0 ? Math.min(100, Math.round(x.paid / (x.inv - x.claim - x.ret) * 100)) : 0, tel = String(s.Phone || "").replace(/\D/g, "");
+      const row = (l, v, cls) => `<div class="flex items-center justify-between py-1.5 text-[13px]"><span class="text-slate-500">${l}</span><b class="num ${cls || "text-slate-800"}">${v}</b></div>`;
+      return `<article class="card overflow-hidden ${isMain ? "ring-2 ring-brand-300" : ""}">
+        <div class="p-4 text-white" style="background:linear-gradient(135deg,#552c83,#2e1650)"><div class="flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-white/15 flex items-center justify-center shrink-0">${ic("store", "!w-6 !h-6")}</span>
+          <div class="min-w-0 flex-1"><h3 class="font-display font-bold text-[17px] truncate">${esc(s.Supplier_Name)}</h3><div class="text-[11.5px] text-brand-200 num">${esc(s.Supplier_ID)}${s.Contact_Person && s.Contact_Person !== "-" ? " · " + esc(s.Contact_Person) : ""}</div></div>${isMain ? `<span class="pill !bg-gold-400 !text-brand-950">${ic("badge-check")} الرئيسية</span>` : ""}</div>
+          <div class="grid grid-cols-3 gap-1.5 mt-3">${[["كتاب", fmt(books.length)], ["متسعّر", fmt(priced)], ["ناشر", fmt(pubs)]].map(y => `<div class="rounded-xl bg-white/10 py-1.5 text-center"><div class="font-bold num">${y[1]}</div><div class="text-[10.5px] text-brand-200">${y[0]}</div></div>`).join("")}</div></div>
+        <div class="p-4"><div class="text-[12px] font-bold text-slate-700 mb-1">${ic("receipt", "inline -mt-0.5 text-brand-600")} الحساب</div>
+          ${row("فواتير التوريد", fmt(x.inv))}${x.claim ? row("مطالبات تلف", "− " + fmt(x.claim), "text-amber-700") : ""}${x.ret ? row("مرتجعات", "− " + fmt(x.ret), "text-amber-700") : ""}${row("المدفوع", fmt(x.paid), "text-emerald-700")}
+          <div class="flex items-center justify-between pt-2 mt-1 border-t border-slate-100"><span class="font-bold text-slate-900">المستحق لها</span><b class="num text-[17px] ${due > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(due)} ج.م</b></div>
+          ${x.inv ? `<div class="mt-2 h-1.5 rounded-full bg-slate-100 overflow-hidden"><span class="block h-full bg-emerald-500" style="width:${paidPct}%"></span></div><div class="text-[11px] text-slate-500 mt-1">اتسدد <span class="num">${paidPct}%</span></div>` : `<div class="text-[11.5px] text-slate-400 mt-1">لسه مفيش فواتير توريد</div>`}
+          <div class="flex flex-wrap gap-1.5 mt-3 text-[11.5px]"><span class="pill pill-brand">خصم الكمية ${fmt(s.Volume_Discount_Pct !== undefined && s.Volume_Discount_Pct !== "" ? s.Volume_Discount_Pct : 3)}%</span><span class="pill">مرتجع خلال ${fmt(s.Return_Policy_Days || 30)} يوم</span>${s.Payment_Terms && s.Payment_Terms !== "-" ? `<span class="pill">${esc(s.Payment_Terms)}</span>` : ""}</div>
+          ${s.Contract_Notes ? `<p class="text-[12px] text-slate-500 mt-2 leading-relaxed">${ic("info", "inline -mt-0.5")} ${esc(s.Contract_Notes)}</p>` : ""}
+          <div class="grid grid-cols-2 gap-2 mt-4">${tel ? `<a class="btn btn-outline btn-sm justify-center" href="tel:${tel}">${ic("phone")} اتصال</a><a class="btn btn-success btn-sm justify-center" target="_blank" rel="noopener" href="https://wa.me/2${tel.replace(/^2/, "")}">${ic("message-circle")} واتساب</a>` : ""}
+            <a class="btn btn-soft btn-sm justify-center" href="#/a/supplier">${ic("wallet")} كشف الحساب</a><a class="btn btn-soft btn-sm justify-center" href="#/a/po">${ic("truck")} طلبات التوريد</a></div>
+          <div class="flex items-center justify-end gap-1.5 mt-3">${lockedBtn("SAVE_SUPPLIER", `<button class="act-ic act-ic-edit" data-act="supplierForm" data-id="${esc(s.Supplier_ID)}" aria-label="تعديل بيانات المكتبة">${ic("pencil")}</button>`)}${hasMoves ? "" : lockedBtn("DELETE_SUPPLIER", `<button class="act-ic act-ic-del" data-act="supplierDel" data-id="${esc(s.Supplier_ID)}" aria-label="حذف المكتبة">${ic("trash-2")}</button>`)}</div></div></article>`; }).join("")}</div>`;
+});
+
+// لوحة القيادة على الموبايل: شريط تنقّل سريع بين أقسامها (الصفحة طويلة جداً على الموبايل)
+_wrapA("/a/dash", view => {
+  if (innerWidth >= 1024) return;
+  const secs = [...view.querySelectorAll("section")].filter(s => !s.parentElement.closest("section")).map(s => { const h = s.querySelector("h2,h3,.card-title"); return h && h.textContent.trim() ? [s, h.textContent.trim().replace(/\s+/g, " ").slice(0, 28)] : null; }).filter(Boolean);
+  if (secs.length < 5) return;
+  secs.forEach(([s], i) => { s.id = s.id || "dsec" + i; s.style.scrollMarginTop = "8.5rem"; });
+  const nav = document.createElement("nav");
+  nav.className = "sticky top-14 z-20 -mx-4 px-4 py-2 mb-3 bg-slate-50/95 backdrop-blur";
+  nav.innerHTML = `<div class="flex gap-1.5 overflow-x-auto" style="scrollbar-width:none">${secs.map(([s, t]) => `<button type="button" class="shrink-0 rounded-full bg-white ring-1 ring-slate-200 px-3 h-8 text-[12px] font-semibold text-slate-700 active:scale-95" data-jump="${s.id}">${esc(t)}</button>`).join("")}</div>`;
+  nav.addEventListener("click", e => { const b = e.target.closest("[data-jump]"); if (!b) return; const t = document.getElementById(b.dataset.jump); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" }); });
+  const first = view.firstElementChild; first ? first.insertAdjacentElement("afterend", nav) : view.prepend(nav);
+});
