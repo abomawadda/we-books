@@ -171,7 +171,7 @@ function tracker(input) {
       <span class="pill pill-gray num">المطلوب: ${fmt(req)}</span>
       <span class="pill ${deliv ? "pill-green" : "pill-gray"} num">المستلم: ${fmt(deliv)}</span>
       ${ready > 0 ? `<span class="pill pill-brand num">جاهز للاستلام الآن: ${fmt(ready)}</span>` : ""}
-      ${remUnalloc > 0 ? `<span class="pill pill-amber num">متبقٍ للترحيل: ${fmt(remUnalloc)}</span>` : remTotal > 0 && !ready ? `<span class="pill pill-amber num">متبقٍ: ${fmt(remTotal)}</span>` : ""}
+      ${!allocRan((APP.emp || {}).activePhase, active) ? `<span class="pill pill-brand">${ic("truck", "inline !w-3.5 !h-3.5 -mt-0.5")} قبل التوزيع — الكتب في الطريق</span>` : remUnalloc > 0 ? `<span class="pill pill-amber num">متبقٍ للترحيل: ${fmt(remUnalloc)}</span>` : remTotal > 0 && !ready ? `<span class="pill pill-amber num">متبقٍ: ${fmt(remTotal)}</span>` : ""}
     </div>
   </div>` : (badge ? `<div class="mt-3 pt-2.5 border-t border-slate-100">${badge}</div>` : "");
 
@@ -205,7 +205,7 @@ function carryNotice(ph) {
   // المُرحَّل فعلاً = اللي نسخته في المرحلة الجديدة لسه قائمة (لو اتلغت هناك ميتحسبش)
   const all = APP.emp.myReservationItems || [], live = id => all.some(x => x.Carried_From_Item_ID === id && !String(x.Allocation_Status).startsWith("Cancelled"));
   const carried = Emp.phaseItems().filter(i => i.Allocation_Status === "Carried_Forward" && (!all.some(x => x.Carried_From_Item_ID === i.Res_Item_ID) || live(i.Res_Item_ID))).reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0);
-  const pending = ["Receiving", "Delivering", "Completed"].includes(st) ? Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0) : 0;
+  const pending = allocRan(ph, Emp.activeItems()) ? Emp.activeItems().reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Allocated_Qty)), 0) : 0;
   const chose = Emp.activeItems().filter(i => n(i.Requested_Qty) > n(i.Allocated_Qty)).every(i => i.Waitlist_Choice === "carry");
   if (pending > 0) return { qty: pending, text: chose ? `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — وافقت على ترحيلها للمرحلة القادمة بأولوية الحجز.` : `تنويه: متبقٍ لك ${booksWord(pending)} لم تتوفر بعد — اختار من «حجوزاتي»: ترحيلها للمرحلة القادمة أو إنهاء حجزك على المتاح.` };
   if (carried > 0) return { qty: carried, text: `تنويه: تم ترحيل ${booksWord(carried)} المتبقية لك إلى المرحلة القادمة.` };

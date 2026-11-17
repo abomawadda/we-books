@@ -65,7 +65,7 @@ const _epBodyBase = epBody;
 epBody = function (id) {
   const html = _epBodyBase(id);
   if (!APP.phaseId || !can("WAITLIST_DECISION")) return html;
-  const ph = phaseObj(); if ((ph.Effective_Status || ph.Phase_Status) === "Open") return html;
+  const ph = phaseObj(); if ((ph.Effective_Status || ph.Phase_Status) === "Open" || !allocRan(ph, phaseItems().filter(i => i.Emp_ID === id))) return html;
   const { b } = maps(), w = phaseItems().filter(i => i.Emp_ID === id && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
   if (!w.length) return html;
   const ch = w.every(i => i.Waitlist_Choice === "carry") ? "وافق على الترحيل" : w.some(i => i.Waitlist_Choice) ? "قرار جزئي" : "لم يختر بعد";
