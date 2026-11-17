@@ -258,7 +258,7 @@ function askBody() {
   const rows = askRows();
   return `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">${UI.kpi("عدد الموظفين", fmt(rows.length), { icon: "users" })}${UI.kpi("النسخ", fmt(sum(rows, "req")), { icon: "book-open", tone: "blue" })}${UI.kpi("القيمة", money(sum(rows, "amt")), { icon: "receipt", tone: "gray" })}${UI.kpi("المتبقي عليهم", money(sum(rows, "rem")), { icon: "hand-coins", tone: "amber" })}</div>`
     + UI.table([{ t: "الموظف", v: r => `<b>${empLink(r.e.Emp_ID, r.e.Full_Name)}</b><div class="text-[11px] text-slate-400 num">${esc(r.e.Emp_ID)} · ${esc(r.e.Department || "")}</div>` },
-      { t: "نسخ", cls: "num", v: r => fmt(r.req) }, { t: "مُسلَّم", cls: "num", v: r => fmt(r.dl) }, { t: "القيمة", cls: "num", v: r => fmt(Math.round(r.amt)) }, { t: "المقدم الباقي", cls: "num", v: r => r.down ? `<b class="text-rose-600">${fmt(r.down)}</b>` : "" }, { t: "المتبقي", cls: "num", v: r => fmt(r.rem) },
+      { t: "نسخ", cls: "num", v: r => fmt(r.req) }, { t: "مُسلَّم", cls: "num", v: r => fmt(r.dl) }, { t: "القيمة", cls: "num", v: r => fmt(Math.round(r.amt)) }, { t: "المطلوب قبل الاستلام", cls: "num", v: r => r.down ? `<b class="text-rose-600">${fmt(r.down)}</b>` : "" }, { t: "المتبقي", cls: "num", v: r => fmt(r.rem) },
       { t: "", actions: true, v: r => r.e.Mobile ? `<a class="btn btn-outline btn-xs !text-emerald-700" target="_blank" rel="noopener" href="${esc(Brand.waLink(r.e.Mobile, ""))}">${ic("message-circle")} واتساب</a>` : "" }], rows.slice(0, 400), { empty: "لا أحد يطابق هذا السؤال", emptyIcon: "search" });
 }
 function familyBox() {
@@ -283,7 +283,7 @@ Router.add("/a/ask", view => {
     <div class="mt-6">${UI.section(`${ic("users", "text-brand-600")} تحليل الأسر`, "من بيانات الأبناء التي سجّلها الموظفون — تفيد في تخطيط كميات العام القادم", familyBox())}</div>`;
 });
 on("askF", (v, el) => { ASK[el.dataset.id] = v; if (el.dataset.id === "stage") ASK.grade = ""; Shell.rerender(); });
-on("askCsv", () => exportCSV("اسأل البيانات", ["الرقم", "الاسم", "جهة العمل", "الموبايل", "نسخ", "مسلم", "القيمة", "المقدم الباقي", "المتبقي"], askRows().map(r => [r.e.Emp_ID, r.e.Full_Name, r.e.Department, r.e.Mobile, r.req, r.dl, Math.round(r.amt), r.down, r.rem])));
+on("askCsv", () => exportCSV("اسأل البيانات", ["الرقم", "الاسم", "جهة العمل", "الموبايل", "نسخ", "مسلم", "القيمة", "المطلوب قبل الاستلام", "المتبقي"], askRows().map(r => [r.e.Emp_ID, r.e.Full_Name, r.e.Department, r.e.Mobile, r.req, r.dl, Math.round(r.amt), r.down, r.rem])));
 
 // ---------------------------------------------------------------- رقابة: العمليات الحساسة خلال 7 أيام (في لوحة القيادة)
 const SENSITIVE = { VOID_EMPLOYEE_PAYMENT: "إلغاء إيصال", DELETE_EMP_INVOICE: "حذف فاتورة", ADJUST_EMP_INVOICE: "تعديل فاتورة", MANUAL_ALLOCATION_OVERRIDE: "تخصيص يدوي استثنائي", SAVE_ROLE_PERMISSIONS: "تغيير الصلاحيات", REFUND_EMPLOYEE_CREDIT: "رد رصيد", RECORD_STOCK_ADJUSTMENT: "تسوية مخزن", CANCEL_UNDELIVERED_QTY: "إلغاء كميات", CUSTOMIZE_EMP_INSTALLMENTS: "تعديل أقساط" };

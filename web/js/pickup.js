@@ -22,7 +22,7 @@ function pickupCard() {
     <div class="p-4 sm:p-5 flex items-center gap-4">
       <button class="w-24 h-24 shrink-0 rounded-2xl bg-white ring-1 ring-slate-200 p-1.5 flex items-center justify-center" data-act="myQr" aria-label="كبّر رمز الاستلام"><span id="qrMini" class="block w-full h-full">${UI.skeleton(1)}</span></button>
       <div class="flex-1 min-w-0"><div class="text-[12px] font-bold text-emerald-700">📦 كتبك جاهزة — ${booksWord(p.ready)}</div>
-        <div class="font-display font-bold text-[17px] text-slate-900 leading-snug mt-0.5">${p.down ? `هات معاك <span class="num text-rose-600">${fmt(p.down)}</span> ج.م (المقدم)` : "مفيش مقدم مطلوب — تعالى استلم على طول"}</div>
+        <div class="font-display font-bold text-[17px] text-slate-900 leading-snug mt-0.5">${p.down ? `هات معاك <span class="num text-rose-600">${fmt(p.down)}</span> ج.م (${planIsInst(Emp.invoice()) ? "المقدم" : "كامل المبلغ"})` : "مفيش مبلغ مطلوب — تعالى استلم على طول"}</div>
         <div class="text-[12.5px] text-slate-500 mt-1">${p.slot ? "" : p.ph.Delivery_Start_Date ? `التسليم من ${esc(day(p.ph.Delivery_Start_Date))}` : ""}</div></div>
     </div>
     ${p.slot || (p.sc && p.sc.place) ? `<div class="mx-4 mb-3 rounded-2xl bg-brand-50 text-brand-900 p-3 text-[13.5px] leading-relaxed">${p.slot ? `🗓️ <b>موعدك:</b> ${esc(slotTxt(p.slot))}<br>` : ""}${p.sc.place ? `📍 <b>المكان:</b> ${esc(p.sc.place)}<br>` : ""}${p.sc.note ? `💡 ${esc(p.sc.note)}` : ""}</div>` : ""}

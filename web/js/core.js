@@ -581,6 +581,9 @@ call = async function (action, payload, opts) {
 };
 
 /** هل التوزيع اتعمل للمرحلة؟ قبل التوزيع (حجز/قفل/توريد/استلام) مفيش حاجة اسمها «كتب موصلتش» — كل الكتب لسه في الطريق */
+/** طريقة السداد للفاتورة/الحجز: التقسيط فقط فيه «مقدم وأقساط»، والكاش مبلغ واحد كامل */
+function planIsInst(x) { return String((x && (x.Payment_Plan_Type || x.Payment_Method_Selected || x.method)) || "") === "INSTALLMENT"; }
+function downWord(x) { return planIsInst(x) ? "المقدم" : "كامل المبلغ"; }
 function allocRan(phase, items) {
   const st = phase && (phase.Effective_Status || phase.Phase_Status);
   if (st === "Delivering" || st === "Completed") return true;
