@@ -3431,9 +3431,9 @@ on("supReturn", async () => {
   const d = A(), { b } = maps(), pool = d.returnPool || {}, ids = Object.keys(pool).filter(k => pool[k].returnable > 0);
   if (!ids.length) return toast("مفيش كتب متاحة لمرتجع نهائي — كل الرصيد الحر محجوز لموظفين وهيتدمج في المراحل الجاية", "warning");
   const terms = d.returnTerms || {};
-  const v = await UI.form({ title: "مرتجع نهائي للمكتبة", intro: "للكتب اللي محدش حجزها بس. الحساب: سعر الغلاف − خصم المكتبة لكل صنف، وبعدين خصم الكمية على إجمالي الإذن كله (زي الفاتورة الأصلية).", fields: [
+  const v = await UI.form({ title: "مرتجع نهائي للمكتبة", intro: "للكتب اللي محدش حجزها بس. الحساب: سعر الغلاف − خصم المكتبة لكل صنف، وبعدين خصم الكمية بنسبة فاتورة الطلبية اللي ورد فيها كل كتاب، على إجمالي الإذن (مش لكل صنف).", fields: [
     ...ids.map(k => ({ name: "q_" + k, label: `${bookName(b, k)} — متاح ${pool[k].returnable}`, type: "number", min: 0, max: pool[k].returnable, value: pool[k].returnable, cols: 1 })),
-    { name: "volumePct", label: `خصم الكمية % (من ${terms.volFrom ? "فاتورة " + terms.volFrom : "آخر فاتورة"})`, type: "number", value: terms.volPct || 0, cols: 1 },
+    { name: "volumePct", label: "تعديل خصم الكمية % (اختياري — للمدير/المالية)", type: "number", placeholder: "تلقائي من فاتورة كل كتاب", cols: 1 },
     { name: "volumeReason", label: "سبب تعديل خصم الكمية (لو غيّرته)", cols: 1 },
     { name: "reason", label: "ملاحظات الإذن", value: "مرتجع نهائي — تصفية الحساب مع المكتبة" }], ok: "احسب المرتجع", icon: "calculator" });
   if (!v) return;
@@ -3444,8 +3444,8 @@ on("supReturn", async () => {
   if (!p.success) return toast(p.message || "تعذر الحساب", "danger");
   const row = (t, x, cls) => `<div class="flex justify-between py-1 ${cls || ""}"><span>${t}</span><b class="num">${x}</b></div>`;
   const ok = await UI.form({ title: "راجع المرتجع قبل التسجيل", fields: [{ name: "_p", type: "html", html: `<div class="text-[12.5px]">
-    <div class="max-h-60 overflow-auto rounded-xl ring-1 ring-slate-200 divide-y divide-slate-100">${p.lines.map(l => `<div class="px-3 py-2"><div class="font-semibold">${esc(bookName(b, l.bookId))}</div><div class="text-slate-500 num">${l.qty} × (غلاف ${fmt(l.cover)} − ${l.disc}%) = ${fmt(l.afterItem)} <span class="text-[11px]">· ${esc(l.src)}</span></div></div>`).join("")}</div>
-    <div class="mt-3 rounded-xl bg-slate-50 px-3 py-2">${row("إجمالي الغلاف", fmt(p.grossCover))}${row("بعد خصم الأصناف", fmt(p.afterItem))}${row(`(−) خصم الكمية ${p.volPct}% على الإجمالي`, fmt(p.volAmt))}${row("صافي المرتجع (يتخصم من حساب المكتبة)", moneyTxt(p.net), "text-[14px] text-emerald-700 border-t border-slate-200 mt-1 pt-2")}</div>
+    <div class="max-h-60 overflow-auto rounded-xl ring-1 ring-slate-200 divide-y divide-slate-100">${p.lines.map(l => `<div class="px-3 py-2"><div class="font-semibold">${esc(bookName(b, l.bookId))}</div><div class="text-slate-500 num">${l.qty} × (غلاف ${fmt(l.cover)} − ${l.disc}%) = ${fmt(l.afterItem)} <span class="text-[11px]">· ${esc(l.src)} · كمية ${l.vol}%</span></div></div>`).join("")}</div>
+    <div class="mt-3 rounded-xl bg-slate-50 px-3 py-2">${row("إجمالي الغلاف", fmt(p.grossCover))}${row("بعد خصم الأصناف", fmt(p.afterItem))}${row(`(−) خصم الكمية ${p.volMixed ? p.volMixed.join("% / ") : p.volPct}% ${p.volMixed ? "(كل فاتورة على إجمالي كتبها)" : "على الإجمالي"}`, fmt(p.volAmt))}${row("صافي المرتجع (يتخصم من حساب المكتبة)", moneyTxt(p.net), "text-[14px] text-emerald-700 border-t border-slate-200 mt-1 pt-2")}</div>
     <p class="text-[11.5px] text-slate-500 mt-2">${p.qty} نسخة في إذن واحد. التسجيل نهائي: الكتب تخرج من المخزن والقيمة تنزل من المستحق للمكتبة.</p></div>` }], ok: "تسجيل المرتجع النهائي", icon: "undo-2" });
   if (ok) await act("RECORD_BOOK_RETURN", base);
 });
