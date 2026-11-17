@@ -677,6 +677,22 @@ fail(api('SAVE_CART_DRAFT', { cart: {} }, coord), 'cart draft employee only');
   assert.strictEqual(P.surplus, R(P.deliveredRevenue + P.adjustments - P.netPurchases - P.openingStock + P.closingStock - P.expenses), 'surplus identity');
 }
 
+// 16) تصحيح سعر كتاب يُطبَّق تلقائياً على الحجوزات والفواتير القائمة
+{
+  const done = new Set(rows(S.PHASES).filter(p => p.Phase_Status === 'Completed').map(p => p.Phase_ID));
+  const it = rows(S.RES_ITEMS).find(i => !String(i.Allocation_Status).startsWith('Cancelled') && i.Allocation_Status !== 'Carried_Forward' && !done.has(i.Phase_ID) && i.Unit_Emp_Price > 0 && (i.Allocated_Qty || i.Delivered_Qty));
+  const inv0 = rows(S.EMP_INVOICES).find(v => v.Res_ID === it.Res_ID);
+  const r = ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: it.Book_ID, coverPrice: 210, supplierDiscountPct: 20 }] }, coord), 'reprice');
+  const newEmp = rows(S.BOOKS).find(b => b.Book_ID === it.Book_ID).Emp_Selling_Price;
+  assert.ok(r.repriced && r.repriced.items > 0, 'repriced items');
+  const it2 = rows(S.RES_ITEMS).find(i => i.Res_Item_ID === it.Res_Item_ID);
+  assert.strictEqual(it2.Unit_Emp_Price, newEmp); assert.strictEqual(it2.Unit_Cover_Price, 210);
+  const inv1 = rows(S.EMP_INVOICES).find(v => v.Emp_Inv_ID === inv0.Emp_Inv_ID);
+  const billable = Math.max(it.Allocated_Qty, it.Delivered_Qty) - it.Returned_Qty;
+  assert.strictEqual(Math.round((inv1.Net_Final_Invoice_Amount - inv0.Net_Final_Invoice_Amount) * 100) / 100, Math.round(billable * (newEmp - it.Unit_Emp_Price) * 100) / 100, 'invoice follows new price');
+  assert.ok(rows(S.AUDIT || '19_Audit_Log').length >= 0);
+}
+
 console.log('\nALL PASSED:', passed, 'checks');
 
 

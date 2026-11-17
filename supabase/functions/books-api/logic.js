@@ -730,15 +730,15 @@ function callServerApi(action, payload, sessionToken) {
       case "GET_AUDIT_LOG": return E.getAuditLog(payload);
       case "POST_ANNOUNCEMENT": return E.postAnnouncement(session, payload);
       case "SAVE_SUPPLIER": return E.saveSupplier(session, payload);
-      case "SAVE_BOOK": return E.saveBook(session, payload);
+      case "SAVE_BOOK": return E.withReprice_(session, () => E.saveBook(session, payload));
       case "DELETE_BOOK": return E.deleteBook(session, payload);
-      case "BULK_PRICE_BOOKS": return E.bulkPriceBooks(session, payload);
+      case "BULK_PRICE_BOOKS": return E.withReprice_(session, () => E.bulkPriceBooks(session, payload));
       case "SET_BOOK_TRACKS": return E.setBookTracks(session, payload);
       case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
       case "SET_PUBLISHER_LOGO": return E.setPublisherLogo(session, payload.publisher, payload.url);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
-      case "BULK_IMPORT_BOOKS": return E.bulkImportBooks(session, payload.booksArray || []);
+      case "BULK_IMPORT_BOOKS": return E.withReprice_(session, () => E.bulkImportBooks(session, payload.booksArray || []));
       case "BULK_IMPORT_EMPLOYEES": return E.bulkImportEmployees(session, payload.employeesArray || []);
       case "SAVE_PHASE": return E.savePhase(session, payload);
       case "DELETE_PHASE": return E.deletePhase(session, payload);
@@ -747,7 +747,7 @@ function callServerApi(action, payload, sessionToken) {
       case "SET_PHASE_STATUS": return E.setPhaseStatus(session, payload);
       case "GENERATE_PO_SNAPSHOT": return E.generatePurchaseOrderSnapshot(session, payload.phaseId);
       case "CANCEL_PO_BACKORDER": return E.cancelPoBackorder(session, payload);
-      case "SUBMIT_SUPPLIER_INVOICE": return E.recordSupplierInvoiceAndStock(session, payload);
+      case "SUBMIT_SUPPLIER_INVOICE": return E.withReprice_(session, () => E.recordSupplierInvoiceAndStock(session, payload));
       case "VOID_SUPPLIER_INVOICE": return E.voidSupplierInvoice(session, payload);
       case "RUN_ALLOCATION_ENGINE": return E.runAutoAllocationEngine(session, payload.phaseId);
       case "MANUAL_ALLOCATION_OVERRIDE": return E.manualAllocationOverride(session, payload);
@@ -1014,6 +1014,53 @@ const OperationsEngine = {
     })));
     DB_Engine.logAudit(session.userId, session.role, "Returns", "SUPPLIER_FINAL_RETURN", docNo, null, { lines: lines.map(l => [l.bookId, l.qty, l.net]), afterItem: afterItem, volPct: volPct, net: net });
     return Object.assign(res, { preview: false, docNo: docNo, message: "تم تسجيل مرتجع نهائي " + docNo + ": " + res.qty + " نسخة بصافي " + net + " ج.م اتخصم من حساب المكتبة." });
+  },
+
+  /**
+   * تصحيح الأسعار تلقائياً: أي تغيير في سعر الغلاف/سعر الموظف لكتاب يُطبَّق على كل بنود الحجز القائمة له
+   * (كل المراحل غير المكتملة، حتى المُسلَّمة)، ثم تُعاد الفواتير والأقساط؛ الزيادة المدفوعة تصبح رصيداً مستحق الرد.
+   */
+  withReprice_: function(session, fn) {
+    const S = this.S(), price = {};
+    DB_Engine.getAllRecords(S.BOOKS).forEach(b => price[Util.str(b.Book_ID)] = [Util.num(b.Emp_Selling_Price), Util.num(b.Cover_Price)]);
+    const res = fn();
+    if (!res || res.success === false) return res;
+    const changed = {};
+    DB_Engine.getAllRecords(S.BOOKS).forEach(b => { const id = Util.str(b.Book_ID), o = price[id], ep = Util.num(b.Emp_Selling_Price), cp = Util.num(b.Cover_Price);
+      if (o && ep > 0 && (o[0] !== ep || o[1] !== cp)) changed[id] = [ep, cp]; });
+    if (!Object.keys(changed).length) return res;
+    const r = this.repriceItems_(session, changed);
+    if (r.items) res.message = (res.message || "") + " · اتطبّق السعر الجديد على " + r.items + " بند في " + r.res + " حجز" + (r.invoices ? " وأُعيد حساب " + r.invoices + " فاتورة" : "") + ".";
+    res.repriced = r;
+    return res;
+  },
+  repriceItems_: function(session, changed) {
+    const S = this.S(), R = FinancialEngine.roundCurrency;
+    const done = {}; DB_Engine.getAllRecords(S.PHASES).forEach(p => { if (p.Phase_Status === "Completed") done[Util.str(p.Phase_ID)] = 1; });
+    const all = DB_Engine.getAllRecords(S.RES_ITEMS), resIds = {}, phases = {}, log = [];
+    let n = 0;
+    all.forEach(i => {
+      const c = changed[Util.str(i.Book_ID)];
+      if (!c || this.isCancelledItem_(i) || done[Util.str(i.Phase_ID)]) return;
+      if (Util.num(i.Unit_Emp_Price) === c[0] && Util.num(i.Unit_Cover_Price) === c[1]) return;
+      log.push([i.Res_Item_ID, Util.num(i.Unit_Emp_Price), c[0]]);
+      i.Unit_Emp_Price = c[0]; i.Unit_Cover_Price = c[1];
+      const billable = Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty)) - Util.num(i.Returned_Qty);
+      i.Total_Emp_Line_Amount = R((Util.num(i.Allocated_Qty) || Util.num(i.Delivered_Qty) ? billable : Util.num(i.Requested_Qty)) * c[0]);
+      resIds[Util.str(i.Res_ID)] = 1; phases[Util.str(i.Phase_ID)] = 1; n++;
+    });
+    if (!n) return { items: 0 };
+    DB_Engine.overwriteTableData(S.RES_ITEMS, all);
+    Object.keys(resIds).forEach(rid => {
+      const mine = all.filter(i => Util.str(i.Res_ID) === rid && !this.isCancelledItem_(i));
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", rid, {
+        Total_Emp_Value: R(mine.reduce((a, i) => a + Util.num(i.Requested_Qty) * Util.num(i.Unit_Emp_Price), 0)),
+        Total_Cover_Value: R(mine.reduce((a, i) => a + Util.num(i.Requested_Qty) * Util.num(i.Unit_Cover_Price), 0)) });
+    });
+    const before = DB_Engine.getAllRecords(S.EMP_INVOICES).filter(v => phases[Util.str(v.Phase_ID)]).length;
+    Object.keys(phases).forEach(ph => this.syncEmployeeInvoicesForPhase_(ph));
+    DB_Engine.logAudit(session.userId, session.role, "Catalog", "REPRICE_RESERVATIONS", Object.keys(changed).join(","), null, { items: n, sample: log.slice(0, 50) });
+    return { items: n, res: Object.keys(resIds).length, invoices: before, phases: Object.keys(phases) };
   },
 
   inventoryRow_: function(session, phaseId, bookId, type, qty, cost, ref, notes) {
