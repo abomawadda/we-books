@@ -36,9 +36,12 @@ Shell.renderLogin = function () {
     f.insertAdjacentHTML("beforebegin", `
       <div id="lgPick" class="space-y-4">
         <div class="text-center lg:text-right">
-          <h2 class="text-xl lg:text-2xl font-bold text-white">تسجيل الدخول</h2>
-          <p class="text-[12.5px] text-brand-200 mt-0.5">اختر فئتك للمتابعة أو إنشاء حساب جديد</p>
+          <img src="icons/logo.svg" alt="" class="w-16 h-16 mx-auto lg:mx-0 drop-shadow-lg" onerror="this.remove()">
+          <h2 class="text-[22px] lg:text-2xl font-bold text-white mt-2">أهلاً بيك 👋</h2>
+          <p class="text-[13px] text-gold-300 font-semibold mt-0.5">كتب ولادك أقرب… وقسطها أخف</p>
+          <div class="flex flex-wrap justify-center lg:justify-start gap-1.5 mt-3">${[["badge-percent", "خصم للأعضاء"], ["calendar-check", "تقسيط مريح"], ["package-check", "استلام قريب منك"]].map(x => `<span class="inline-flex items-center gap-1 rounded-full bg-white/10 ring-1 ring-white/15 px-2.5 h-7 text-[11.5px] text-brand-100">${ic(x[0], "!w-3.5 !h-3.5 text-gold-300")} ${x[1]}</span>`).join("")}</div>
         </div>
+        <div class="flex items-center gap-2 text-[11.5px] text-brand-200/90"><span class="h-px flex-1 bg-white/15"></span><span>${ic("log-out", "inline !w-3.5 !h-3.5 rotate-180")} اختار فئتك عشان تدخل</span><span class="h-px flex-1 bg-white/15"></span></div>
 
         <button type="button" data-act="entryPick" data-id="emp" class="w-full text-right rounded-2xl p-4 bg-white/[0.16] hover:bg-white/[0.22] ring-1 ring-gold-300/50 shadow-sm transition active:scale-[.99] flex items-center gap-3.5">
           <span class="w-11 h-11 shrink-0 rounded-2xl bg-gold-400/20 flex items-center justify-center text-[24px] leading-none">${emp.emoji}</span>
@@ -106,6 +109,7 @@ Shell.renderLogin = function () {
       : `<div><label class="label !mb-1" for="regOrg">${esc(c.org)}</label><div class="input-icon">${ic("building-2")}<input id="regOrg" class="input !h-10" placeholder="${esc(c.orgPh || "")}" ${c.orgReq ? "required" : ""}></div></div>`;
 
     f.insertAdjacentHTML("beforebegin", headerHtml + `
+      <div class="rounded-2xl bg-gold-400/10 ring-1 ring-gold-300/30 px-3 py-2.5 mb-3 text-[12px] text-brand-100 leading-relaxed flex gap-2">${ic("sparkles", "shrink-0 mt-0.5 text-gold-300")}<span>التسجيل <b class="text-white">مرة واحدة بس</b> — هيظهر لك <b class="text-white">رقم عضوية</b> تدخل بيه بعد كده مع آخر 4 أرقام من القومي والموبايل.</span></div>
       <form id="fReg" class="space-y-2.5" autocomplete="on">
         <div>
           <label class="label !mb-1" for="regName">الاسم ثلاثي على الأقل</label>
@@ -126,15 +130,22 @@ Shell.renderLogin = function () {
         </div>
         ${orgField}
         <p class="text-[11px] text-brand-200/80 text-center">يُحفظ آخر 4 أرقام من القومي فقط للتحقق عند الدخول</p>
-        <button class="btn btn-gold w-full !h-11 !text-brand-950 font-bold shadow-lift">إنشاء الحساب والدخول ${ic("arrow-right", "rotate-180")}</button>
+        <div id="regChecks" class="grid grid-cols-2 gap-1.5 text-[11px]"></div>
+        <button id="regGo" class="btn btn-gold w-full !h-11 !text-brand-950 font-bold shadow-lift disabled:opacity-50">إنشاء الحساب والدخول ${ic("arrow-right", "rotate-180")}</button>
       </form>`);
 
     const regForm = $("#fReg");
-    if (regForm) regForm.onsubmit = e => { e.preventDefault(); submitInlineRegister(t); };
+    if (regForm) { regForm.onsubmit = e => { e.preventDefault(); submitInlineRegister(t); }; regForm.addEventListener("input", () => regCheck(t)); regForm.addEventListener("change", () => regCheck(t)); regCheck(t); }
     return;
   }
 
   f.insertAdjacentHTML("beforebegin", headerHtml);
+  { const e1 = $("#lgEmp"), e2 = $("#lgNat"), e3 = $("#lgMob");
+    if (e1) { e1.placeholder = t === "emp" ? "مثال: 512345" : "رقم العضوية (7 أرقام)"; e1.setAttribute("inputmode", "numeric"); }
+    if (e2) e2.placeholder = "••••";
+    const hint = (el, txt) => { const box = el && el.closest("div.input-icon"); if (box && !box.nextElementSibling?.classList?.contains("lg-hint")) box.insertAdjacentHTML("afterend", `<p class="lg-hint text-[11px] text-brand-200/80 mt-1">${txt}</p>`); };
+    hint(e2, "آخر 4 أرقام من يمين الرقم القومي");
+    hint(e3, t === "emp" ? "الموبايل المسجّل في بيانات النقابة" : "الموبايل اللي سجّلت بيه"); }
   setTimeout(() => {
     try {
       const rem = JSON.parse(localStorage.getItem("wb_remember") || "null");
@@ -148,6 +159,15 @@ Shell.renderLogin = function () {
   }, 20);
 };
 
+/** تحقق لحظي من بيانات التسجيل: علامة ✓ لكل خانة صحيحة، والزر يتفعّل لما الكل يكمل */
+function regCheck(k) {
+  const d = v => String(v || "").replace(/[٠-٩]/g, x => String("٠١٢٣٤٥٦٧٨٩".indexOf(x))).replace(/\D/g, ""), val = id => ($("#" + id) || {}).value || "";
+  const c = ENTRY[k] || {}, nat = d(val("regNat")), mob = d(val("regMob"));
+  const rows = [["الاسم ثلاثي", val("regName").trim().split(/\s+/).filter(Boolean).length >= 3], ["الرقم القومي", nat.length === 14 && /^[23]/.test(nat)], ["الموبايل", /^01[0125]\d{8}$/.test(mob)]]
+    .concat(c.orgReq ? [[k === "outsource" ? "الشركة" : "جهة العمل", !!val("regOrg").trim()]] : []);
+  const box = $("#regChecks"); if (box) box.innerHTML = rows.map(r => `<span class="flex items-center gap-1 rounded-lg px-2 py-1 ${r[1] ? "bg-emerald-400/15 text-emerald-200" : "bg-white/5 text-brand-200/70"}">${ic(r[1] ? "circle-check" : "circle-alert", "!w-3.5 !h-3.5")} ${r[0]}</span>`).join("");
+  const go = $("#regGo"); if (go) go.disabled = !rows.every(r => r[1]);
+}
 async function submitInlineRegister(k) {
   const normDigits = v => String(v || "").replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "");
   const name = ($("#regName") ? $("#regName").value : "").trim().replace(/\s+/g, " ");
