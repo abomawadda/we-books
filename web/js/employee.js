@@ -421,10 +421,10 @@ function refreshCartViews() {
   const bar = $("#cartBar");
   if (bar) {
     bar.classList.toggle("hidden", !t.count && !Emp.activeItems().length);
-    bar.innerHTML = `<button data-act="openCart" class="w-full flex items-center gap-3 rounded-2xl bg-brand-800 text-white px-4 py-3 shadow-glow active:scale-[.98] transition">
-      <span class="relative w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-lg">${ic("shopping-cart")}<span class="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 rounded-full bg-gold-400 text-brand-950 text-[11px] font-bold flex items-center justify-center num">${t.count}</span></span>
-      <span class="flex-1 text-right"><span class="block text-[12px] text-brand-200">${Emp.dirty ? "السلة · لم تُحفظ بعد" : "السلة · حجزك محفوظ ✅"}</span><span class="block font-bold num">${booksWord(t.count)} · ${moneyTxt(t.net)}</span></span>
-      <span class="font-semibold text-[14px] flex items-center gap-1">${Emp.dirty ? "إتمام الحجز" : "السلة"} ${ic("chevron-left")}</span></button>`;
+    bar.innerHTML = `<button data-act="openCart" class="w-full flex items-center gap-3 rounded-2xl text-white pl-2 pr-3 py-2.5 shadow-glow active:scale-[.98] transition ring-1 ring-white/10" style="background:linear-gradient(135deg,#552c83,#2e1650)">
+      <span class="relative w-11 h-11 rounded-xl bg-white/15 flex items-center justify-center text-lg shrink-0">${ic("shopping-cart")}<span class="absolute -top-1.5 -left-1.5 min-w-[20px] h-5 px-1 rounded-full bg-gold-400 text-brand-950 text-[11px] font-bold flex items-center justify-center num">${t.count}</span></span>
+      <span class="flex-1 min-w-0 text-right leading-tight"><span class="block font-bold num text-[15px]">${money(t.net)}</span><span class="block text-[11.5px] ${Emp.dirty ? "text-gold-300" : "text-emerald-300"}">${Emp.dirty ? "لسه ما اتأكدش" : "حجزك محفوظ ✓"}${t.cover - t.net > 0 ? ` · ${gTxt("وفّرت", "وفّرتي")} <span class="num">${fmt(t.cover - t.net)}</span>` : ""}</span></span>
+      <span class="shrink-0 rounded-xl px-3 h-10 flex items-center gap-1 font-bold text-[13.5px] ${Emp.dirty ? "bg-gold-400 text-brand-950" : "bg-white/15 text-white"}">${Emp.dirty ? "إتمام الحجز" : "السلة"} ${ic("chevron-left", "!w-4 !h-4")}</span></button>`;
   }
   const hc = $("#cartCount"); if (hc) hc.textContent = t.count;
   const badge = $("#cartBadge"); if (badge) { badge.textContent = t.count; badge.classList.toggle("hidden", !t.count); }
@@ -930,37 +930,24 @@ function gradeList() {
 function bookModeTabs() {
   if (!Emp.open()) return "";
   const m = Emp.bookMode || "";
-  const t = (id, e, ttl, sub, act) => `<button type="button" class="min-w-0 text-right rounded-2xl p-3 ring-1 transition active:scale-[.98] ${m === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200"}" data-act="${act}" data-id="${id}" aria-pressed="${m === id}">
-    <span class="block text-[24px] leading-none">${e}</span><b class="block text-[13px] mt-1.5 leading-tight">${ttl}</b><span class="block text-[10.5px] mt-0.5 leading-snug ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></button>`;
-  return `<section class="mb-4"><div class="text-[12px] font-bold text-slate-500 mb-2">${gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟")}</div>
-    <div class="grid grid-cols-3 gap-2">${t("manual", "🔍", "أختار بنفسي", "كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد", "bookMode")}</div></section>`;
+  const t = (id, e, ttl, sub, act) => `<button type="button" class="w-full text-right rounded-2xl px-3.5 py-3 ring-1 transition active:scale-[.99] flex items-center gap-3 ${m === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200"}" data-act="${act}" data-id="${id}" aria-pressed="${m === id}">
+    <span class="w-11 h-11 rounded-xl flex items-center justify-center text-[24px] shrink-0 ${m === id ? "bg-white/15" : "bg-slate-50"}">${e}</span>
+    <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14.5px]">${ttl}</b><span class="block text-[12px] mt-0.5 ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></span>
+    <span class="shrink-0 ${m === id ? "text-gold-300" : "text-slate-300"}">${ic(m === id ? "circle-check" : "chevron-left")}</span></button>`;
+  return `<section class="mb-4"><div class="text-[13px] font-bold text-slate-700 mb-2">${gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟")}</div>
+    <div class="grid gap-2">${t("manual", "🔍", "أختار بنفسي", "كل الكتب مادة مادة — كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها — اختار لكل مادة بسرعة", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد بضغطة", "bookMode")}</div></section>`;
 }
 on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? "" : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
-/** رسالة الترحيب قبل اختيار طريقة الحجز */
-function bookModeHello() {
-  const ki = myKids().findIndex(k => k.grade === Emp.filter.grade && kidBen(k) === Emp.ben), who = ki >= 0 ? kidName(myKids()[ki], ki) : "";
-  return `<div class="relative overflow-hidden rounded-3xl bg-white ring-1 ring-slate-200 shadow-xs px-5 py-8 text-center">
-    <span class="absolute -top-10 -left-10 w-36 h-36 rounded-full bg-brand-50"></span><span class="absolute -bottom-12 -right-8 w-32 h-32 rounded-full bg-gold-50"></span>
-    <div class="relative">
-      <div class="mx-auto w-16 h-16 rounded-3xl flex items-center justify-center text-[34px] shadow-soft" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)">📚</div>
-      <h3 class="font-display font-bold text-[18px] text-slate-900 mt-4">${who ? `كتب ${esc(who)} جاهزة` : "كتب الصف جاهزة"} ✨</h3>
-      <p class="text-[13px] text-slate-500 mt-1.5 leading-relaxed max-w-xs mx-auto">${gTxt("اختار من فوق الطريقة اللي تريحك", "اختاري من فوق الطريقة اللي تريحك")} — وكل الكتب بخصم العاملين وتقدر${gTxt("", "ي")} تعدّل${gTxt("", "ي")} في أي وقت قبل القفل.</p>
-      <div class="mt-5 grid gap-2 text-right max-w-xs mx-auto text-[12.5px]">
-        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">🔍</span><span><b class="text-slate-800">أختار بنفسي</b> <span class="text-slate-500">— كل الكتب مادة مادة</span></span></div>
-        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">🎒</span><span><b class="text-slate-800">جهّز الشنطة</b> <span class="text-slate-500">— كتاب لكل مادة بسرعة</span></span></div>
-        <div class="flex items-center gap-2.5 rounded-2xl bg-slate-50 px-3 py-2"><span class="text-[18px]">📚</span><span><b class="text-slate-800">بالسلسلة</b> <span class="text-slate-500">— كتب ناشر واحد بضغطة</span></span></div>
-      </div>
-      <div class="mt-5 inline-flex items-center gap-1.5 text-[12px] font-bold text-brand-700 animate-bounce">${ic("arrow-up", "!w-4 !h-4")} ${gTxt("اختار طريقة", "اختاري طريقة")}</div>
-    </div></div>`;
-}
 /** فاصل السلة بعد قائمة الكتب */
 function cartDivider() {
   const t = Emp.totals(); if (!t.count) return "";
-  return `<div class="flex items-center gap-2 my-5"><span class="h-px flex-1 bg-slate-200"></span><span class="text-[12px] font-bold text-slate-500">${ic("shopping-cart", "inline -mt-0.5")} السلة</span><span class="h-px flex-1 bg-slate-200"></span></div>
-    <button type="button" class="w-full rounded-2xl bg-white ring-1 ring-brand-200 p-3.5 flex items-center gap-3 text-right shadow-xs active:scale-[.99]" data-act="openCart">
-      <span class="w-11 h-11 rounded-xl bg-brand-700 text-white flex items-center justify-center shrink-0">${ic("shopping-cart")}</span>
-      <span class="flex-1 min-w-0"><b class="block text-[14px] text-slate-900">${booksWord(t.count)} في السلة</b><span class="block text-[12px] text-emerald-600 font-semibold">${gTxt("وفّرت", "وفّرتي")} ${moneyTxt(t.cover - t.net)}</span></span>
-      <span class="text-left"><b class="block num text-brand-800 text-[16px]">${money(t.net)}</b><span class="text-[11px] font-bold text-brand-700">${gTxt("راجع وأكّد", "راجعي وأكّدي")} ←</span></span></button>`;
+  const gs = resGroups(cartLines());
+  return `<div class="flex items-center gap-2 mt-6 mb-3"><span class="h-px flex-1 bg-slate-200"></span><span class="inline-flex items-center gap-1.5 rounded-full bg-brand-50 text-brand-800 px-3 py-1 text-[12.5px] font-bold">${ic("shopping-cart", "!w-4 !h-4")} السلة · ${booksWord(t.count)}</span><span class="h-px flex-1 bg-slate-200"></span></div>
+    <div class="space-y-2">${gs.map(g => `<section class="rounded-2xl bg-white ring-1 ring-slate-200 overflow-hidden">
+      <div class="flex items-center gap-2.5 px-3 py-2 bg-brand-50/50"><span class="text-[20px]">${g.emoji}</span><div class="flex-1 min-w-0"><b class="block text-[13.5px] text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="block text-[11px] text-brand-700">${esc(g.sub)}</span>` : ""}</div><b class="num text-[13px] text-brand-800">${moneyTxt(g.net)}</b></div>
+      <ul class="divide-y divide-slate-100 px-3">${g.lines.map(l => `<li class="flex items-center gap-2 py-2 text-[12.5px]"><span class="flex-1 min-w-0 truncate text-slate-700">${esc(l.name)}</span>${l.qty > 1 ? `<span class="num text-slate-400">×${l.qty}</span>` : ""}<span class="num font-semibold text-slate-800 whitespace-nowrap">${lineAmt(l)}</span></li>`).join("")}</ul></section>`).join("")}</div>
+    <div class="rounded-2xl bg-slate-50 px-3.5 py-2.5 mt-2 flex items-center justify-between text-[13px]"><span class="text-emerald-600 font-semibold">${gTxt("وفّرت", "وفّرتي")} ${moneyTxt(t.cover - t.net)}</span><span><span class="text-slate-500">الإجمالي </span><b class="num text-brand-800 text-[16px]">${money(t.net)}</b></span></div>
+    <div class="h-24"></div>`;
 }
 function renderBookGrid() {
   const r = APP.emp, f = Emp.filter, el = $("#bookGrid"); if (!el) return;
@@ -975,7 +962,7 @@ function renderBookGrid() {
     const { list, sorted } = gradeList(); count = list.length;
     const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
     el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? (curKid() ? "مفيش كتب مسجّلة لمدارس " + f.type + " في الصف ده لسه." : "جرّب «كل المدارس».") : "", f.type ? `<button class="btn btn-outline mt-4" data-act="fTypeAll">${ic("layout-grid")} اعرض كتب كل المدارس</button>` : "")
-      : bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? bookModeHello() + `<div id="cartDiv">${cartDivider()}</div>` : Emp.open() && Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
+      : bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? `<div id="cartDiv">${cartDivider()}</div>` : Emp.open() && Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
           <span class="w-7 h-7 rounded-full flex items-center justify-center text-white shrink-0 shadow-soft" style="background:var(--tc)">${ic("book-open", "!w-3.5 !h-3.5")}</span><h3 class="font-display font-bold text-slate-900 text-[14.5px] flex-1 min-w-0 truncate">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}<span class="font-sans font-semibold text-[12px] text-slate-500"> — ${esc(gradeShort(Emp.filter.grade || ""))}</span></h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
           ${g.k !== "__p" && subjRank(g.k) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
         <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="nextKid">${nextKidCard()}</div><div id="cartDiv">${cartDivider()}</div>`);

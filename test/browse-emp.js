@@ -65,6 +65,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
     await p.evaluate(() => document.querySelector('[data-act="kdType"]').click()); await p.waitForTimeout(900); await shot('fam-kidask');
     await p.keyboard.press('Escape'); await p.waitForTimeout(400);
     await p.evaluate(() => Router.go('/e/wiz')); await p.waitForTimeout(600); await shot('fam-wiz');
+    await p.evaluate(() => { Emp.bookMode = ''; openKid(0); }); await p.waitForTimeout(600); await shot('bk-nomode'); await p.evaluate(() => scrollTo(0, 2000)); await p.waitForTimeout(300); await shot('bk-nomode2');
     await p.evaluate(() => { Emp.cartStep = 'list'; Router.go('/e/cart'); }); await p.waitForTimeout(600); await shot('cart-1');
     await p.evaluate(() => ACTIONS.cartStep('pay')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-2'); await p.evaluate(() => scrollTo(0, 700)); await p.waitForTimeout(300); await shot('cart-2s'); await p.evaluate(() => scrollTo(0, 0));
     await p.evaluate(() => ACTIONS.cartStep('confirm')); await p.waitForTimeout(500); await p.evaluate(() => scrollTo(0, 0)); await shot('cart-3');
