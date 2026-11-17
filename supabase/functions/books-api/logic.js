@@ -229,16 +229,16 @@ const FinancialEngine = {
    * baseDate ثابت للفاتورة حتى لا تتحرك تواريخ الاستحقاق مع كل تحديث.
    */
   calculateInstallmentPlan: function(totalAmount, downPaymentType, downPaymentInput, installmentCount, baseDate) {
-    const total = this.roundUpEmployeePrice(totalAmount);
+    const total = this.roundCurrency(Math.max(0, Util.num(totalAmount)));
     const count = Math.max(1, parseInt(installmentCount, 10) || 1);
     let downPayment;
     if (downPaymentType === "PERCENTAGE") {
       const pct = Math.min(100, Math.max(0, Util.num(downPaymentInput)));
-      downPayment = this.roundUpEmployeePrice(total * pct / 100);
+      downPayment = Math.min(total, this.roundUpEmployeePrice(total * pct / 100));
     } else {
-      downPayment = this.roundUpEmployeePrice(Math.min(total, Math.max(0, Util.num(downPaymentInput))));
+      downPayment = this.roundCurrency(Math.min(total, Math.max(0, Util.num(downPaymentInput))));
     }
-    const remainingAfterDown = Math.max(0, total - downPayment);
+    const remainingAfterDown = this.roundCurrency(Math.max(0, total - downPayment));
     const base = Util.parseDate(baseDate) || new Date();
     const schedule = [];
     if (downPayment > 0) {
@@ -247,8 +247,8 @@ const FinancialEngine = {
     const baseInst = Math.floor(remainingAfterDown / count);
     let allocated = 0;
     for (let i = 1; i <= count; i++) {
-      const amt = (i === count) ? (remainingAfterDown - allocated) : baseInst;
-      allocated += amt;
+      const amt = (i === count) ? this.roundCurrency(remainingAfterDown - allocated) : baseInst;
+      allocated = this.roundCurrency(allocated + amt);
       if (amt > 0) {
         const due = new Date(base.getFullYear(), base.getMonth() + i, 1);
         schedule.push({ installmentNo: i, label: "القسط رقم (" + i + ")", dueDate: Utilities.formatDate(due, Util.tz(), "yyyy-MM-dd"), amount: amt });
@@ -882,6 +882,8 @@ const OperationsEngine = {
       x.onHand += q;
       if (["IN_SUPPLY", "OPENING_CARRYOVER"].indexOf(String(r.Movement_Type)) !== -1 && q > 0) {
         x.inQty += q; x.inCost += q * Util.num(r.Unit_Actual_Cost);
+      } else if (String(r.Movement_Type) === "SUPPLIER_VOID" && q < 0) {
+        x.inQty = Math.max(0, x.inQty + q); x.inCost = Math.max(0, x.inCost + q * Util.num(r.Unit_Actual_Cost));
       }
     });
     items.forEach(i => {
@@ -998,7 +1000,8 @@ const OperationsEngine = {
 
     const docNo = Counter.next("SUP_RETURN", "SRT"), phaseId = Util.str(payload.phaseId), now = Util.now(), stamp = new Date().getTime();
     const reason = Util.str(payload.reason) || "مرتجع نهائي — تصفية الحساب مع المكتبة";
-    DB_Engine.insertRecordsBatch(S.INVENTORY, lines.map((l, k) => Object.assign(this.inventoryRow_(session, phaseId, l.bookId, "OUT_SUPPLIER_RETURN", -l.qty, l.netUnit, docNo, "مرتجع نهائي للمكتبة"), { Trans_ID: "TRN-" + stamp + "-SRT" + k })));
+    const snapC = this.getStockSnapshot_();
+    DB_Engine.insertRecordsBatch(S.INVENTORY, lines.map((l, k) => Object.assign(this.inventoryRow_(session, phaseId, l.bookId, "OUT_SUPPLIER_RETURN", -l.qty, this.bookCost_(snapC, l.bookId), docNo, "مرتجع نهائي للمكتبة — قيمته للمكتبة " + l.net), { Trans_ID: "TRN-" + stamp + "-SRT" + k })));
     DB_Engine.insertRecordsBatch(S.SUP_LEDGER, [{
       Sup_Trans_ID: "SLED-" + docNo, Supplier_ID: supplierId, Phase_ID: phaseId, Trans_Date: Util.today(), Trans_Type: "RETURN_DEBIT_NOTE",
       Reference_ID: docNo, Debit_Amount: net, Credit_Amount: 0, Payment_Channel: "مرتجع نهائي", Document_Ref: docNo, Recorded_By: Util.actor(session),
@@ -2856,8 +2859,10 @@ const OperationsEngine = {
         net += billable * p;
         cover += billable * Util.num(i.Unit_Cover_Price);
       });
-      const adj = FinancialEngine.roundCurrency(Util.num(h.Invoice_Adjustment));
-      if (adj) net = Math.max(0, net + adj);
+      const RC = FinancialEngine.roundCurrency;
+      alloc = RC(alloc); deliv = RC(deliv); ret = RC(ret); net = RC(net);
+      const adj = RC(Util.num(h.Invoice_Adjustment));
+      if (adj) net = Math.max(0, RC(net + adj));
       const old = oldInvMap[invId];
       const paid = FinancialEngine.roundCurrency(payments.filter(p => Util.str(p.Emp_Inv_ID) === invId).reduce((s, p) => s + Util.num(p.Amount), 0));
       if (net === 0 && paid === 0 && (!old || h.Res_Status === "Cancelled")) return; // فاتورة محذوفة أو بلا قيمة
@@ -3395,7 +3400,21 @@ const OperationsEngine = {
     // الفائض المحاسبي = الإيراد − تكلفة المسلَّم − المصروفات − عجز الجرد
     // ملاحظة: الإيراد هنا يشمل المخصص غير المسلَّم؛ في نهاية الموسم يتساويان.
     const deliveredRevenue = R(items.reduce((s, i) => s + (Util.num(i.Delivered_Qty) - Util.num(i.Returned_Qty)) * Util.num(i.Unit_Emp_Price), 0));
-    const surplus = R(deliveredRevenue - cogs - totalExp - shrink);
+    // تعديلات فواتير الموظفين (خصم/إضافة يدوي) — جزء من الإيراد الفعلي
+    const adjustments = R(DB_Engine.getAllRecords(S.RES_HEADER).filter(h => h.Res_Status !== "Cancelled").reduce((s, h) => s + Util.num(h.Invoice_Adjustment), 0));
+    // صافي تكلفة الشراء الفعلية من المكتبة = كل الدائن − كل المدين ما عدا الدفعات (يشمل خصم الكمية والإلغاء والتالف والمرتجع النهائي)
+    const netPurchases = R(supLed.filter(l => l.Trans_Type !== "PAYMENT_DEBIT").reduce((s, l) => s + Util.num(l.Credit_Amount) - Util.num(l.Debit_Amount), 0));
+    // المخزون المتبقي بالتكلفة بعد خصم الكمية (نسبة الصافي إلى ما قبل خصم الكمية في فواتير التوريد)
+    const sih = DB_Engine.getAllRecords(S.SUP_INV_HEADER).filter(h => h.Status !== "Voided");
+    const af = sih.reduce((s, h) => s + Util.num(h.Total_After_Item_Discount), 0), nf = sih.reduce((s, h) => s + Util.num(h.Net_Payable_Amount), 0);
+    const volFactor = af > 0 ? nf / af : 1;
+    const preStockVal = R(Object.keys(snap).reduce((s, b) => s + Math.max(0, snap[b].onHand) * snap[b].avgCost, 0));
+    const closingStock = R(preStockVal * volFactor);
+    // الفائض = إيراد المسلَّم + التعديلات − صافي الشراء + المخزون المتبقي − المصروفات
+    // رصيد افتتاحي مُرحَّل من موسم سابق: تكلفته محسوبة قبل كده فتُطرح هنا
+    const openingStock = R(ledger.filter(r => r.Movement_Type === "OPENING_CARRYOVER").reduce((s, r) => s + Util.num(r.Qty_Change) * Util.num(r.Unit_Actual_Cost), 0));
+    const surplus = R(deliveredRevenue + adjustments - netPurchases - openingStock + closingStock - totalExp);
+    const volumeDiscount = R(sih.reduce((s, h) => s + Util.num(h.Volume_Discount_Amount), 0));
     const cashExpected = R(collected - refunds - supPaid - totalExp);
 
     const waiting = items.filter(i => !this.isCancelledItem_(i)).reduce((s, i) => s + Math.max(0, Util.num(i.Requested_Qty) - Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty))), 0);
@@ -3415,7 +3434,8 @@ const OperationsEngine = {
       success: true,
       generatedAt: Util.now(),
       deficitBearer: st.DEFICIT_BEARER, cashHolder: st.CASH_ACCOUNT_HOLDER,
-      pnl: { billedRevenue: revenue, deliveredRevenue: deliveredRevenue, cogs: cogs, expenses: totalExp, inventoryShrink: shrink, surplus: surplus, employeeSavings: savings },
+      pnl: { billedRevenue: revenue, deliveredRevenue: deliveredRevenue, adjustments: adjustments, netPurchases: netPurchases, closingStock: closingStock, openingStock: openingStock, volumeDiscount: volumeDiscount, cogs: cogs, expenses: totalExp, inventoryShrink: shrink, surplus: surplus, employeeSavings: savings,
+        formula: "الفائض = إيراد المسلَّم + تعديلات الفواتير − صافي الشراء من المكتبة − الرصيد الافتتاحي + المخزون المتبقي بالتكلفة − المصروفات" },
       supplier: { purchasesNet: purchasesNet, voids: supVoids, damageClaims: claims, returns: supReturns, paid: supPaid, balance: supBalance },
       cash: { collected: collected, refunds: refunds, byMethod: byMethod, supplierPaid: supPaid, expenses: totalExp, expectedCashOnHand: cashExpected },
       receivables: { total: receivables, creditsDue: creditsDue, aging: aging },

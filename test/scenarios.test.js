@@ -659,6 +659,24 @@ fail(api('SAVE_CART_DRAFT', { cart: {} }, coord), 'cart draft employee only');
   assert.strictEqual(pv2.volPct, 3); assert.strictEqual(pv2.net, R(pv2.afterItem - R(pv2.afterItem * 0.03)));
 }
 
+// 15) خطة أقساط بمبلغ بكسور: مجموع الجدول = الفاتورة بالقرش، ولا قسط وهمي بعد السداد الكامل
+{
+  const sumInst = id => Math.round(rows(S.INSTALLMENTS).filter(x => x.Emp_Inv_ID === id).reduce((s, x) => s + x.Scheduled_Amount, 0) * 100) / 100;
+  rows(S.EMP_INVOICES).forEach(i => assert.strictEqual(sumInst(i.Emp_Inv_ID), i.Net_Final_Invoice_Amount, 'schedule sum = invoice ' + i.Emp_Inv_ID));
+  const inv = rows(S.EMP_INVOICES).find(i => i.Remaining_Balance > 1) || rows(S.EMP_INVOICES)[0];
+  ok(api('ADJUST_EMP_INVOICE', { invId: inv.Emp_Inv_ID, amount: -0.5, reason: 'تقريب' }, A), 'fractional adj');
+  const i2 = rows(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === inv.Emp_Inv_ID);
+  assert.strictEqual(sumInst(i2.Emp_Inv_ID), i2.Net_Final_Invoice_Amount, 'schedule = fractional invoice');
+  if (i2.Remaining_Balance > 0) {
+    ok(api('RECORD_EMPLOYEE_PAYMENT', { empInvId: i2.Emp_Inv_ID, amount: i2.Remaining_Balance, paymentMethod: 'CASH' }, fin), 'pay fractional');
+    const i3 = rows(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === inv.Emp_Inv_ID);
+    assert.strictEqual(i3.Invoice_Status, 'Paid_In_Full');
+    assert.strictEqual(rows(S.INSTALLMENTS).filter(x => x.Emp_Inv_ID === i3.Emp_Inv_ID && x.Remaining_Inst_Amount > 0).length, 0, 'no phantom installment');
+  }
+  const P = ok(api('GET_SETTLEMENT_REPORT', {}, A), 'set final').pnl, R = v => Math.round(v * 100) / 100;
+  assert.strictEqual(P.surplus, R(P.deliveredRevenue + P.adjustments - P.netPurchases - P.openingStock + P.closingStock - P.expenses), 'surplus identity');
+}
+
 console.log('\nALL PASSED:', passed, 'checks');
 
 

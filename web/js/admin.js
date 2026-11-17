@@ -3413,7 +3413,7 @@ Router.add("/a/supplier", view => {
     ], poolRows, { maxH: 420 }) : UI.empty("undo-2", "مفيش كتب مرتجعة أو فائضة في المخزن")}
     <div class="grid gap-3 md:grid-cols-2 mt-3">
       <div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="font-bold text-[13.5px] mb-1">${ic("user", "inline -mt-0.5 text-brand-600")} مرتجعات الموظفين</div><div class="text-[12.5px] text-slate-600">${fmt(empRets.length)} إذن · ${fmt(sum(empRets, "Qty"))} نسخة · اتخصم من فواتيرهم <b class="num">${fmt(Math.abs(sum(empRets, "Total_Amount_Impact")))}</b> ج.م — الكتب رجعت المخزن وبتتدمج في المراحل الجاية.</div></div>
-      <div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="font-bold text-[13.5px] mb-1">${ic("store", "inline -mt-0.5 text-brand-600")} المرتجع النهائي للمكتبة</div>${Object.keys(supRets).length ? `<ul class="text-[12.5px] divide-y divide-slate-100">${Object.values(supRets).map(x => `<li class="py-1.5 flex justify-between gap-2"><span><b class="num">${esc(x.no)}</b> · <span class="num">${esc(day(x.date))}</span> · ${fmt(x.qty)} نسخة</span><b class="num text-emerald-600">${fmt(x.amt)}</b></li>`).join("")}</ul>` : `<div class="text-[12.5px] text-slate-500">لسه ما اترجعش حاجة للمكتبة. المرتجع النهائي بيبقى في آخر المبادرة لتصفية الحساب.</div>`}</div>
+      <div class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="font-bold text-[13.5px] mb-1">${ic("store", "inline -mt-0.5 text-brand-600")} المرتجع النهائي للمكتبة</div>${Object.keys(supRets).length ? `<ul class="text-[12.5px] divide-y divide-slate-100">${Object.values(supRets).map(x => `<li class="py-1.5 flex items-center justify-between gap-2"><span class="flex-1 min-w-0"><b class="num">${esc(x.no)}</b> · <span class="num">${esc(day(x.date))}</span> · ${fmt(x.qty)} نسخة</span><b class="num text-emerald-600">${fmt(x.amt)}</b><button class="act-ic act-ic-edit" data-act="printSupRet" data-id="${esc(x.no)}" title="كشف المرتجع PDF" aria-label="كشف المرتجع PDF">${ic("printer")}</button></li>`).join("")}</ul>` : `<div class="text-[12.5px] text-slate-500">لسه ما اترجعش حاجة للمكتبة. المرتجع النهائي بيبقى في آخر المبادرة لتصفية الحساب.</div>`}</div>
     </div>`)
   + `<div class="h-4"></div>` + UI.section(`${ic("file-text", "text-brand-600")} كشف الحساب`, "مدين = ينزل من حساب المكتبة · دائن = يزوّد اللي علينا", UI.table([
     { t: "التاريخ", cls: "num", v: l => esc(day(l.Trans_Date)) }, { t: "البيان", v: "Notes" }, { t: "المرجع", v: "Document_Ref" },
@@ -3427,6 +3427,23 @@ on("paySup", async () => {
     { name: "docRef", label: "رقم إيصال المكتبة / التحويل", required: true }, { name: "allowAdvance", label: "دفعة مقدمة (أكبر من المستحق)", type: "check" }], ok: "تسجيل الدفعة", icon: "landmark" });
   if (v) await act("RECORD_SUPPLIER_PAYMENT", Object.assign(v, { phaseId: APP.phaseId }));
 });
+/** بيانات كشف المرتجع النهائي من أذون المرتجع وقيد المكتبة */
+function supRetData(no) {
+  const d = A(), { s, b } = maps(), rs = d.deliveryReturns.filter(r => r.Doc_Type === "SUPPLIER_RETURN" && r.Printed_Receipt_No === no);
+  if (!rs.length) return null;
+  const R = v => Math.round(v * 100) / 100;
+  const lines = rs.map(r => { const m = String(r.Return_Reason || "").match(/غلاف\s*([\d.]+)\s*خصم\s*([\d.]+)%\s*\+\s*كمية\s*([\d.]+)%/) || [], qty = n(r.Qty), cover = n(m[1]), disc = n(m[2]), unit = R(cover * (1 - disc / 100));
+    return { code: r.Book_ID, name: bookName(b, r.Book_ID), meta: bookMeta(b, r.Book_ID), qty, cover, disc, unit, after: R(unit * qty), vol: n(m[3]), net: R(-n(r.Total_Amount_Impact)) }; });
+  const gm = {}; lines.forEach(l => { const g = gm[l.vol] = gm[l.vol] || { vol: l.vol, after: 0, amt: 0, net: 0 }; g.after = R(g.after + l.after); g.net = R(g.net + l.net); });
+  Object.values(gm).forEach(g => g.amt = R(g.after - g.net));
+  const led = d.supLedger.find(l => l.Reference_ID === no) || {}, supId = led.Supplier_ID || rs[0].Party_ID, sup = s[supId] || {};
+  let run = 0, before, after;
+  d.supLedger.forEach(l => { if (l === led) before = run; run = R(run + n(l.Credit_Amount) - n(l.Debit_Amount)); if (l === led) after = run; });
+  const net = R(lines.reduce((a, l) => a + l.net, 0)), aft = R(lines.reduce((a, l) => a + l.after, 0));
+  return { no, date: rs[0].Trans_Date, phase: (d.phases.find(p => p.Phase_ID === rs[0].Phase_ID) || {}).Phase_Name || "", by: rs[0].Handled_By, supplier: sup.Supplier_Name || supId, phone: sup.Phone || "",
+    lines, groups: Object.values(gm), cover: R(lines.reduce((a, l) => a + l.cover * l.qty, 0)), after: aft, volAmt: R(aft - net), net, balBefore: before, balAfter: after };
+}
+on("printSupRet", no => { const dt = supRetData(no); if (!dt) return toast("الإذن غير موجود", "warning"); Doc.show("مرتجع نهائي " + no, Doc.supplierReturn(dt), { size: "A4", file: "مرتجع-نهائي-" + no, ref: no }); });
 on("supReturn", async () => {
   const d = A(), { b } = maps(), pool = d.returnPool || {}, ids = Object.keys(pool).filter(k => pool[k].returnable > 0);
   if (!ids.length) return toast("مفيش كتب متاحة لمرتجع نهائي — كل الرصيد الحر محجوز لموظفين وهيتدمج في المراحل الجاية", "warning");
@@ -3447,7 +3464,9 @@ on("supReturn", async () => {
     <div class="max-h-60 overflow-auto rounded-xl ring-1 ring-slate-200 divide-y divide-slate-100">${p.lines.map(l => `<div class="px-3 py-2"><div class="font-semibold">${esc(bookName(b, l.bookId))}</div><div class="text-slate-500 num">${l.qty} × (غلاف ${fmt(l.cover)} − ${l.disc}%) = ${fmt(l.afterItem)} <span class="text-[11px]">· ${esc(l.src)} · كمية ${l.vol}%</span></div></div>`).join("")}</div>
     <div class="mt-3 rounded-xl bg-slate-50 px-3 py-2">${row("إجمالي الغلاف", fmt(p.grossCover))}${row("بعد خصم الأصناف", fmt(p.afterItem))}${row(`(−) خصم الكمية ${p.volMixed ? p.volMixed.join("% / ") : p.volPct}% ${p.volMixed ? "(كل فاتورة على إجمالي كتبها)" : "على الإجمالي"}`, fmt(p.volAmt))}${row("صافي المرتجع (يتخصم من حساب المكتبة)", moneyTxt(p.net), "text-[14px] text-emerald-700 border-t border-slate-200 mt-1 pt-2")}</div>
     <p class="text-[11.5px] text-slate-500 mt-2">${p.qty} نسخة في إذن واحد. التسجيل نهائي: الكتب تخرج من المخزن والقيمة تنزل من المستحق للمكتبة.</p></div>` }], ok: "تسجيل المرتجع النهائي", icon: "undo-2" });
-  if (ok) await act("RECORD_BOOK_RETURN", base);
+  if (!ok) return;
+  const r = await act("RECORD_BOOK_RETURN", base);
+  if (r && r.success && r.docNo) setTimeout(() => ACTIONS.printSupRet(r.docNo), 300);
 });
 
 // ============================================================ المصروفات والمخزن
