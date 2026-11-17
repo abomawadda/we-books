@@ -55,7 +55,7 @@ at(2027, 1, 2, 9);
 expectFail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-01', items: [{ bookId: 'BK-101', qty: 1 }], paymentMethod: 'CASH' }, E['1005']), 'حجز بعد انتهاء الموعد');
 const po = ok(api('GENERATE_PO_SNAPSHOT', { phaseId: 'PH-01' }, coord), 'تجميد طلب التوريد');
 console.log('   المطلوب من المكتبة:', po.snapshot.map(p => p.Book_ID + '×' + p.Net_Order_To_Supplier_Qty).join('، '));
-ok(api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'NOOR-1', invoiceDate: '2027-01-05', volumeDiscountPct: 5,
+ok(api('SUBMIT_SUPPLIER_INVOICE', { supplierId: 'SUP-01', phaseId: 'PH-01', supplierInvoiceNo: 'NOOR-1', invoiceDate: '2027-01-02', volumeDiscountPct: 5,
   items: po.snapshot.map(p => p.Book_ID === 'BK-201' ? { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: 0, coverPrice: 150, itemDiscPct: 20, notPrinted: true }
     : { bookId: p.Book_ID, orderedQty: p.Net_Order_To_Supplier_Qty, receivedQty: p.Net_Order_To_Supplier_Qty, coverPrice: 0, itemDiscPct: 20 }) }, store), 'استلام فاتورة المكتبة (BK-201 لم يُطبع)');
 ok(api('RUN_ALLOCATION_ENGINE', { phaseId: 'PH-01' }, coord), 'التوزيع بالأسبقية');

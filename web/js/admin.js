@@ -2415,7 +2415,7 @@ on("phaseForm", async id => {
       { name: "phaseName", label: "اسم المرحلة", value: p.Phase_Name || "", required: true, placeholder: "مثال: الترم الأول 2026/2027" },
       { name: "startDate", label: "بداية الحجز", type: "date", value: day(p.Start_DateTime), cols: 1, required: true },
       { name: "endDate", label: "نهاية الحجز", type: "date", value: day(p.End_DateTime), cols: 1, required: true },
-      { name: "deliveryStartDate", label: "بداية التسليم", type: "date", value: day(p.Delivery_Start_Date), cols: 1, hint: "أساس جدول الأقساط" },
+      { name: "deliveryStartDate", label: "بداية التسليم", type: "date", value: day(p.Delivery_Start_Date), cols: 1, hint: "بعد قفل الحجز — أساس جدول الأقساط" },
       { name: "gradeScope", label: "نطاق الصفوف المتاحة", type: "seg", value: isAll ? "ALL" : "CUSTOM", cols: 1, options: [["ALL", "كل الصفوف الدراسية"], ["CUSTOM", "تحديد صفوف معينة"]] },
       { name: "_phaseGrades", type: "html", html: `
         <input type="hidden" name="allowedGrades" value="${esc(isAll ? "ALL" : picked.join("،"))}">
