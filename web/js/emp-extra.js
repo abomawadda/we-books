@@ -68,7 +68,7 @@ _wrap("/e/me", view => {
 // ---------------------------------------------------------------- كتب لم تصل بعد: ترحيل أو إنهاء الحجز على المتاح
 function waitBox() {
   const ph = (APP.emp || {}).activePhase || {};
-  if (ph.Booking_Open) return "";
+  if (ph.Booking_Open || !allocRan(ph, Emp.phaseItems())) return ""; // قبل التوزيع: الشحنة لسه بتتجهز — مفيش «كتب موصلتش»
   const bm = Emp.bookMap(), w = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && n(i.Requested_Qty) > Math.max(n(i.Allocated_Qty), n(i.Delivered_Qty)));
   if (!w.length) return "";
   const decided = w.every(i => i.Waitlist_Choice === "carry");

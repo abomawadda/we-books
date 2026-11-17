@@ -579,3 +579,10 @@ call = async function (action, payload, opts) {
   } catch (_) {}
   return r;
 };
+
+/** هل التوزيع اتعمل للمرحلة؟ قبل التوزيع (حجز/قفل/توريد/استلام) مفيش حاجة اسمها «كتب موصلتش» — كل الكتب لسه في الطريق */
+function allocRan(phase, items) {
+  const st = phase && (phase.Effective_Status || phase.Phase_Status);
+  if (st === "Delivering" || st === "Completed") return true;
+  return (items || []).some(i => /^(Fully_Allocated|Partially_Allocated|Waitlisted)$/.test(String(i.Allocation_Status || "")));
+}
