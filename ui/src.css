@@ -66,8 +66,8 @@
   /* شاشة الدخول: خانات زجاجية بنفس ألوان الخلفية */
   .glass .label { @apply text-brand-100; }
   .glass .input { @apply bg-white/10 text-white ring-white/15 placeholder:text-white/35 focus:ring-gold-400 focus:bg-white/15; }
-  .glass .input-icon > .ico { @apply text-brand-200; }
-  .glass .input:-webkit-autofill { -webkit-text-fill-color: #fff; -webkit-box-shadow: 0 0 0 40px #3b2160 inset; caret-color: #fff; }
+
+
 
   .chip { @apply inline-flex items-center gap-1.5 h-9 px-3.5 rounded-full text-[13px] font-semibold ring-1 ring-slate-200 bg-white text-slate-600 whitespace-nowrap transition active:scale-95; }
   .chip[aria-pressed=true] { @apply bg-brand-700 text-white ring-brand-700 shadow-glow; }
@@ -251,13 +251,19 @@ input[type="number"], input[type="tel"], input[type="url"], input[type="password
   font-weight: 700;
 }
 .glass .input {
-  background-color: rgba(255, 255, 255, 0.14) !important;
-  border: 1px solid rgba(255, 255, 255, 0.22) !important;
-  color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  background-color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.6) !important;
+  color: #1e1033 !important;
+  -webkit-text-fill-color: #1e1033;
+  caret-color: #552c83;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
+.glass .input::placeholder { color: #9a8fae !important; -webkit-text-fill-color: #9a8fae; }
+.glass .input-icon > .ico, .glass .input-icon > svg { color: #6b4a96 !important; }
+.glass select.input option { color: #1e1033; background: #fff; }
+.glass .input:-webkit-autofill { -webkit-text-fill-color: #1e1033 !important; -webkit-box-shadow: 0 0 0 40px #ffffff inset !important; caret-color: #552c83; }
 .glass .input:focus {
-  background-color: rgba(255, 255, 255, 0.2) !important;
+  background-color: #ffffff !important;
   border-color: #f9b224 !important;
   box-shadow: 0 0 0 3px rgba(249, 178, 36, 0.35) !important;
 }
