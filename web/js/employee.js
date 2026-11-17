@@ -317,7 +317,16 @@ function cartHTML() {
   const hadRes = Emp.activeItems().length > 0;
   const methods = [["INSTALLMENT", "calendar-check", "تقسيط", "مقدم + أقساط شهرية"], ["CASH", "banknote", "نقداً", "كامل القيمة عند الاستلام"], ["INSTAPAY", "send", "إنستاباي", "تحويل كامل القيمة"], ["WALLET", "smartphone", "محفظة", "تحويل كامل القيمة"]];
   const ids = Object.keys(APP.cart);
-  return `
+  // السلة بنفس السلوك في كل طرق الحجز: ١ الكتب (مراجعة) ← ٢ طريقة السداد ← ٣ التأكيد
+  let step = Emp.cartStep || "list"; if (Emp._noList && step === "list") step = "pay"; if (!ids.length || !open) step = "list";
+  const stepBar = open && ids.length ? `<ol class="flex items-center gap-1.5 mb-3">${[["list", "الكتب"], ["pay", "السداد"], ["confirm", "التأكيد"]].map((x, i, a) => { const k = a.findIndex(y => y[0] === step), done = i < k, cur = i === k;
+      return `<li class="flex items-center gap-1.5 ${i < a.length - 1 ? "flex-1" : ""}"><span class="w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center shrink-0 ${done ? "bg-emerald-500 text-white" : cur ? "bg-brand-700 text-white ring-4 ring-brand-100" : "bg-slate-100 text-slate-400"}">${done ? ic("check", "!w-3 !h-3") : i + 1}</span><span class="text-[11.5px] font-bold ${cur ? "text-brand-800" : done ? "text-emerald-700" : "text-slate-400"}">${x[1]}</span>${i < a.length - 1 ? `<span class="h-0.5 flex-1 rounded-full ${done ? "bg-emerald-300" : "bg-slate-200"}"></span>` : ""}</li>`; }).join("")}</ol>` : "";
+  const mini = `<div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-white flex items-center justify-center text-brand-700 shrink-0">${ic("shopping-cart")}</span>
+      <span class="flex-1 min-w-0 leading-tight"><b class="block text-[13.5px] text-slate-900">${booksWord(t.count)} · <span class="num">${money(t.net)}</span></b><span class="block text-[11.5px] text-emerald-600 font-semibold">${gTxt("وفّرت", "وفّرتي")} ${moneyTxt(t.cover - t.net)}</span></span>
+      <button type="button" class="text-[12px] font-bold text-brand-700 px-2 py-1 rounded-lg hover:bg-brand-50" data-act="cartStep" data-id="list">${ic("pencil", "inline !w-3.5 !h-3.5")} الكتب</button></div>`;
+  if (step === "pay") return stepBar + mini + payBlock() + `<div class="grid grid-cols-[auto_1fr] gap-2 mt-4"><button class="btn btn-outline" data-act="cartStep" data-id="list">${ic("arrow-right")}</button><button class="btn btn-primary btn-lg" data-act="cartStep" data-id="confirm" ${p.method === "INSTALLMENT" && !pc.ok ? "disabled" : ""}>التالي: مراجعة وتأكيد ←</button></div>`;
+  if (step === "confirm") return stepBar + confirmBlock();
+  return stepBar + `
   ${Emp._noList ? "" : (ids.length ? resGroups(cartLines()).map(g => `<section class="mt-3 first:mt-0 rounded-2xl ring-1 ring-slate-200 overflow-hidden">
       <div class="flex items-center gap-2.5 px-3 py-2 bg-brand-50/60"><span class="text-[22px] leading-none">${g.emoji}</span>
         <div class="flex-1 min-w-0"><div class="font-bold text-[14px] text-slate-900 truncate">${esc(g.title)}</div>${g.sub ? `<div class="text-[11.5px] text-brand-700 font-semibold">${esc(g.sub)}</div>` : ""}</div>
@@ -335,7 +344,18 @@ function cartHTML() {
     <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><span class="font-bold text-slate-900">الإجمالي</span><span class="text-xl font-bold text-brand-800 num">${money(t.net)}</span></div>
   </div>
 
-  <div class="mt-4"><div class="label">طريقة السداد</div>
+  ${open ? (ids.length ? `<button data-act="cartStep" data-id="pay" class="btn btn-primary btn-lg w-full mt-4">${ic("check")} ${gTxt("تمام راجعت — نختار طريقة السداد", "تمام راجعت — نختار طريقة السداد")} ←</button>
+      <div class="grid grid-cols-2 gap-2 mt-2"><a href="#/e/books" data-act="goClose" data-id="/e/books" class="btn btn-outline btn-sm justify-center">${ic("plus")} ضيف كتب</a>${Emp.dirty ? `<button data-act="cartLater" class="btn btn-outline btn-sm justify-center">${ic("clock")} احفظها لبعدين</button>` : `<button data-act="printRes" class="btn btn-outline btn-sm justify-center">${ic("download")} طلب الحجز</button>`}</div>
+      ${Emp.dirty ? `<button data-act="discardDraft" class="btn btn-ghost btn-sm w-full mt-2 !text-rose-600">${ic("undo-2")} ${hadRes ? "تراجع عن التعديلات" : "إلغاء الطلب قبل التأكيد"}</button>` : ""}`
+    : hadRes ? `<button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4">${ic("ban")} إلغاء حجزي</button>` : "")
+    : `<div class="mt-4 rounded-2xl bg-amber-50 text-amber-800 text-sm p-3.5 flex gap-2">${ic("lock", "mt-0.5")}الحجز مغلق في هذه المرحلة.</div>`}`;
+}
+/** خطوة السداد: طريقة الدفع والمقدم والأقساط */
+function payBlock() {
+  const t = Emp.totals(), open = Emp.open(), p = APP.plan, s = APP.emp.settings, pc = Emp.planCalc(t.net);
+  const methods = [["INSTALLMENT", "calendar-check", "تقسيط", "مقدم + أقساط شهرية"], ["CASH", "banknote", "نقداً", "كامل القيمة عند الاستلام"], ["INSTAPAY", "send", "إنستاباي", "تحويل كامل القيمة"], ["WALLET", "smartphone", "محفظة", "تحويل كامل القيمة"]];
+  return `
+  <div class="mt-4"><div class="font-bold text-[14.5px] text-slate-900 mb-2">${gTxt("هتدفع إزاي؟", "هتدفعي إزاي؟")}</div>
     <div class="grid grid-cols-2 gap-2">${methods.map(m => { const dis = m[0] === "INSTALLMENT" && !APP.emp.employee.installmentAllowed; const sel = p.method === m[0];
       return `<button data-act="planMethod" data-id="${m[0]}" ${dis || !open ? "disabled" : ""} class="text-right rounded-2xl p-3 ring-1 transition disabled:opacity-40 ${sel ? "ring-2 ring-brand-600 bg-brand-50" : "ring-slate-200 hover:bg-slate-50"}">
         <div class="flex items-center gap-2 font-bold text-[13.5px] ${sel ? "text-brand-800" : "text-slate-800"}">${ic(m[1])}${m[2]}${sel ? ic("circle-check", "mr-auto text-brand-600") : ""}</div><div class="text-[11px] text-slate-500 mt-0.5">${dis ? "غير متاح لحسابك" : m[3]}</div></button>`; }).join("")}</div></div>
@@ -349,11 +369,23 @@ function cartHTML() {
     <div class="plan-preview">${planPreview(pc)}</div>
   </div>` : `<div class="mt-3 text-[12.5px] text-slate-500 flex gap-2">${ic("info", "text-brand-500 mt-0.5")}<span>يُسدَّد كامل المبلغ عند استلام الكتب${p.method !== "CASH" ? ` عبر ${ar(p.method)} باسم <b>${esc(s.CASH_ACCOUNT_HOLDER || "")}</b>` : ""}.</span></div>`}
 
-  ${open ? `<button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4" ${!ids.length && !hadRes ? "disabled" : ""}>${ic(ids.length ? "check-check" : "ban")} ${ids.length ? (hadRes ? "احفظ التعديل" : "أكّد الحجز") : "إلغاء حجزي"}</button>
-    ${Emp.dirty ? `<button data-act="discardDraft" class="btn btn-ghost btn-sm w-full mt-2 !text-rose-600">${ic("undo-2")} ${hadRes ? "تراجع عن التعديلات" : "إلغاء الطلب قبل التأكيد"}</button>` : ""}
-    ${ids.length ? `<button data-act="printRes" class="btn btn-ghost btn-sm w-full mt-2">${ic("download")} احفظ طلب الحجز (صورة أو PDF)</button>` : ""}
-    <p class="text-[11.5px] text-slate-400 mt-2.5 leading-relaxed">${ic("info", "inline -mt-0.5")} أسبقيتك محفوظة بوقت حجز كل كتاب — لو زوّدت كتب، الكتب القديمة تفضل في دورها.</p>`
-    : `<div class="mt-4 rounded-2xl bg-amber-50 text-amber-800 text-sm p-3.5 flex gap-2">${ic("lock", "mt-0.5")}الحجز مغلق في هذه المرحلة.</div>`}`;
+`;
+}
+/** خطوة التأكيد: ملخص كل فرد + السداد + أكّد / عدّل / احفظ مؤقتاً / احذف */
+function confirmBlock() {
+  const t = Emp.totals(), hadRes = Emp.activeItems().length > 0, gs = resGroups(cartLines()), p = APP.plan;
+  return `<div class="rounded-3xl ring-1 ring-brand-200 overflow-hidden">
+    <div class="px-4 py-3 text-white" style="background:linear-gradient(135deg,#552c83,#2e1650)"><div class="text-[11.5px] text-brand-200">${gTxt("خلاص كده؟ راجع آخر مرة", "خلاص كده؟ راجعي آخر مرة")}</div><div class="font-display font-bold text-[18px]">${hadRes ? "تعديل حجزك" : "تأكيد حجزك"} — <span class="num">${money(t.net)}</span></div></div>
+    <ul class="divide-y divide-slate-100 bg-white">${gs.map(g => `<li class="flex items-center gap-2.5 px-4 py-2.5"><span class="text-[20px]">${g.emoji}</span><span class="flex-1 min-w-0"><b class="block text-[13.5px] text-slate-900 truncate">${esc(g.title)}</b>${g.sub ? `<span class="block text-[11px] text-brand-700">${esc(g.sub)}</span>` : ""}</span><span class="text-left"><b class="block num text-[13px] text-brand-800">${moneyTxt(g.net)}</b><span class="text-[11px] text-slate-500">${booksWord(g.count)}</span></span></li>`).join("")}
+      <li class="flex items-center gap-2.5 px-4 py-2.5 bg-slate-50"><span class="w-8 h-8 rounded-lg bg-white flex items-center justify-center text-brand-700">${ic("wallet", "!w-4 !h-4")}</span><span class="flex-1 text-[13px] text-slate-700">طريقة السداد: <b>${esc(ar(p.method))}</b>${p.method === "INSTALLMENT" ? ` · ${fmt(p.count)} ${n(p.count) > 2 ? "أقساط" : "قسط"}` : ""}</span><button type="button" class="text-[12px] font-bold text-brand-700" data-act="cartStep" data-id="pay">تغيير</button></li></ul></div>
+  <button data-act="submitRes" class="btn btn-primary btn-lg w-full mt-4">${ic("check-check")} ${hadRes ? "احفظ التعديل" : "أكّد الحجز"}</button>
+  <div class="grid grid-cols-3 gap-2 mt-2">
+    <button type="button" class="btn btn-outline btn-sm justify-center flex-col !h-auto py-2 gap-0.5" data-act="cartStep" data-id="list">${ic("pencil")}<span class="text-[11.5px]">عدّل الكتب</span></button>
+    <button type="button" class="btn btn-outline btn-sm justify-center flex-col !h-auto py-2 gap-0.5" data-act="cartLater">${ic("clock")}<span class="text-[11.5px]">احفظ مؤقتاً</span></button>
+    <button type="button" class="btn btn-outline btn-sm justify-center flex-col !h-auto py-2 gap-0.5 !text-rose-600 !ring-rose-200" data-act="cartDelete">${ic("trash-2")}<span class="text-[11.5px]">احذف الطلب</span></button>
+  </div>
+  <button data-act="printRes" class="btn btn-ghost btn-sm w-full mt-2">${ic("download")} احفظ طلب الحجز (صورة أو PDF)</button>
+  <p class="text-[11.5px] text-slate-400 mt-2 leading-relaxed">${ic("info", "inline -mt-0.5")} الحجز ميتسجلش وأسبقيتك متتحسبش غير لما ${gTxt("تدوس", "تدوسي")} «${hadRes ? "احفظ التعديل" : "أكّد الحجز"}». الحفظ المؤقت بيحفظ السلة بس.</p>`;
 }
 function planPreview(pc) {
   const rows = [["عند الاستلام", "مقدم", pc.down]];
@@ -736,10 +768,15 @@ function gradePicker() {
       <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
     : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
     <h2 class="font-display font-bold text-slate-800 mb-1 flex items-center gap-2">${ic("graduation-cap", "text-brand-600")} ${ks.length ? "أو اختر صفاً آخر" : "اختر صف ابنك"}</h2>
-    <p class="text-[13px] text-slate-500 mb-4">نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر.</p>
+    <p class="text-[13px] text-slate-500 mb-4">${Emp.open() ? gTxt("اضغط على الصف لعرض كتبه — أو علّم ✓ على أكتر من صف ونحجز لهم صف صف كأنهم أولادك.", "اضغطي على الصف لعرض كتبه — أو علّمي ✓ على أكتر من صف ونحجز لهم صف صف كأنهم أولادك.") : "نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر."}</p>
     ${stages.map(s => `<section class="mb-5"><div class="text-[13px] font-bold text-brand-700 mb-2">${esc(s)}</div>
-      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 hover:ring-brand-300 p-3 text-center active:scale-95 transition shadow-soft" data-act="fGrade" data-id="${esc(g)}">
-        <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>`).join("")}</div></section>`).join("")}`;
+      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => { const on = (Emp.gsel || []).includes(g); return `<div class="relative"><button class="w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 ${on ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200 hover:ring-brand-300"}" data-act="fGrade" data-id="${esc(g)}">
+        <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>
+        ${Emp.open() ? `<button type="button" class="absolute -top-1.5 -left-1.5 w-7 h-7 rounded-full flex items-center justify-center shadow-soft ring-2 ring-white ${on ? "bg-brand-600 text-white" : "bg-slate-100 text-slate-400"}" data-act="gpSel" data-id="${esc(g)}" aria-label="اختيار ${esc(gradeShort(g))}" aria-pressed="${on}">${ic(on ? "check" : "plus", "!w-3.5 !h-3.5")}</button>` : ""}</div>`; }).join("")}</div></section>`).join("")}
+    ${(Emp.gsel || []).length ? `<div class="fixed inset-x-3 z-30 max-w-xl mx-auto animate-pop-in" style="bottom:calc(${Emp.totals().count ? "10.5" : "5.5"}rem + env(safe-area-inset-bottom))"><div class="rounded-2xl bg-brand-800 text-white p-3 flex items-center gap-3 shadow-glow">
+      <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14px]">${Emp.gsel.length === 1 ? "صف واحد" : Emp.gsel.length === 2 ? "صفين" : Emp.gsel.length + " صفوف"} مختارة</b><span class="block text-[11.5px] text-brand-200 truncate">${Emp.gsel.map(gradeShort).join(" · ")}</span></span>
+      <button type="button" class="text-[12px] text-brand-200 px-2" data-act="gpClear">مسح</button>
+      <button type="button" class="btn btn-sm !bg-gold-400 !text-brand-950 shrink-0" data-act="gpStart">احجز صف صف ←</button></div></div>` : ""}`;
 }
 // ============================================================ جهّز الشنطة: كتاب لكل مادة بضغطة
 const BAG = { rows: [], m: null };
@@ -1030,7 +1067,20 @@ Router.add("/e/cart", view => {
     <section class="card card-pad"><div class="cart-body"></div></section></div>`;
   refreshCartViews();
 });
-on("openCart", () => { if (window.innerWidth < 1024 && !window.__forceSheet) return Router.go("/e/cart");
+on("cartStep", v => {
+  if (v === "list" && Router.current === "/e/wiz") { Emp.cartStep = "pay"; return wzGo("review"); }
+  if (v === "confirm" && APP.plan.method === "INSTALLMENT" && !Emp.planCalc(Emp.totals().net).ok) return toast("راجع المقدم الأول", "warning");
+  Emp.cartStep = v; refreshCartViews(); const c = document.querySelector(".cart-body,.wiz-pay"); if (c && c.scrollIntoView) c.scrollIntoView({ block: "start", behavior: "smooth" });
+});
+on("cartLater", async () => {
+  if (Emp.dirty) await call("SAVE_CART_DRAFT", { phaseId: APP.phaseId, cart: APP.cart }).catch(() => {});
+  if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
+  Emp.cartStep = "list"; toast(gTxt("اتحفظت سلتك مؤقتاً 🕒 — ارجع أكّد قبل قفل الحجز عشان تتحسب أسبقيتك", "اتحفظت سلتك مؤقتاً 🕒 — ارجعي أكّدي قبل قفل الحجز عشان تتحسب أسبقيتك"), "info");
+  Router.go("/e/home");
+});
+on("cartDelete", () => { const had = Emp.activeItems().length > 0;
+  if (had && ACTIONS.empCancel) return ACTIONS.empCancel(); return ACTIONS.discardDraft && ACTIONS.discardDraft(); });
+on("openCart", () => { Emp.cartStep = "list"; if (window.innerWidth < 1024 && !window.__forceSheet) return Router.go("/e/cart");
   const m = UI.open(`<div class="cart-body"></div>`, { title: "سلة الكتب", sub: APP.emp.activePhase.Phase_Name, onClose: () => refreshCartViews() });
   m.body.querySelector(".cart-body").innerHTML = cartHTML();
   Emp._cartSheet = m;
@@ -1080,7 +1130,7 @@ on("submitRes", async () => {
   const r = await call("SUBMIT_OR_UPDATE_RESERVATION", { phaseId: APP.phaseId, items, paymentMethod: APP.plan.method, downPaymentType: APP.plan.downType, downPaymentInput: n(APP.plan.down), installmentCount: APP.plan.count }, { block: true });
   if (!r.success) return toast(r.message, "danger");
   if (r.queued) { if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; } return UI.open(`<div class="text-center py-4"><div class="text-4xl">${r.busy ? "⏳" : "📴"}</div><h3 class="text-xl font-bold mt-3">حجزك اتحفظ على موبايلك</h3><p class="text-sm text-slate-600 mt-1">${esc(r.message)} — هيوصلك تأكيد أول ما يتبعت. ما تمسحش التطبيق لحد ما يتبعت 🙏</p></div>`, { footer: `<button data-close class="btn btn-primary w-full">تمام</button>` }); }
-  Emp.dirty = false;
+  Emp.dirty = false; Emp.cartStep = "list";
   if (Emp._cartSheet) { Emp._cartSheet.close(); Emp._cartSheet = null; }
   if (Router.current === "/e/cart" || Router.current === "/e/wiz") Router.go("/e/home");
   (r.warnings || []).forEach(w => toast(w, "warning"));
@@ -1205,8 +1255,9 @@ function wzFamily() {
 }
 function wzGradePick() {
   const cat = APP.emp.catalog || {}, stages = uniq((cat.grades || []).map(g => g.stage)), cnt = {}; APP.emp.books.forEach(b => cnt[b.Grade] = (cnt[b.Grade] || 0) + 1);
-  return `<h1 class="font-display font-bold text-[20px] text-slate-900">${gTxt("اختر الصف", "اختاري الصف")}</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">${gTxt("بدون تسجيل — تقدر تضيف أكثر من صف.", "بدون تسجيل — تقدري تضيفي أكثر من صف.")}</p>
-    ${stages.map(s => `<div class="text-[12.5px] font-bold text-brand-700 mb-2">${esc(s)}</div><div class="grid grid-cols-3 gap-2 mb-4">${(cat.grades || []).filter(g => g.stage === s && cnt[g.label]).map(g => `<button class="rounded-2xl bg-white ring-1 ring-slate-200 p-3 font-bold text-[15px] active:scale-95" data-act="wzTempAdd" data-id="${esc(g.label)}">${esc(gradeShort(g.label))}</button>`).join("")}</div>`).join("")}
+  return `<h1 class="font-display font-bold text-[20px] text-slate-900">${gTxt("اختر الصف", "اختاري الصف")}</h1><p class="text-[13px] text-slate-500 mt-1 mb-4">${gTxt("بدون تسجيل — علّم كل الصفوف اللي محتاجها، ونحجز لكل صف لوحده كأنه ابن.", "بدون تسجيل — علّمي كل الصفوف اللي محتاجاها، ونحجز لكل صف لوحده كأنه ابن.")}</p>
+    ${stages.map(s => `<div class="text-[12.5px] font-bold text-brand-700 mb-2">${esc(s)}</div><div class="grid grid-cols-3 gap-2 mb-4">${(cat.grades || []).filter(g => g.stage === s && cnt[g.label]).map(g => { const on = (Emp.gsel || []).includes(g.label); return `<button class="relative rounded-2xl p-3 font-bold text-[15px] active:scale-95 transition ring-1 ${on ? "bg-brand-700 text-white ring-brand-700" : "bg-white ring-slate-200"}" data-act="gpSel" data-id="${esc(g.label)}" aria-pressed="${on}">${on ? `<span class="absolute top-1 left-1">${ic("check", "!w-3.5 !h-3.5")}</span>` : ""}${esc(gradeShort(g.label))}</button>`; }).join("")}</div>`).join("")}
+    <button class="btn btn-primary btn-lg w-full mb-2" data-act="gpStart" ${(Emp.gsel || []).length ? "" : "disabled"}>${(Emp.gsel || []).length ? `ابدأ الحجز لـ ${Emp.gsel.length === 1 ? "صف واحد" : Emp.gsel.length === 2 ? "صفين" : Emp.gsel.length + " صفوف"} — صف صف ←` : gTxt("اختار صف أو أكتر", "اختاري صف أو أكتر")}</button>
     <button class="btn btn-ghost w-full" data-act="wzUnskip">${ic("arrow-right")} رجوع</button>`;
 }
 function wzMember() {
@@ -1290,10 +1341,10 @@ function wzReviewHTML() {
       <div class="flex justify-between text-emerald-600 font-semibold"><span>${gTxt("وفّرت 🎉", "وفّرتي 🎉")}</span><span class="num">${moneyTxt(t.cover - t.net)}</span></div>
       <div class="flex justify-between items-baseline pt-1.5 border-t border-slate-200"><b>الإجمالي</b><span class="text-2xl font-bold text-brand-800 num">${money(t.net)}</span></div></div>
     <button class="btn btn-ghost w-full mt-2" data-act="wzToFamily">${ic("plus")} إضافة أو استكمال فرد آخر</button>
-    <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("wallet")} التالي: تأكيد الحجز وطريقة السداد ←</button>`;
+    <button class="btn btn-primary btn-lg w-full mt-2" data-act="wzPay" ${t.count ? "" : "disabled"}>${ic("check")} ${gTxt("تمام راجعت — نختار طريقة السداد", "تمام راجعت — نختار طريقة السداد")} ←</button>`;
 }
 function wzPayHTML() {
-  return `<h1 class="font-display font-bold text-[22px] text-slate-900">${gTxt("هتدفع إزاي؟ 💳", "هتدفعي إزاي؟ 💳")}</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">${gTxt("اختار طريقة السداد، وبعدها أكّد الحجز.", "اختاري طريقة السداد، وبعدها أكّدي الحجز.")}</p>
+  return `<h1 class="font-display font-bold text-[22px] text-slate-900">السداد والتأكيد 💳</h1><p class="text-[13.5px] text-slate-500 mt-1 mb-4">${gTxt("اختار طريقة السداد، وبعدها راجع وأكّد الحجز.", "اختاري طريقة السداد، وبعدها راجعي وأكّدي الحجز.")}</p>
     <div class="wiz-pay card card-pad"></div><button class="btn btn-ghost w-full mt-2" data-act="wzReview">${ic("arrow-right")} رجوع للمراجعة</button>`;
 }
 Router.add("/e/wiz", view => {
@@ -1311,6 +1362,19 @@ on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kid
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
 on("wzSkip", () => { WZ.skip = true; Shell.rerender(); });
 on("wzUnskip", () => { WZ.skip = false; Shell.rerender(); });
+// اختيار أكتر من صف (بدون تسجيل أبناء) ← الحجز لهم صف صف في المعالج كأنهم أولاد
+on("gpSel", g => { Emp.gsel = Emp.gsel || []; Emp.gsel = Emp.gsel.includes(g) ? Emp.gsel.filter(x => x !== g) : Emp.gsel.concat(g); if (navigator.vibrate) navigator.vibrate(6); if (Router.current === "/e/books") renderBookGrid(); else Shell.rerender(); });
+on("gpClear", () => { Emp.gsel = []; renderBookGrid(); });
+on("gpStart", () => {
+  const gs = (Emp.gsel || []).slice(); if (!gs.length) return toast(gTxt("اختار صف الأول", "اختاري صف الأول"), "info");
+  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
+  const go = gradeOrder(); gs.sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99));
+  gs.forEach(g => { if (!WZ.temp.some(t => t.grade === g)) WZ.temp.push({ name: "", grade: g, type: "" }); });
+  WZ.skip = false; WZ.mode = {}; WZ.pub = {}; BAG._for = ""; Emp.gsel = []; Emp.bookMode = ""; wzSave();
+  const ms = wzMembers(), i = ms.findIndex(m => m._temp && m.grade === gs[0]);
+  toast(`هنحجز ${gs.length === 1 ? "للصف" : "لكل صف لوحده"} — نبدأ بـ ${gradeShort(gs[0])} 📚`, "info");
+  wzGo("member", i >= 0 ? i : 0);
+});
 on("wzTempAdd", g => { WZ.temp.push({ name: "", grade: g, type: "" }); WZ.skip = false; wzSave(); Shell.rerender(); });
 on("wzTempDel", j => { WZ.temp.splice(+j, 1); wzSave(); Shell.rerender(); });
 on("wzStart", () => { WZ.mode = {}; WZ.pub = {}; BAG._for = ""; const ms = wzMembers(); const nxt = ms.findIndex((_, idx) => !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); wzGo("member", nxt >= 0 ? nxt : 0); });
@@ -1344,7 +1408,7 @@ on("wzPrev", () => { BAG._for = ""; wzGo("member", Math.max(0, WZ.i - 1)); });
 on("wzBack", () => { Emp.wzManual = false; wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false); BAG._for = ""; wzGo("afterMember", WZ.i); });
 on("wzReview", () => wzGo("review"));
 on("wzBackReview", () => { Emp.wzManual = false; wzGo("review"); });
-on("wzPay", () => wzGo("pay"));
+on("wzPay", () => { Emp.cartStep = "pay"; wzGo("pay"); });
 on("wzEdit", v => { const [ben, grade] = String(v).split("|"); const ms = wzMembers(); let i = ms.findIndex(m => (ben ? kidBen(m) === ben : !kidBen(m) && m.grade === grade)); if (i < 0) { WZ.temp.push({ name: "", grade, type: "" }); i = wzMembers().length - 1; }
   WZ.mode[i] = "manual"; WZ.i = i; wzSave(); wzFocus(wzMembers()[i]); Emp.wzManual = "review"; Router.go("/e/books"); });
 /** ملخص نصي للحجز للمشاركة على واتساب */

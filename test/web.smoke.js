@@ -93,7 +93,11 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   check(/BK-101|سلاح/.test(d.querySelector('.cart-body').textContent) || true, 'cart updated');
   await click('[data-act="openCart"]');
   check(dialog() && /سلة الكتب/.test(dialog().textContent), 'cart sheet opened');
+  check(!dialog().querySelector('[data-act="planMethod"]') && dialog().querySelector('[data-act="cartStep"][data-id="pay"]'), 'cart step 1: list only, no payment');
+  await click('[data-act="cartStep"][data-id="pay"]', dialog());
   await click('[data-act="planCount"][data-id="3"]', dialog());
+  await click('[data-act="cartStep"][data-id="confirm"]', dialog());
+  check(dialog().querySelector('[data-act="cartLater"]') && dialog().querySelector('[data-act="cartDelete"]'), 'cart step 3: confirm/edit/save/delete');
   await click('[data-act="submitRes"]', dialog());
   check(/حجزك اتسجل/.test(d.body.textContent), 'reservation saved with success dialog');
   expectNoErrorToasts('reservation');
