@@ -19,6 +19,12 @@ Shell.renderLogin = function () {
   if (t === "adm") return _renderLogin.call(Shell);
   Shell.loginTab = "emp"; _renderLogin.call(Shell); Shell.loginTab = t;
   const f = $("#fEmp"); if (!f) return;
+  // الهيدر: «النقابة العامة بالدقهلية» بين الشعارين، وتحتهما عنوان المبادرة كبير + اسم المصمم
+  { const head = $("#lgMobHead"); if (head) {
+      const mid = head.querySelector(".min-w-0.text-center"); if (mid) mid.innerHTML = `<div class="font-display font-bold text-[14.5px] sm:text-[16px] leading-snug text-white">${esc(Brand.get().org || "النقابة العامة بالدقهلية")}</div>`;
+      head.insertAdjacentHTML("beforeend", `<div class="text-center max-w-md mx-auto mt-4 mb-1 px-2">
+        <h1 class="font-display font-bold text-[25px] sm:text-[28px] leading-[1.3] text-white">${esc(Brand.get().initiative || "مبادرة الكتب الخارجية المخفضة")}</h1>
+        <div class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white/10 ring-1 ring-white/15 px-3 py-1 text-[12px] text-gold-300 font-semibold">${ic("sparkles", "!w-3.5 !h-3.5")} تصميم أ. محمود العراقي</div></div>`); const cr = $("#lgCredit"); if (cr) cr.remove(); } }
 
   const adm = $('[data-act="loginTab"][data-id="adm"]');
   if (adm) {
@@ -36,9 +42,7 @@ Shell.renderLogin = function () {
     f.insertAdjacentHTML("beforebegin", `
       <div id="lgPick" class="space-y-4">
         <div class="text-center lg:text-right">
-          <img src="icons/logo.svg" alt="" class="w-16 h-16 mx-auto lg:mx-0 drop-shadow-lg" onerror="this.remove()">
-          <h2 class="text-[22px] lg:text-2xl font-bold text-white mt-2">أهلاً بيك 👋</h2>
-          <p class="text-[13px] text-gold-300 font-semibold mt-0.5">كتب ولادك أقرب… وقسطها أخف</p>
+          <p class="text-[13.5px] text-gold-300 font-semibold">كتب ولادك أقرب… وقسطها أخف</p>
           <div class="flex flex-wrap justify-center lg:justify-start gap-1.5 mt-3">${[["badge-percent", "خصم للأعضاء"], ["calendar-check", "تقسيط مريح"], ["package-check", "استلام قريب منك"]].map(x => `<span class="inline-flex items-center gap-1 rounded-full bg-white/10 ring-1 ring-white/15 px-2.5 h-7 text-[11.5px] text-brand-100">${ic(x[0], "!w-3.5 !h-3.5 text-gold-300")} ${x[1]}</span>`).join("")}</div>
         </div>
         <div class="flex items-center gap-2 text-[11.5px] text-brand-200/90"><span class="h-px flex-1 bg-white/15"></span><span>${ic("log-out", "inline !w-3.5 !h-3.5 rotate-180")} اختار فئتك عشان تدخل</span><span class="h-px flex-1 bg-white/15"></span></div>

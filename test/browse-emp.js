@@ -33,7 +33,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', PFX
   await shot('login');
   if (process.env.LOGIN) {
     for (const [k, m] of [['emp', 'login'], ['guest', 'login'], ['guest', 'register'], ['outsource', 'register']]) {
-      await p.evaluate(([k, m]) => { Shell.loginTab = k; Shell.regMode = m; Shell.renderLogin(); }, [k, m]); await p.waitForTimeout(400); await shot('lg-' + k + '-' + m); }
+      await p.evaluate(([k, m]) => { Shell.loginTab = k; Shell.regMode = m; Shell.renderLogin(); }, [k, m]); await p.waitForTimeout(400); await p.evaluate(() => { const set = (id, v) => { const e = document.getElementById(id); if (e) e.value = v; }; set('lgEmp', '512345'); set('lgNat', '4512'); set('lgMob', '01012345678'); set('regName', 'أحمد محمد علي'); set('regNat', '29901011234567'); }); await shot('lg-' + k + '-' + m); }
     await b.close(); return;
   }
   await p.evaluate(() => { Shell.loginTab = 'emp'; Shell.renderLogin(); }); await p.waitForTimeout(300);
