@@ -880,3 +880,28 @@ on("lqFrom", v => { LQ.from = v; Shell.rerender(); });
 on("lqTo", v => { LQ.to = v; Shell.rerender(); });
 on("lqReset", () => { LQ.ph = LQ.from = LQ.to = ""; Shell.rerender(); });
 on("ledgerPdf", () => { const x = ledgerData(); Doc.show("كشف حساب " + x.scope, Doc.cashStatement(x), { size: "A4", file: "كشف-حساب-" + x.scope.replace(/\s+/g, "-") }); });
+
+// ============================================================ أثر تغيير السعر على كتب اتسلّمت بالفعل
+const RP_KEY = "wb_reprice_last";
+function repriceDialog(rp) {
+  const L = (rp && rp.delivered) || []; if (!L.length) return;
+  try { localStorage.setItem(RP_KEY, JSON.stringify({ at: new Date().toISOString(), delivered: L })); } catch (_) {}
+  const { e } = maps(), byEmp = {};
+  L.forEach(x => (byEmp[x.empId] = byEmp[x.empId] || []).push(x));
+  const tot = L.reduce((a, x) => a + x.diff, 0);
+  const wa = id => { const ls = byEmp[id], x = ls[0], d = ls.reduce((a, l) => a + l.diff, 0);
+    const txt = `أهلاً ${String(x.name || "").split(" ")[0]}، حصل تصحيح في سعر ${ls.map(l => "«" + l.book + "»").join(" و")} اللي استلمته من مبادرة الكتب. ${d > 0 ? `اتضاف على فاتورتك ${fmt(d)} ج.م` : `اتخصم من فاتورتك ${fmt(-d)} ج.م`}${x.credit ? ` وبقى ليك رصيد ${fmt(x.credit)} ج.م` : x.remaining ? ` والمتبقي عليك دلوقتي ${fmt(x.remaining)} ج.م` : ""}. نعتذر عن الخطأ 🙏`;
+    return x.mobile ? Brand.waLink(x.mobile, txt) : ""; };
+  UI.open(`<p class="text-[13px] text-slate-600 mb-3">السعر الجديد اتطبّق تلقائياً على فواتيرهم. دول اللي <b>استلموا الكتاب بالفعل</b> واتغيّر عليهم المبلغ:</p>
+    <div class="grid grid-cols-3 gap-2 mb-3">${UI.stat("أعضاء", fmt(Object.keys(byEmp).length))}${UI.stat("نسخ", fmt(L.reduce((a, x) => a + x.qty, 0)))}${UI.stat(tot >= 0 ? "زيادة عليهم" : "رد لهم", `<span class="${tot >= 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(Math.abs(tot))}</span>`)}</div>
+    <ul class="space-y-2 max-h-[55vh] overflow-auto">${Object.keys(byEmp).map(id => { const ls = byEmp[id], x = ls[0], d = ls.reduce((a, l) => a + l.diff, 0), w = wa(id);
+      return `<li class="rounded-2xl ring-1 ring-slate-200 p-3"><div class="flex items-center gap-2"><b class="flex-1 min-w-0 truncate text-[14px]">${esc(x.name || empName(e, id))} <span class="text-[11px] text-slate-400 num">${esc(id)}</span></b>
+        <b class="num text-[13px] ${d > 0 ? "text-rose-600" : "text-emerald-600"}">${d > 0 ? "+" : "−"}${fmt(Math.abs(d))}</b>
+        ${w ? `<a class="act-ic act-ic-edit" href="${esc(w)}" target="_blank" rel="noopener" title="ابعتله واتساب" aria-label="واتساب">${ic("message-circle")}</a>` : ""}<button class="act-ic act-ic-edit" data-act="empProfile" data-id="${esc(id)}" title="ملف الموظف" aria-label="ملف الموظف">${ic("user")}</button></div>
+        ${ls.map(l => `<div class="text-[12px] text-slate-600 mt-1">${esc(l.book)}${l.ben ? " · لـ " + esc(l.ben) : ""} · <span class="num">${l.qty}</span> نسخة: <span class="num line-through text-slate-400">${fmt(l.oldPrice)}</span> ← <b class="num">${fmt(l.newPrice)}</b></div>`).join("")}
+        <div class="text-[11.5px] mt-1 ${x.credit ? "text-emerald-700" : x.remaining ? "text-rose-600" : "text-slate-500"}">${x.credit ? `له رصيد مستحق الرد ${fmt(x.credit)} ج.م` : x.remaining ? `المتبقي عليه الآن ${fmt(x.remaining)} ج.م` : "حسابه متصفّي"}</div></li>`; }).join("")}</ul>
+    <button class="btn btn-outline w-full mt-3" data-act="repriceCsv">${ic("file-spreadsheet")} تنزيل القائمة Excel</button>`, { title: "⚠️ تغيير سعر أثّر على كتب اتسلّمت" });
+}
+on("repriceCsv", () => { let L = []; try { L = JSON.parse(localStorage.getItem(RP_KEY) || "{}").delivered || []; } catch (_) {}
+  exportCSV("أثر-تغيير-السعر", ["الرقم", "الاسم", "الموبايل", "الكتاب", "لمين", "نسخ", "السعر القديم", "السعر الجديد", "الفرق", "المتبقي عليه", "رصيد له"], L.map(x => [x.empId, x.name, x.mobile, x.book, x.ben, x.qty, x.oldPrice, x.newPrice, x.diff, x.remaining, x.credit])); });
+{ const _callRP = call; call = async function () { const r = await _callRP.apply(this, arguments); if (r && r.repriced && r.repriced.delivered && r.repriced.delivered.length && APP.user && APP.user.userType !== "EMPLOYEE") setTimeout(() => repriceDialog(r.repriced), 500); return r; }; }
