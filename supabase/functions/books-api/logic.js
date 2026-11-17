@@ -242,7 +242,7 @@ const FinancialEngine = {
     const base = Util.parseDate(baseDate) || new Date();
     const schedule = [];
     if (downPayment > 0) {
-      schedule.push({ installmentNo: 0, label: "المقدم (عند الاستلام)", dueDate: Utilities.formatDate(base, Util.tz(), "yyyy-MM-dd"), amount: downPayment });
+      schedule.push({ installmentNo: 0, label: count === 1 && remainingAfterDown === 0 && downPaymentType === "PERCENTAGE" && Util.num(downPaymentInput) >= 100 ? "السداد الكامل (عند الاستلام)" : "المقدم (عند الاستلام)", dueDate: Utilities.formatDate(base, Util.tz(), "yyyy-MM-dd"), amount: downPayment });
     }
     const baseInst = Math.floor(remainingAfterDown / count);
     let allocated = 0;
@@ -2947,7 +2947,7 @@ const OperationsEngine = {
       Util.require(inv, "لا توجد فاتورة للموظف في هذه المرحلة. شغّل التوزيع أولاً.");
       if (st.REQUIRE_DOWN_PAYMENT_BEFORE_DELIVERY && !force) {
         Util.require(Util.num(inv.Total_Paid_Amount) + 0.001 >= Util.num(inv.Down_Payment_Required),
-          "لم يُسدَّد المقدم المطلوب قبل التسليم (" + inv.Down_Payment_Required + " ج.م، المسدد " + inv.Total_Paid_Amount + "). وجّه الموظف للخزينة أولاً.");
+          (inv.Payment_Plan_Type === "INSTALLMENT" ? "لم يُسدَّد المقدم المطلوب" : "لم يُسدَّد كامل المبلغ (دفع كاش مرة واحدة)") + " قبل التسليم (" + inv.Down_Payment_Required + " ج.م، المسدد " + inv.Total_Paid_Amount + "). وجّه الموظف للخزينة أولاً.");
       }
       if (st.BLOCK_DELIVERY_IF_OVERDUE && !force) {
         const od = this.overdueForEmployee_(empId, inv.Emp_Inv_ID);

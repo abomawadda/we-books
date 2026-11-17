@@ -78,7 +78,7 @@ function nextMilestone(ph) {
   if (dl && /^\d{4}-\d{2}-\d{2}$/.test(String(ph.Delivery_Start_Date))) dl.setHours(9, 0, 0, 0);
   if (st && st > now) return { label: nm + "يفتح الحجز بعد", at: st, art: "calendar", note: "جهّز قائمة كتب أولادك من دلوقتي ✍️" };
   if (ph.Booking_Open && en && en > now) return { label: (ph.Phase_Name ? "الحجز مفتوح - " + ph.Phase_Name : "الحجز مفتوح") + " · ينتهي الحجز في", at: en, art: "books", note: "احجز أو عدّل قبل ما الوقت يخلص ⏳" };
-  if (dl && dl > now) return { label: nm + "يبدأ التسليم بعد", at: dl, art: "truck", note: "كتبك في الطريق، جهّز المقدم 📦" };
+  if (dl && dl > now) return { label: nm + "يبدأ التسليم بعد", at: dl, art: "truck", note: "كتبك في الطريق، جهّز " + (planIsInst(Emp.invoice() || APP.plan) ? "المقدم" : "المبلغ") + " 📦" };
   return null;
 }
 function countdownHTML(m) {
@@ -231,7 +231,7 @@ Router.add("/e/home", view => {
   let msg;
   if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
   else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ — ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
-  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز المقدم وتعالى استلم` + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
+  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز ${planIsInst(inv || APP.plan) ? "المقدم" : "المبلغ"} وتعالى استلم` + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
   else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتب " + (ph.Phase_Name || "المرحلة دي") + " 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: carry ? carry.text : "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
   else msg = { icon: psi.icon, title: psi.title, sub: carry ? carry.text : psi.sub, cta: "", href: "" };
@@ -1510,7 +1510,7 @@ const docEmp = () => { const u = APP.user; return { name: u.fullName, id: u.empI
 on("printInv", () => {
   const inv = Emp.invoice(), bm = Emp.bookMap(), r = APP.emp; if (!inv) return;
   const h = r.myReservations.find(x => x.Res_ID === inv.Res_ID) || {};
-  Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, emp: docEmp(),
+  Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, count: n(inv.Installments_Count), emp: docEmp(),
     lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, req: n(i.Requested_Qty), choice: i.Waitlist_Choice, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
     adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, down: inv.Down_Payment_Required,
     schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID, ref: inv.Emp_Inv_ID });
