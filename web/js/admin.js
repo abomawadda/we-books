@@ -66,8 +66,11 @@ function bookSortComparator(a, b, catalog) {
 
 const Admin = {
   async load() {
-    const r = await call("GET_ADMIN_DASHBOARD_DATA");
+    const r = await call("GET_ADMIN_DASHBOARD_DATA", APP.adm && APP._admVer ? { since: APP._admVer } : {});
     if (!r.success) { toast(r.message, "danger"); return; }
+    // مفيش تغيير من آخر تحميل: نفس البيانات بدون إعادة تنزيلها
+    if (r.notModified && APP.adm) { Shell.rerender(); const ep0 = $("#epBody"); if (ep0 && Q.epId) ep0.innerHTML = epBody(Q.epId); Notif.badge(); return; }
+    APP._admVer = r.ver || "";
     (r.books || []).forEach(b => {
       if (n(b.Cover_Price) > 0) {
         const first = r2(n(b.Cover_Price) * (1 - n(b.Supplier_Discount_Pct) / 100));

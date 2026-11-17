@@ -203,7 +203,14 @@ async function health() {
 const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'ADMIN_EMP_PORTAL', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
-const reply = (o: any, status = 200) => new Response(JSON.stringify(o), { status, headers: { ...CORS, 'Content-Type': 'application/json; charset=utf-8' } });
+const reply = (o: any, status = 200, gz = false) => {
+  const body = JSON.stringify(o), headers: any = { ...CORS, 'Content-Type': 'application/json; charset=utf-8', 'Vary': 'Accept-Encoding' };
+  if (gz && body.length > 2048) {
+    const stream = new Blob([body]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Response(stream, { status, headers: { ...headers, 'Content-Encoding': 'gzip' } });
+  }
+  return new Response(body, { status, headers });
+};
 
 async function handle(action: string, payload: any, token: string, clientIp = '') {
   // مسار الحجز (funnel) وأخطاء الموظفين: كتابة مباشرة خفيفة بلا محرك ولا أقفال — مرة واحدة لكل موظف/خطوة/يوم
@@ -346,6 +353,15 @@ async function handle(action: string, payload: any, token: string, clientIp = ''
   }
   let session = null;
   if (action !== 'GET_PUBLIC_INIT_DATA') { session = await verify(token); if (!session) return EXPIRED; }
+  // لوحة الإدارة: بصمة البيانات (عدد الصفوف + آخر تعديل + نسخة المنطق). لو زي اللي عند المتصفح ← بلا إعادة إرسال
+  if (action === 'GET_ADMIN_DASHBOARD_DATA' && session && session.userType === 'ADMIN') {
+    const [v] = await sql`select count(*)::text as c, coalesce(max(xmin::text::bigint), 0)::text as x from books.records`;
+    const ver = v.c + '.' + v.x + '.' + rtCommit.slice(0, 8) + '.' + session.role;
+    if (payload && payload.since && payload.since === ver) return { success: true, notModified: true, ver };
+    const res = await rt.run(store, action, rt.apiFn(action, payload, session), { readOnly: true });
+    if (res && res.success) res.ver = ver;
+    return res;
+  }
   return await rt.run(store, action, rt.apiFn(action, payload, session), { readOnly: READ_ONLY.has(action), scope: rt.scopeFor(action, payload, session) });
 }
 
@@ -363,7 +379,7 @@ Deno.serve(async (req: Request) => {
   const busy = (e: any) => e && (['53300', '57P03', '57014', '40001', '40P01'].includes(e.code) || /too many clients|connection slots|max client|CONNECT_TIMEOUT/i.test(String(e.message || e.code)));
   try {
     for (let i = 0; ; i++) {
-      try { return reply(await handle(body.action, body.payload || {}, body.token, ip)); }
+      try { return reply(await handle(body.action, body.payload || {}, body.token, ip), 200, /\bgzip\b/.test(req.headers.get('accept-encoding') || '')); }
       catch (e) { if (!busy(e) || i >= 8) throw e; await new Promise(r => setTimeout(r, Math.min(4000, 150 * 2 ** i) * (0.5 + Math.random()))); }
     }
   }

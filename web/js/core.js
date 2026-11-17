@@ -541,7 +541,7 @@ call = async function (action, payload, opts) {
   const isGet = /^GET_/.test(action);
   if (!navigator.onLine && Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, message: "اتحفظ على جهازك 📴 وهيتبعت لوحده أول ما النت يرجع" }; }
   const r = await _callNet(action, payload, opts);
-  if (isGet && r && r.success) Offline.save(action, payload, r);
+  if (isGet && r && r.success && !r.notModified) Offline.save(action, payload, r);
   if (Offline.netFail(r)) {
     if (isGet) { const c = Offline.load(action, payload); if (c) { Offline.bar(); return Object.assign({}, c.r, { offline: true, cachedAt: c.at }); } }
     if (Offline.QUEUE.includes(action) && APP.token) { Offline.push(action, payload); return { success: true, queued: true, busy: /ضغط/.test(r.message || ""), message: /ضغط/.test(r.message || "") ? "المنصة عليها زحمة — حجزك اتحفظ على جهازك وهيتبعت لوحده خلال دقايق ⏳ (أسبقيتك بتتحسب لحظة وصوله)" : "النت فاصل — اتحفظ على جهازك وهيتبعت لوحده أول ما يرجع 📴" }; }
