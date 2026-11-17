@@ -56,12 +56,23 @@ on("shareSave", () => {
 
 // ---------------------------------------------------------------- قواعد التعديل بعد قفل الحجز
 function closedRulesBox() {
-  const ph = (APP.emp || {}).activePhase || {};
-  if (ph.Booking_Open || !Emp.phaseItems().length) return "";
+  const ph = (APP.emp || {}).activePhase || {}, items = Emp.phaseItems().filter(i => !String(i.Allocation_Status).startsWith("Cancelled"));
+  if (ph.Booking_Open || !items.length) return "";
+  // بعد التوزيع/التسليم: رسالة «اتطلبت من المكتبة» مالهاش لازمة
+  if (allocRan(ph, items)) {
+    const left = items.reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
+    const st = ph.Effective_Status || ph.Phase_Status, openPh = ((APP.emp || {}).phases || []).find(p => p.Booking_Open && p.Phase_ID !== ph.Phase_ID);
+    if (left > 0) return "";
+    if (st !== "Completed" && !items.every(i => n(i.Delivered_Qty) >= n(i.Allocated_Qty))) return "";
+    return `<div class="mb-4 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 text-emerald-900 p-3.5 text-[13px] leading-relaxed flex gap-2.5">${ic("circle-check", "mt-0.5 text-emerald-600")}<div>
+      <b>${esc(ph.Phase_Name || "المرحلة")} ${st === "Completed" ? "انتهت" : "خلصت عندك"}.</b> ${openPh ? `الحجز مفتوح دلوقتي في «${esc(openPh.Phase_Name)}».` : "أول ما تتفتح مرحلة جديدة هتلاقيها هنا وهنبلغك في الجرس 🔔"}
+      ${openPh ? `<button class="text-brand-700 font-semibold underline mr-1" data-act="setPhase" data-id="${esc(openPh.Phase_ID)}">احجز فيها</button>` : ""}</div></div>`;
+  }
   return `<div class="mb-4 rounded-2xl bg-sky-50 ring-1 ring-sky-100 text-sky-900 p-3.5 text-[13px] leading-relaxed flex gap-2.5">${ic("info", "mt-0.5 text-sky-600")}<div>
-    <b>الحجز اتقفل.</b> الكتب اتطلبت من المكتبة بعدد الحجوزات، فأي تقليل أو إلغاء دلوقتي بيبقى عن طريق المسؤول بس وممكن يترفض لو الكتاب اتورّد.
+    <b>الحجز اتقفل.</b> ${st0(ph) === "Closed" ? "الطلبات بتتجمّع دلوقتي عشان تتبعت للمكتبة" : "الكتب اتطلبت من المكتبة بعدد الحجوزات"}، فأي تقليل أو إلغاء دلوقتي بيبقى عن طريق المسؤول بس وممكن يترفض لو الكتاب اتورّد.
     <button class="text-brand-700 font-semibold underline mr-1" data-act="contact">كلّم المسؤول</button> · <button class="text-brand-700 font-semibold underline" data-act="faq">أسئلة شائعة</button></div></div>`;
 }
+const st0 = ph => ph.Effective_Status || ph.Phase_Status;
 
 // ---------------------------------------------------------------- تركيب الإضافات في الصفحات
 const _wrap = (path, fn) => { const base = Router.routes[path]; if (base) Router.add(path, view => { base(view); fn(view); }); };

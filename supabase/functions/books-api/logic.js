@@ -1030,20 +1030,27 @@ const OperationsEngine = {
       if (o && ep > 0 && (o[0] !== ep || o[1] !== cp)) changed[id] = [ep, cp]; });
     if (!Object.keys(changed).length) return res;
     const r = this.repriceItems_(session, changed);
-    if (r.items) res.message = (res.message || "") + " · اتطبّق السعر الجديد على " + r.items + " بند في " + r.res + " حجز" + (r.invoices ? " وأُعيد حساب " + r.invoices + " فاتورة" : "") + ".";
+    if (r.items) res.message = (res.message || "") + " · اتطبّق السعر الجديد على " + r.items + " بند في " + r.res + " حجز" + (r.invoices ? " وأُعيد حساب " + r.invoices + " فاتورة" : "") + "." + (r.delivered.length ? " ⚠️ منها " + r.delivered.length + " بند اتسلّم بالفعل — راجع قائمة المتأثرين." : "");
     res.repriced = r;
     return res;
   },
   repriceItems_: function(session, changed) {
     const S = this.S(), R = FinancialEngine.roundCurrency;
     const done = {}; DB_Engine.getAllRecords(S.PHASES).forEach(p => { if (p.Phase_Status === "Completed") done[Util.str(p.Phase_ID)] = 1; });
-    const all = DB_Engine.getAllRecords(S.RES_ITEMS), resIds = {}, phases = {}, log = [];
+    const all = DB_Engine.getAllRecords(S.RES_ITEMS), resIds = {}, phases = {}, log = [], delivered = [];
+    const emps = {}; DB_Engine.getAllRecords(S.EMPLOYEES).forEach(e => emps[Util.str(e.Emp_ID)] = e);
+    const bks = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => bks[Util.str(b.Book_ID)] = b);
     let n = 0;
     all.forEach(i => {
       const c = changed[Util.str(i.Book_ID)];
       if (!c || this.isCancelledItem_(i) || done[Util.str(i.Phase_ID)]) return;
       if (Util.num(i.Unit_Emp_Price) === c[0] && Util.num(i.Unit_Cover_Price) === c[1]) return;
       log.push([i.Res_Item_ID, Util.num(i.Unit_Emp_Price), c[0]]);
+      const dq = Util.num(i.Delivered_Qty) - Util.num(i.Returned_Qty);
+      if (dq > 0) { const e = emps[Util.str(i.Emp_ID)] || {}, b = bks[Util.str(i.Book_ID)] || {};
+        delivered.push({ empId: Util.str(i.Emp_ID), name: Util.str(e.Full_Name), mobile: Util.str(e.Mobile), phaseId: Util.str(i.Phase_ID), bookId: Util.str(i.Book_ID),
+          book: [b.Publisher, b.Subject, b.Grade].filter(Boolean).join(" — ") || Util.str(b.Book_Name), ben: Util.str(i.Beneficiary), qty: dq,
+          oldPrice: Util.num(i.Unit_Emp_Price), newPrice: c[0], diff: R(dq * (c[0] - Util.num(i.Unit_Emp_Price))), invId: "EINV-" + Util.str(i.Phase_ID) + "-" + Util.str(i.Emp_ID) }); }
       i.Unit_Emp_Price = c[0]; i.Unit_Cover_Price = c[1];
       const billable = Math.max(Util.num(i.Allocated_Qty), Util.num(i.Delivered_Qty)) - Util.num(i.Returned_Qty);
       i.Total_Emp_Line_Amount = R((Util.num(i.Allocated_Qty) || Util.num(i.Delivered_Qty) ? billable : Util.num(i.Requested_Qty)) * c[0]);
@@ -1059,8 +1066,11 @@ const OperationsEngine = {
     });
     const before = DB_Engine.getAllRecords(S.EMP_INVOICES).filter(v => phases[Util.str(v.Phase_ID)]).length;
     Object.keys(phases).forEach(ph => this.syncEmployeeInvoicesForPhase_(ph));
-    DB_Engine.logAudit(session.userId, session.role, "Catalog", "REPRICE_RESERVATIONS", Object.keys(changed).join(","), null, { items: n, sample: log.slice(0, 50) });
-    return { items: n, res: Object.keys(resIds).length, invoices: before, phases: Object.keys(phases) };
+    DB_Engine.logAudit(session.userId, session.role, "Catalog", "REPRICE_RESERVATIONS", Object.keys(changed).join(","), null, { items: n, delivered: delivered.length, sample: log.slice(0, 50) });
+    // أرصدة الفواتير بعد إعادة الحساب لكل من اتسلّم كتاب اتغير سعره
+    const invNow = {}; DB_Engine.getAllRecords(S.EMP_INVOICES).forEach(v => invNow[v.Emp_Inv_ID] = v);
+    delivered.forEach(d => { const v = invNow[d.invId] || {}; d.remaining = Util.num(v.Remaining_Balance); d.credit = Util.num(v.Credit_Balance); });
+    return { items: n, res: Object.keys(resIds).length, invoices: before, phases: Object.keys(phases), delivered: delivered };
   },
 
   inventoryRow_: function(session, phaseId, bookId, type, qty, cost, ref, notes) {
