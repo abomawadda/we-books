@@ -1103,3 +1103,65 @@ _wrap("/e/me", view => {
   }
 });
 
+// ================================================================ المرحلة الثالثة: التنبيهات الذكية للموظف (تذكير قبل القفل + قرار تعديل البيانات + جاهزية الطرد)
+const HR_REQ_SEEN = "wb_hr_req_seen";
+const hrReqSeen = () => { try { return JSON.parse(localStorage.getItem(HR_REQ_SEEN) || "{}"); } catch (_) { return {}; } };
+const _notifListP3 = Notif.list;
+Notif.list = function () {
+  const out = _notifListP3.call(Notif);
+  if (!(APP.user && APP.user.userType === "EMPLOYEE" && APP.emp)) return out;
+  const r = APP.emp, ph = r.activePhase || {};
+  // 1) تذكير ذكي قبل قفل الحجز لمن سجّل أبناءه ولم يحجز بعد
+  if (ph.Booking_Open && myKids().length > 0 && !Emp.activeItems().length) {
+    const d = Emp.daysLeft();
+    if (d !== null && d <= 2) {
+      out.unshift({ id: "nudge-close-" + ph.Phase_ID + "-" + d, icon: "clock", tone: "amber", title: d <= 0 ? "اليوم آخر يوم للحجز! ⏳" : `باقي ${d === 1 ? "يوم واحد" : "يومان"} على قفل الحجز ⏳`, body: `أبناؤك مسجلون (${myKids().length}) ولم تسجّل حجزك بعد — احجز في دقيقة`, href: "#/e/books" });
+    }
+  }
+  // 2) إشعار جاهزية الطرد المغلّف على الشباك
+  const sc = typeof parseSched === "function" ? parseSched((r.settings || {}).PICKUP_SCHEDULE) : null;
+  if (sc && sc.packed && sc.packed[APP.user.empId]) {
+    out.unshift({ id: "packed-" + sc.packed[APP.user.empId], icon: "package-check", tone: "green", title: "طرد كتبك مغلّف وجاهز على الشباك ✅", body: "يمكنك الحضور للاستلام مباشرة بدون انتظار", href: "#/e/orders" });
+  }
+  // 3) قرار الإدارة على طلب تعديل بيانات ملف الموظف
+  (r.myChangeRequests || []).filter(x => x.Status === "Approved" || x.Status === "Rejected").forEach(x => {
+    const okd = x.Status === "Approved";
+    out.unshift({ id: "hrreq-" + x.Req_ID + "-" + x.Status, icon: okd ? "circle-check" : "circle-x", tone: okd ? "green" : "red", title: okd ? "تم اعتماد تعديل بياناتك الشخصي ✅" : "لم يُعتمد طلب تعديل بياناتك", body: x.Review_Note || (okd ? "تم تحديث ملفك بنجاح في المنظومة" : "راجع الإدارة للتفاصيل"), href: "#/e/me" });
+  });
+  return out;
+};
+_wrap("/e/home", view => {
+  const r = APP.emp || {}, ph = r.activePhase || {};
+  const nudges = [];
+  // بطاقة تذكير ذكي لمن سجّل أبناءه ولم يحجز بعد قبل قفل الحجز بـ 48 ساعة
+  if (ph.Booking_Open && myKids().length > 0 && !Emp.activeItems().length) {
+    const d = Emp.daysLeft();
+    if (d !== null && d <= 2) {
+      nudges.push(`<section class="card p-4 mb-3 ring-2 ring-amber-300 bg-amber-50/60 flex items-center gap-3">
+        <span class="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center text-xl shrink-0">⏳</span>
+        <div class="flex-1 min-w-0">
+          <b class="block text-[14px] text-amber-950">${d <= 0 ? "النهارده آخر يوم للحجز!" : `باقي ${d === 1 ? "يوم واحد" : "يومان"} على قفل «${esc(ph.Phase_Name || "الحجز")}»`}</b>
+          <div class="text-[12px] text-amber-900/80 mt-0.5">أبناؤك مسجلون بالفعل (${myKids().length}) — كتبهم جاهزة بضغطة واحدة!</div>
+        </div>
+        <button type="button" class="btn btn-primary btn-xs shrink-0" data-act="wizStart">احجز الآن</button>
+      </section>`);
+    }
+  }
+  // إشعار قرار الإدارة على طلب تعديل البيانات
+  const seen = hrReqSeen();
+  (r.myChangeRequests || []).filter(x => (x.Status === "Approved" || x.Status === "Rejected") && !seen[x.Req_ID + "@" + x.Status]).forEach(x => {
+    const okd = x.Status === "Approved";
+    nudges.push(`<section class="card p-4 mb-3 ring-2 ${okd ? "ring-emerald-200 bg-emerald-50/50" : "ring-rose-200 bg-rose-50/50"} flex items-start gap-3">
+      <span class="text-[26px]">${okd ? "✅" : "ℹ️"}</span>
+      <div class="flex-1 min-w-0">
+        <b class="text-[14px] ${okd ? "text-emerald-900" : "text-rose-900"}">${okd ? "تم اعتماد وتطبيق تعديل بيانات ملفك الشخصي" : "لم يُعتمد طلب تعديل بياناتك"}</b>
+        ${x.Review_Note ? `<div class="text-[12px] text-slate-600 mt-0.5">ملاحظة الإدارة: ${esc(x.Review_Note)}</div>` : ""}
+        <div class="flex gap-2 mt-2"><a href="#/e/me" class="btn btn-outline btn-xs !bg-white">عرض حسابي</a><button type="button" class="btn btn-primary btn-xs" data-act="hrReqSeen" data-id="${esc(x.Req_ID + "@" + x.Status)}">تمام</button></div>
+      </div>
+    </section>`);
+  });
+  if (nudges.length) afterHead(view, nudges.join(""));
+});
+on("hrReqSeen", k => { const s = hrReqSeen(); s[k] = 1; try { localStorage.setItem(HR_REQ_SEEN, JSON.stringify(s)); } catch (_) {} Router.render(); });
+
+

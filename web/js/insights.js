@@ -143,6 +143,15 @@ function pplBody() {
       <div class="flex flex-wrap gap-2 mb-3">${Object.keys(cnt).map(k => `<span class="rounded-full bg-amber-50 text-amber-800 ring-1 ring-amber-200 px-3 py-1 text-[12.5px] font-semibold">ينقصه ${esc(k)}: <b class="num">${fmt(cnt[k])}</b></span>`).join("")}</div>`
       + UI.table([{ t: "العضو", v: r => `<b>${esc(r.name || "—")}</b><div class="text-[11px] text-slate-400 num">${esc(r.job_id || "")}</div>` }, { t: "جهة العمل", v: r => esc(r.workplace || "") }, { t: "الناقص", v: r => `<span class="text-amber-700 font-semibold">${esc(r.missing)}</span>` }], rows, { empty: "لا أحد — كل الأعضاء بياناتهم مكتملة 🎉", emptyIcon: "users" });
   }
+  if (PPL.tab === "kids") {
+    const all = nonBookers().filter(e => empKids(e).length > 0), q = PPL.q.trim();
+    const rows = all.filter(e => (!PPL.dept || (e.Department || "غير محدد") === PPL.dept) && (!q || (e.Full_Name + " " + e.Emp_ID + " " + e.Mobile).includes(q)));
+    return `<div class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 text-amber-900 p-3 text-[13px] mb-3 flex gap-2">${ic("sparkles", "mt-0.5 text-amber-600")}<span>هؤلاء موظفون سجّلوا أبناءهم بالفعل في التطبيق ولم يحجزوا في المرحلة الحالية بعد — هم الأعلى استجابة للتذكير السريع.</span></div>`
+      + UI.table([{ t: "الموظف", v: e => `<b>${empLink(e.Emp_ID, e.Full_Name)}</b><div class="text-[11px] text-slate-400 num">${esc(e.Emp_ID)} · ${esc(e.Department || "")}</div>` },
+        { t: "الأبناء المسجلون", v: e => `<div class="flex flex-wrap gap-1">${empKids(e).map(k => `<span class="pill pill-brand !text-[10.5px]">${esc(k.name || k.label)}${k.grade ? " · " + esc(Doc.shortGrade(k.grade)) : ""}</span>`).join("")}</div>` },
+        { t: "الموبايل", cls: "num", v: e => esc(e.Mobile || "") },
+        { t: "", actions: true, v: e => e.Mobile ? `<a class="btn btn-outline btn-xs !text-emerald-700" target="_blank" rel="noopener" href="${esc(Brand.waLink(e.Mobile, WA_REMIND(e)))}">${ic("message-circle")} ذكّره</a>` : "" }], rows.slice(0, 400), { empty: "كل من سجّل أبناءه حجز بالفعل 🎉", emptyIcon: "users" });
+  }
   const all = nonBookers(), q = PPL.q.trim();
   const depts = {}; all.forEach(e => { const k = e.Department || "غير محدد"; depts[k] = (depts[k] || 0) + 1; });
   let rows = all.filter(e => (!PPL.dept || (e.Department || "غير محدد") === PPL.dept) && (!q || (e.Full_Name + " " + e.Emp_ID + " " + e.Mobile).includes(q)));
@@ -157,10 +166,11 @@ async function loadSkipped() {
   rerenderList("pplBody", pplBody);
 }
 Router.add("/a/people", view => {
-  const nb = nonBookers().length;
+  const nb = nonBookers(), nbKids = nb.filter(e => empKids(e).length > 0).length;
   view.innerHTML = UI.pageHead("متابعة الأعضاء", "من لم يحجز بعد (للتذكير)، ومن لا يستطيع الدخول لنقص بياناته في MyNekaba", `${syncBtn("btn-sm")}<button class="btn btn-outline btn-sm" data-act="pplCsv">${ic("file-spreadsheet")} Excel</button>`)
   + `<div class="card p-3 mb-3 flex flex-wrap items-center gap-2">
-      <button class="btn btn-sm ${PPL.tab === "none" ? "btn-primary" : "btn-outline"}" data-act="pplTab" data-id="none">${ic("user-x")} لم يحجزوا <span class="num">(${fmt(nb)})</span></button>
+      <button class="btn btn-sm ${PPL.tab === "none" ? "btn-primary" : "btn-outline"}" data-act="pplTab" data-id="none">${ic("user-x")} لم يحجزوا <span class="num">(${fmt(nb.length)})</span></button>
+      <button class="btn btn-sm ${PPL.tab === "kids" ? "btn-primary" : "btn-outline"}" data-act="pplTab" data-id="kids">${ic("sparkles")} سجّلوا أبناءهم ولم يحجزوا <span class="num">(${fmt(nbKids)})</span></button>
       <button class="btn btn-sm ${PPL.tab === "skip" ? "btn-primary" : "btn-outline"}" data-act="pplTab" data-id="skip">${ic("user-round-x")} بياناتهم ناقصة${PPL.skipped && PPL.skipped.rows ? ` <span class="num">(${fmt(PPL.skipped.rows.length)})</span>` : ""}</button>
       <div class="flex-1"></div>${searchBox("pplQ", PPL.q, "بحث بالاسم أو الرقم")}</div>
     <div id="pplBody">${pplBody()}</div>`;
@@ -170,13 +180,48 @@ on("pplDept", v => { PPL.dept = v; rerenderList("pplBody", pplBody); });
 on("pplQ", v => { PPL.q = v; rerenderList("pplBody", pplBody); });
 on("pplCsv", () => {
   if (PPL.tab === "skip") return PPL.skipped && PPL.skipped.rows ? exportCSV("أعضاء بياناتهم ناقصة", ["الرقم الوظيفي", "الاسم", "جهة العمل", "الناقص"], PPL.skipped.rows.map(r => [r.job_id, r.name, r.workplace, r.missing])) : toast("القائمة لم تُحمَّل بعد", "warning");
+  if (PPL.tab === "kids") return exportCSV("سجلوا أبناءهم ولم يحجزوا", ["الرقم الوظيفي", "الاسم", "جهة العمل", "الموبايل", "عدد الأبناء"], nonBookers().filter(e => empKids(e).length > 0).map(e => [e.Emp_ID, e.Full_Name, e.Department, e.Mobile, empKids(e).length]));
   exportCSV("لم يحجزوا", ["الرقم الوظيفي", "الاسم", "جهة العمل", "الموبايل"], nonBookers().map(e => [e.Emp_ID, e.Full_Name, e.Department, e.Mobile]));
 });
 
-// ---------------------------------------------------------------- تقارير المدير الإضافية
+// ---------------------------------------------------------------- تقارير المدير الإضافية + التنبؤ بالطلب (R17)
 REPORTS.unshift(["R00", "presentation", "تقرير المجلس", "صفحة واحدة بالأرقام الرئيسية للطباعة"]);
-REPORTS.push(["R15", "building-2", "ربحية الناشرين", "إيراد وتكلفة وهامش كل ناشر"], ["R16", "wand-sparkles", "ماذا لو؟", "أثر تغيير خصم الموظفين على النقابة"]);
+REPORTS.push(["R15", "building-2", "ربحية الناشرين", "إيراد وتكلفة وهامش كل ناشر"], ["R16", "wand-sparkles", "ماذا لو؟", "أثر تغيير خصم الموظفين على النقابة"], ["R17", "trending-up", "التنبؤ بالطلب", "توقع الكميات والميزانية من بيانات الأسرة وقوائم الرغبات"]);
 const WHATIF = { pct: null };
+/** حساب التنبؤ بالطلب للمرحلة القادمة من بيانات الأسرة (بعد الترقية التلقائية) + قوائم الرغبات + الحجوزات التاريخية */
+function demandForecast() {
+  const d = A(), { b } = maps(), gl = (d.catalog && d.catalog.grades) || [];
+  const ord = g => { const i = gl.findIndex(x => x.label === g); return i < 0 ? 99 : i; };
+  const byG = {}, pubByG = {};
+  const ensure = g => (byG[g] = byG[g] || { grade: g, kids: 0, wishQty: 0, wishVal: 0, histQty: 0, histKids: new Set(), avgBooks: 4, avgPrice: 120, topPub: "—" });
+  (d.employees || []).forEach(e => {
+    if (/موقوف|Suspended|Inactive/i.test(e.Employment_Status || "")) return;
+    empKids(e).forEach(k => { if (k.grade) ensure(k.grade).kids++; });
+    let dr = null; try { dr = JSON.parse(e.Cart_Draft || "null"); } catch (_) {}
+    const wl = dr && dr.wishlist && typeof dr.wishlist === "object" ? dr.wishlist : null;
+    if (wl) Object.keys(wl).forEach(bid => { const q = n(wl[bid]), bk = b[bid]; if (!q || !bk || !bk.Grade) return; const row = ensure(bk.Grade); row.wishQty += q; row.wishVal += q * n(bk.Emp_Selling_Price); });
+  });
+  (d.resItems || []).filter(i => !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward").forEach(i => {
+    const bk = b[i.Book_ID]; if (!bk || !bk.Grade) return;
+    const row = ensure(bk.Grade), q = n(i.Requested_Qty);
+    row.histQty += q; row.histKids.add(i.Emp_ID + "|" + (i.Beneficiary || ""));
+    pubByG[bk.Grade] = pubByG[bk.Grade] || {};
+    if (bk.Publisher) pubByG[bk.Grade][bk.Publisher] = (pubByG[bk.Grade][bk.Publisher] || 0) + q;
+  });
+  const catByG = {};
+  (d.books || []).forEach(bk => { if (!bk.Grade || !n(bk.Emp_Selling_Price)) return; (catByG[bk.Grade] = catByG[bk.Grade] || []).push(n(bk.Emp_Selling_Price)); });
+  return Object.values(byG).map(r => {
+    const avgBooks = r.histKids.size ? Math.max(2, Math.round(r.histQty / r.histKids.size)) : 4;
+    const ps = catByG[r.grade] || [];
+    const avgPrice = ps.length ? Math.round(ps.reduce((s, x) => s + x, 0) / ps.length) : 120;
+    const estFromKids = r.kids * avgBooks;
+    const estQty = Math.max(estFromKids, r.wishQty);
+    const estVal = r.wishQty >= estFromKids && r.wishVal > 0 ? Math.round(r.wishVal) : Math.round(estQty * avgPrice);
+    const pm = pubByG[r.grade] || {}, topPub = Object.keys(pm).sort((x, y) => pm[y] - pm[x])[0] || "—";
+    return { grade: r.grade, kids: r.kids, wishQty: r.wishQty, avgBooks, estQty, estVal, topPub };
+  }).filter(r => r.kids > 0 || r.wishQty > 0).sort((x, y) => ord(x.grade) - ord(y.grade) || y.estQty - x.estQty);
+}
+on("forecastCsv", () => exportCSV("التنبؤ-بالطلب-المرحلة-القادمة", ["الصف الدراسي", "الأبناء المسجلون", "قوائم الرغبات (نسخة)", "متوسط كتب الابن", "النسخ المتوقعة", "القيمة التقديرية (ج.م)", "الناشر الأكثر طلباً"], demandForecast().map(r => [r.grade, r.kids, r.wishQty, r.avgBooks, r.estQty, r.estVal, r.topPub])));
 /** مقاييس المرحلة: كل بند محجوز بسعر الكتاب الحالي (بنده إن ثُبِّت) */
 function phaseMoney() {
   const { b } = maps(); let cover = 0, emp = 0, cost = 0, qty = 0, unpriced = 0;
@@ -193,11 +238,33 @@ function phaseMoney() {
 const _renderReport = renderReport;
 renderReport = async function () {
   const sel = Rep.sel, area = $("#repArea");
-  if (!["R00", "R15", "R16"].includes(sel)) return _renderReport();
+  if (!["R00", "R15", "R16", "R17"].includes(sel)) return _renderReport();
   if (!A() || !area) return;
   const M = phaseMoney(), ph = phaseObj(), d = A(), { e, b } = maps();
   let h = "";
-  if (sel === "R00") {
+  if (sel === "R17") {
+    const rows = demandForecast();
+    const totKids = sum(rows, "kids"), totWish = sum(rows, "wishQty"), totEst = sum(rows, "estQty"), totVal = sum(rows, "estVal");
+    h = `<div class="flex flex-wrap items-center justify-between gap-2 mb-3">
+        <p class="text-[13px] text-slate-600">تقدير تلقائي للكميات المتوقعة للمرحلة القادمة بناءً على <b>بيانات الأسرة بعد الترقية السنوية</b> + <b>قوائم الرغبات المحفوظة</b> + <b>متوسط الحجز التاريخي</b> — للتفاوض المبكر مع المكتبات.</p>
+        <button type="button" class="btn btn-outline btn-sm" data-act="forecastCsv">${ic("file-spreadsheet")} تصدير التنبؤ Excel</button>
+      </div>
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        ${UI.kpi("أبناء مسجلون", fmt(totKids), { icon: "users", tone: "brand" })}
+        ${UI.kpi("قوائم الرغبات", fmt(totWish), { icon: "bookmark", tone: "amber", foot: "نسخة محفوظة مسبقاً" })}
+        ${UI.kpi("النسخ المتوقعة", fmt(totEst), { icon: "book-open", tone: "blue" })}
+        ${UI.kpi("الميزانية التقديرية", money(totVal), { icon: "trending-up", tone: "green" })}
+      </div>`
+      + UI.table([
+        { t: "الصف الدراسي", v: r => `<b>${esc(r.grade)}</b>` },
+        { t: "الأبناء", cls: "num", v: r => fmt(r.kids) },
+        { t: "قوائم الرغبات", cls: "num", v: r => r.wishQty ? `<span class="pill pill-amber">${fmt(r.wishQty)}</span>` : "0" },
+        { t: "متوسط كتب/ابن", cls: "num", v: r => fmt(r.avgBooks) },
+        { t: "النسخ المتوقعة", cls: "num", v: r => `<b class="text-brand-800">${fmt(r.estQty)}</b>` },
+        { t: "القيمة التقديرية", cls: "num", v: r => fmt(r.estVal) + " ج.م" },
+        { t: "الناشر المفضل", v: r => `<span class="pill pill-gray">${esc(r.topPub)}</span>` }
+      ], rows, { empty: "لا توجد بيانات أسر أو قوائم رغبات كافية للتنبؤ بعد", emptyIcon: "trending-up" });
+  } else if (sel === "R00") {
     const heads = d.resHeaders.filter(x => x.Phase_ID === APP.phaseId && x.Res_Status !== "Cancelled"), invs = d.empInvoices.filter(i => i.Phase_ID === APP.phaseId);
     const paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance"), exp = d.expenses.filter(x => x.Phase_ID === APP.phaseId).reduce((s, x) => s + n(x.Amount), 0);
     const kids = {}; phaseItems().forEach(i => { const k = (b[i.Book_ID] || {}).Stage || "أخرى"; kids[k] = (kids[k] || 0) + n(i.Requested_Qty); });
