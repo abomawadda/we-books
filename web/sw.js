@@ -1,6 +1,6 @@
 /* Service worker: يخزّن ملفات الواجهة فقط ليفتح التطبيق بسرعة. طلبات الخادم (Supabase) لا تُخزَّن أبداً. */
-const CACHE = "we-books-v3.45.1";
-const SHELL = ["./", "index.html", "app.css?v=3.45.1", "config.js", "js/icons.js?v=3.45.1", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.45.1", "js/core.js?v=3.45.1", "js/docs.js?v=3.45.1", "js/app.js?v=3.45.1", "js/employee.js?v=3.45.1", "js/pickup.js?v=3.45.1", "js/help.js?v=3.45.1", "js/entry.js?v=3.45.1", "js/emp-extra.js?v=3.45.1", "js/admin.js?v=3.45.1", "js/reports.js?v=3.45.1", "js/insights.js?v=3.45.1", "js/admin-pickup.js?v=3.45.1", "js/close.js?v=3.45.1", "js/books-pro.js?v=3.45.1", "js/vendor/qrcode.js",
+const CACHE = "we-books-v3.46.0";
+const SHELL = ["./", "index.html", "app.css?v=3.46.0", "config.js", "js/icons.js?v=3.46.0", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.46.0", "js/core.js?v=3.46.0", "js/docs.js?v=3.46.0", "js/app.js?v=3.46.0", "js/employee.js?v=3.46.0", "js/pickup.js?v=3.46.0", "js/help.js?v=3.46.0", "js/entry.js?v=3.46.0", "js/emp-extra.js?v=3.46.0", "js/admin.js?v=3.46.0", "js/reports.js?v=3.46.0", "js/insights.js?v=3.46.0", "js/admin-pickup.js?v=3.46.0", "js/close.js?v=3.46.0", "js/books-pro.js?v=3.46.0", "js/vendor/qrcode.js",
   "fonts/cairo-arabic-400-normal.woff2", "fonts/cairo-arabic-700-normal.woff2", "icons/app-192.png", "icons/logo.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
@@ -13,4 +13,17 @@ self.addEventListener("fetch", e => {
     return;
   }
   e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => { if (res.ok) { const c = res.clone(); caches.open(CACHE).then(x => x.put(e.request, c)); } return res; })));
+});
+self.addEventListener("push", e => {
+  let d = { title: "مبادرة الكتب المخفضة", body: "لديك تحديث جديد في حسابك", url: "./#/e/home" };
+  try { if (e.data) Object.assign(d, e.data.json()); } catch (_) { if (e.data) d.body = e.data.text(); }
+  e.waitUntil(self.registration.showNotification(d.title, { body: d.body, icon: "icons/app-192.png", badge: "icons/app-192.png", dir: "rtl", lang: "ar", data: { url: d.url || "./#/e/home" } }));
+});
+self.addEventListener("notificationclick", e => {
+  e.notification.close();
+  const target = (e.notification.data && e.notification.data.url) || "./#/e/home";
+  e.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then(list => {
+    for (const c of list) { if ("focus" in c) { c.focus(); if (c.navigate) c.navigate(target).catch(() => {}); return; } }
+    if (clients.openWindow) return clients.openWindow(target);
+  }));
 });

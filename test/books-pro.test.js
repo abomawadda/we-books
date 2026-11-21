@@ -351,4 +351,31 @@ assert.strictEqual(schedObj.bookings['1001'], 0, 'slot booking persisted');
 assert.ok(schedObj.packed['1001'], 'parcel packed timestamp persisted');
 checks += 5;
 
+// ============================================================================
+// الاختبار الخامس عشر: طابور تأكيدات التحويل + النسخ الاحتياطي الكامل + بوابة المكتبات (v3.46.0)
+// ============================================================================
+const empInvs = rows(S.EMP_INVOICES).filter(i => i.Emp_ID === '1001');
+const targetInvId = empInvs[0] ? empInvs[0].Emp_Invoice_ID : '';
+if (targetInvId) {
+  const claimRes = ok(api('SUBMIT_PAYMENT_CLAIM', { invId: targetInvId, amount: 25, method: 'InstaPay', ref: 'IP-998877', note: 'تحويل تجريبي' }, empTok), 'employee submits payment claim');
+  assert.strictEqual(claimRes.claim.status, 'Pending');
+  const revRes = ok(api('REVIEW_PAYMENT_CLAIM', { claimId: claimRes.claim.id, decision: 'Approved', note: 'تمت المطابقة' }, A), 'admin approves payment claim');
+  assert.strictEqual(revRes.claim.status, 'Approved');
+  assert.ok(revRes.receiptNo, 'official receipt issued on claim approval');
+  checks += 3;
+}
+const bkpRes = ok(api('EXPORT_FULL_BACKUP', {}, A), 'admin exports full JSON backup');
+assert.ok(Array.isArray(bkpRes.backup.employees) && bkpRes.backup.employees.length > 0, 'backup includes employees');
+assert.ok(Array.isArray(bkpRes.backup.books) && bkpRes.backup.books.length > 0, 'backup includes books');
+assert.ok(Array.isArray(bkpRes.backup.phases), 'backup includes phases');
+const supRow = rows(S.SUPPLIERS)[0];
+const phRow = rows(S.PHASES)[0];
+const supLink = ok(api('CREATE_SUPPLIER_LINK', { supplierId: supRow.Supplier_ID, phaseId: phRow.Phase_ID }, coord), 'coordinator generates supplier portal token');
+assert.ok(supLink.token && supLink.token.startsWith('SUP-'), 'supplier portal token generated');
+const supPortal1 = ok(api('GET_SUPPLIER_PORTAL', { supplierToken: supLink.token }, ''), 'supplier opens portal with public token (no login)');
+assert.strictEqual(supPortal1.supplierName, supRow.Supplier_Name);
+ok(api('SUPPLIER_UPDATE_PO_ITEM', { supplierToken: supLink.token, bookId: bk1.Book_ID, status: 'Partial', availQty: 7, shipDate: '2028-12-01', note: 'متاح 7 نسخ فقط' }, ''), 'supplier updates book availability');
+checks += 6;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);
+
