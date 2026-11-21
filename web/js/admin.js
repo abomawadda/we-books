@@ -4156,8 +4156,8 @@ function empKids(emp) {
     const isOwn = !k.rel;
     const label = (k.name || "").trim() || (isOwn ? (k.gender === "g" ? "ابنته" : "ابنه") + (ownIdx ? " " + (ownIdx + 1) : "") : "");
     if (isOwn) ownIdx++;
-    return Object.assign({}, k, { grade, label });
-  }).filter(k => k.grade);
+    return Object.assign({}, k, { grade, label: label || (k.rel ? k.rel : "فرد") });
+  }).filter(k => k.name || k.grade);
 }
 function itemChildLabel(kids, book, item) {
   if (item && item.Beneficiary) return "";
@@ -4174,7 +4174,8 @@ function epBody(id) {
   const items = d.resItems.filter(i => i.Emp_ID === id && n(i.Requested_Qty) > 0 && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
   const invs = d.empInvoices.filter(i => i.Emp_ID === id), pays = d.empPayments.filter(p => p.Emp_ID === id);
   const insts = d.installments.filter(i => i.Emp_ID === id).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date)));
-  const billed = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance");
+  const billed = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance"), credit = sum(invs, "Credit_Balance");
+  const netBal = Math.round((rem - credit) * 100) / 100, netDue = Math.max(0, netBal), netCr = Math.max(0, -netBal);
   const overdue = insts.filter(i => i.Status === "Overdue").reduce((s, i) => s + n(i.Remaining_Inst_Amount), 0);
   const rels = [...new Set(items.map(i => i.Beneficiary).filter(Boolean))];
   const t = Q.epTab;
@@ -4312,6 +4313,43 @@ function epBody(id) {
     </div>`;
   }
 
+  if (t === "family") {
+    const canEditFam = can("SAVE_EMPLOYEE_FAMILY");
+    const famCards = kids.map((k, idx) => {
+      const isGirl = k.gender === "g";
+      const relLbl = k.rel || (isGirl ? "ابنة" : "ابن");
+      return `<div class="rounded-2xl bg-white ring-1 ring-slate-200/80 p-3.5 flex items-center gap-3 shadow-2xs">
+        <span class="w-11 h-11 rounded-2xl ${isGirl ? "bg-rose-50 text-rose-600" : "bg-brand-50 text-brand-700"} flex items-center justify-center shrink-0 text-lg">${isGirl ? "👧" : "👦"}</span>
+        <div class="flex-1 min-w-0">
+          <div class="flex flex-wrap items-center gap-1.5">
+            <b class="text-[14px] text-slate-900">${esc(k.name || k.label)}</b>
+            <span class="pill ${k.rel ? "pill-blue" : "pill-brand"} !text-[10.5px]">${esc(relLbl)}</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5 mt-1 text-[11.5px] text-slate-500">
+            ${k.grade ? `<span class="inline-flex items-center gap-1 rounded-md bg-slate-100 px-2 py-0.5 text-slate-700 font-semibold">${ic("graduation-cap", "!w-3 !h-3")} ${esc(k.grade)}</span>` : `<span class="text-slate-400">غير مقيد بصف دراسي</span>`}
+            ${k.type ? `<span class="rounded-md bg-slate-100 px-2 py-0.5">${esc(k.type)}</span>` : ""}
+            ${k.track ? `<span class="rounded-md bg-sky-50 text-sky-700 px-2 py-0.5 font-semibold">${esc(k.track)}</span>` : ""}
+          </div>
+        </div>
+        ${canEditFam ? `<div class="flex items-center gap-1 shrink-0">
+          <button type="button" class="icon-btn w-8 h-8" data-act="empFamForm" data-id="${esc(id)}|${idx}" title="تعديل">${ic("pencil")}</button>
+          <button type="button" class="icon-btn w-8 h-8 text-rose-600" data-act="empFamDel" data-id="${esc(id)}|${idx}" title="حذف">${ic("trash-2")}</button>
+        </div>` : ""}
+      </div>`;
+    }).join("");
+    body = `<div class="space-y-3.5">
+      <div class="flex flex-wrap items-center justify-between gap-2 rounded-2xl bg-slate-50 ring-1 ring-slate-200/80 px-3.5 py-2.5">
+        <div>
+          <div class="text-xs font-bold text-slate-800">${ic("users", "inline -mt-0.5 text-brand-600")} أفراد الأسرة والأبناء (${fmt(kids.length)})</div>
+          <div class="text-[11.5px] text-slate-500 mt-0.5">أي إضافة أو تعديل هنا يتزامن تلقائياً مع «أبنائي وأسرتي» في حساب الموظف والعكس.</div>
+        </div>
+        ${lockedBtn("SAVE_EMPLOYEE_FAMILY", `<button type="button" class="btn btn-primary btn-xs" data-act="empFamForm" data-id="${esc(id)}|-1">${ic("plus")} إضافة فرد للأسرة</button>`)}
+      </div>
+      ${kids.length ? `<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${famCards}</div>`
+        : UI.empty("users", "لم يُسجَّل أفراد أسرة بعد", "أضف أبناء أو أفراد أسرة الموظف هنا ليظهروا له تلقائياً عند الحجز.", canEditFam ? `<button type="button" class="btn btn-primary btn-sm mt-3" data-act="empFamForm" data-id="${esc(id)}|-1">${ic("plus")} إضافة أول فرد</button>` : "")}
+    </div>`;
+  }
+
   return `<div class="hero rounded-3xl text-white p-4 sm:p-5 mb-4 shadow-sm">
       <div class="flex flex-wrap items-center gap-3.5">
         ${UI.avatar(e.Full_Name || id, "w-14 h-14 text-lg ring-2 ring-white/25")}
@@ -4333,17 +4371,53 @@ function epBody(id) {
         <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">النسخ المحجوزة</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(sum(items, "Requested_Qty"))}</div></div>
         <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">إجمالي الفواتير</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(billed)}</div></div>
         <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">المسدد</div><div class="font-bold text-sm num text-emerald-200 mt-0.5">${fmt(paid)}</div></div>
-        <div class="rounded-xl px-2 py-2" style="background:${rem ? "rgba(244,63,94,.32)" : "rgba(255,255,255,.10)"}"><div class="text-[11px] text-brand-200">${overdue ? "المتبقي (متأخر)" : "المتبقي"}</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(rem)}</div></div>
+        <div class="rounded-xl px-2 py-2" style="background:${netCr > 0.004 ? "rgba(16,185,129,.35)" : netDue > 0.004 ? "rgba(244,63,94,.32)" : "rgba(255,255,255,.10)"}"><div class="text-[11px] text-brand-200">${netCr > 0.004 ? "صافي رصيد له" : overdue ? "صافي عليه (متأخر)" : "صافي المتبقي"}</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(netCr > 0.004 ? netCr : netDue)}</div>${credit > 0 && rem > 0 ? `<div class="text-[10px] text-brand-100 num mt-0.5">عليه ${fmt(rem)} − له ${fmt(credit)}</div>` : ""}</div>
       </div>
     </div>
-    <div class="scroll-x !mx-0 !px-0 pb-2.5 mb-3.5 border-b border-slate-200/80">${tab("info", "ملف الموارد البشرية", myPendingReqs.length || undefined)}${tab("res", "ملف الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
+    <div class="scroll-x !mx-0 !px-0 pb-2.5 mb-3.5 border-b border-slate-200/80">${tab("info", "ملف الموارد البشرية", myPendingReqs.length || undefined)}${tab("family", "الأسرة", kids.length)}${tab("res", "ملف الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
 }
 on("epEditRes", id => { if (Q.epM) Q.epM.close(); setTimeout(() => ACTIONS.resEdit(id), 50); });
 on("copyTxt", v => { if (navigator.clipboard) navigator.clipboard.writeText(String(v || "")).then(() => toast("تم النسخ بنجاح", "success")); });
+on("empFamForm", async arg => {
+  const [empId, idxStr] = String(arg || "").split("|"), idx = parseInt(idxStr, 10);
+  const e = maps().e[empId]; if (!e) return;
+  const list = empKids(e).map(k => ({ name: k.name || "", gender: k.gender === "g" ? "g" : "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "" }));
+  const cur = idx >= 0 && list[idx] ? list[idx] : { name: "", gender: "b", grade: "", type: "", track: "", rel: "" };
+  const grades = ((A().catalog && A().catalog.grades) || []).map(g => [g.label, g.label]);
+  const v = await UI.form({
+    title: idx >= 0 ? "تعديل فرد في الأسرة" : "إضافة فرد للأسرة",
+    sub: e.Full_Name || empId,
+    intro: "يتم حفظ البيانات ومزامنتها تلقائياً في حساب الموظف «أبنائي وأسرتي».",
+    ok: "حفظ ومزامنة", icon: "users",
+    fields: [
+      { name: "name", label: "الاسم", value: cur.name, required: true, placeholder: "مثال: يوسف أحمد" },
+      { name: "rel", label: "صلة القرابة", type: "select", value: cur.rel, options: [["", "ابن / ابنة"], ["زوج / زوجة", "زوج / زوجة"], ["حفيد / حفيدة", "حفيد / حفيدة"], ["ابن أخ / أخت", "ابن أخ / أخت"], ["قريب آخر", "قريب آخر"]] },
+      { name: "gender", label: "النوع", type: "select", value: cur.gender, options: [["b", "ذكر"], ["g", "أنثى"]] },
+      { name: "grade", label: "الصف الدراسي (إن وجد)", type: "select", value: cur.grade, options: [["", "— غير مقيد بصف دراسي —"], ...grades] },
+      { name: "type", label: "نوع التعليم", type: "select", value: cur.type, options: [["", "—"], ["عربي", "عربي"], ["لغات", "لغات"], ["أزهر", "أزهر"]] },
+      { name: "track", label: "الشعبة (للثانوي)", type: "select", value: cur.track, options: [["", "—"], ["علمي", "علمي"], ["علمي علوم", "علمي علوم"], ["علمي رياضة", "علمي رياضة"], ["أدبي", "أدبي"], ["بكالوريا", "بكالوريا"]] }
+    ]
+  });
+  if (!v) return;
+  const item = { name: String(v.name || "").trim(), gender: v.gender === "g" ? "g" : "b", grade: String(v.grade || "").trim(), type: String(v.type || "").trim(), track: String(v.track || "").trim(), rel: String(v.rel || "").trim() };
+  if (idx >= 0) list[idx] = item; else list.push(item);
+  const r = await act("SAVE_EMPLOYEE_FAMILY", { empId, kids: list });
+  if (r && r.success) { const el = $("#epBody"); if (el) el.innerHTML = epBody(empId); }
+});
+on("empFamDel", async arg => {
+  const [empId, idxStr] = String(arg || "").split("|"), idx = parseInt(idxStr, 10);
+  const e = maps().e[empId]; if (!e) return;
+  const list = empKids(e).map(k => ({ name: k.name || "", gender: k.gender === "g" ? "g" : "b", grade: k.grade || "", type: k.type || "", track: k.track || "", rel: k.rel || "" }));
+  const target = list[idx]; if (!target) return;
+  if (!await UI.confirm({ title: "حذف فرد من الأسرة", message: `هل تريد حذف «${target.name || target.grade || "الفرد"}» من ملف أسرة ${e.Full_Name || empId}؟ سيتحدث حساب الموظف تلقائياً.`, ok: "حذف", tone: "danger" })) return;
+  list.splice(idx, 1);
+  const r = await act("SAVE_EMPLOYEE_FAMILY", { empId, kids: list });
+  if (r && r.success) { const el = $("#epBody"); if (el) el.innerHTML = epBody(empId); }
+});
 
 // ============================================================ سجل التعديلات
 const AUD_MOD = { Reservations: "الحجوزات", ReservationItems: "بنود الحجز", Invoices: "الفواتير", Payments: "الإيصالات", Installments: "الأقساط", Catalog: "الكتب", Settings: "الإعدادات", Phases: "المراحل", PO_Snapshot: "طلب التوريد", Supplier_Invoices: "فواتير المكتبة", Supplier: "حساب المكتبة", Suppliers: "المكتبات", Allocation: "التوزيع", Delivery: "التسليم", Returns: "المرتجعات", Inventory: "المخزن", Expenses: "المصروفات", Cash: "الخزينة", Employees: "الموظفون", Auth: "الدخول" };
-const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", DELETE_BOOK: "حذف كتاب من الكتالوج", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", SAVE_EMPLOYEE: "إضافة/تعديل ملف موظف", DELETE_EMPLOYEE: "حذف موظف", TOGGLE_EMP_EDIT_PERMIT: "تعديل تصريح بيانات موظف", SUBMIT_EMP_CHANGE_REQUEST: "طلب تعديل بيانات من الموظف", APPROVE_EMP_CHANGE_REQUEST: "اعتماد طلب تعديل موظف", REJECT_EMP_CHANGE_REQUEST: "رفض طلب تعديل موظف", CHANGE_PASSWORD: "تغيير كلمة المرور" };
+const AUD_ACT = { SAVE_RESERVATION: "حفظ حجز (الموظف)", SAVE_RESERVATION_ON_BEHALF: "حجز/تعديل من الإدارة", ADD_NEW: "إضافة كتاب", INCREASE_QTY: "زيادة كمية", DECREASE_QTY: "تخفيض كمية", REMOVE_ITEM: "حذف كتاب", CANCEL_UNDELIVERED: "إلغاء كمية لم تُسلَّم", ADJUST_INVOICE: "تعديل فاتورة", DELETE_INVOICE: "حذف فاتورة", COLLECT: "تحصيل", VOID: "إلغاء إيصال", REFUND: "رد رصيد", CUSTOMIZE_PLAN: "تعديل خطة الأقساط", SAVE_BOOK: "حفظ كتاب", DELETE_BOOK: "حذف كتاب من الكتالوج", BULK_IMPORT_BOOKS: "استيراد كتب", SAVE_SETTING: "تعديل إعداد", SAVE_ROLE_PERMISSIONS: "تعديل الصلاحيات", SAVE_PHASE: "حفظ مرحلة", DELETE_PHASE: "حذف مرحلة", SET_STATUS: "تغيير حالة المرحلة", FREEZE_PO: "تجميد الحصر", CANCEL_BACKORDER: "إلغاء نواقص", APPROVE_INVOICE: "اعتماد فاتورة مكتبة", PAYMENT: "سداد للمكتبة", SAVE_SUPPLIER: "حفظ مكتبة", DELETE_SUPPLIER: "حذف مكتبة", RUN_FIFO: "تشغيل التوزيع", MANUAL_EXCEPTION: "تعديل توزيع يدوي", CARRY_WAITLIST: "ترحيل المنتظرين", EMP_RETURN: "مرتجع موظف", SUPPLIER_RETURN: "مرتجع للمكتبة", ADJUST: "تسوية مخزن", RECORD: "تسجيل مصروف", CLOSE_DAY: "إقفال الخزينة", BULK_IMPORT: "استيراد موظفين", SAVE_EMPLOYEE: "إضافة/تعديل ملف موظف", DELETE_EMPLOYEE: "حذف موظف", SAVE_EMPLOYEE_FAMILY: "تحديث أسرة موظف", TOGGLE_EMP_EDIT_PERMIT: "تعديل تصريح بيانات موظف", SUBMIT_EMP_CHANGE_REQUEST: "طلب تعديل بيانات من الموظف", APPROVE_EMP_CHANGE_REQUEST: "اعتماد طلب تعديل موظف", REJECT_EMP_CHANGE_REQUEST: "رفض طلب تعديل موظف", CHANGE_PASSWORD: "تغيير كلمة المرور" };
 const AUD_F = { Res_ID: "رقم الحجز", Phase_ID: "المرحلة", Emp_ID: "الموظف", Created_At: "أُنشئ", Last_Modified_At: "آخر تعديل", Payment_Method_Selected: "طريقة السداد", Down_Payment_Type: "نوع المقدم", Down_Payment_Input: "المقدم", Calculated_Down_Payment: "قيمة المقدم", Installment_Count: "عدد الأقساط", Installment_Value: "القسط", Total_Cover_Value: "الإجمالي قبل الخصم", Total_Emp_Value: "الإجمالي", Res_Status: "حالة الحجز", Invoice_Adjustment: "تعديل الفاتورة", Adjustment_Reason: "سبب التعديل", Created_By: "أنشأه", Setting_Value: "القيمة", v: "القيمة", reason: "السبب", Book_Name: "الكتاب", Cover_Price: "قبل الخصم", Emp_Selling_Price: "سعر الموظف", Book_Status: "الحالة", Phase_Status: "حالة المرحلة", Amount: "المبلغ", Is_Voided: "ملغى", Void_Reason: "سبب الإلغاء", Net_Final_Invoice_Amount: "صافي الفاتورة", Remaining_Balance: "المتبقي", Total_Paid_Amount: "المسدد", Invoice_Status: "حالة الفاتورة" };
 const AUD_TONE = a => /DELETE|VOID|REMOVE|CANCEL/.test(a) ? "red" : /ADJUST|DECREASE|CUSTOM|SET_STATUS|PERMISSION|SETTING/.test(a) ? "amber" : /ON_BEHALF|MANUAL/.test(a) ? "blue" : "green";
 Q.aud = Q.aud || { module: "", q: "", days: 7 };

@@ -1,6 +1,6 @@
 /* Service worker: يخزّن ملفات الواجهة فقط ليفتح التطبيق بسرعة. طلبات الخادم (Supabase) لا تُخزَّن أبداً. */
-const CACHE = "we-books-v3.42.5";
-const SHELL = ["./", "index.html", "app.css?v=3.42.5", "config.js", "js/icons.js?v=3.42.5", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.42.5", "js/core.js?v=3.42.5", "js/docs.js?v=3.42.5", "js/app.js?v=3.42.5", "js/employee.js?v=3.42.5", "js/pickup.js?v=3.42.5", "js/help.js?v=3.42.5", "js/entry.js?v=3.42.5", "js/emp-extra.js?v=3.42.5", "js/admin.js?v=3.42.5", "js/reports.js?v=3.42.5", "js/insights.js?v=3.42.5", "js/admin-pickup.js?v=3.42.5", "js/close.js?v=3.42.5", "js/books-pro.js?v=3.42.5", "js/vendor/qrcode.js",
+const CACHE = "we-books-v3.42.6";
+const SHELL = ["./", "index.html", "app.css?v=3.42.6", "config.js", "js/icons.js?v=3.42.6", "img/logo-we.png", "img/logo-union.png", "js/art.js?v=3.42.6", "js/core.js?v=3.42.6", "js/docs.js?v=3.42.6", "js/app.js?v=3.42.6", "js/employee.js?v=3.42.6", "js/pickup.js?v=3.42.6", "js/help.js?v=3.42.6", "js/entry.js?v=3.42.6", "js/emp-extra.js?v=3.42.6", "js/admin.js?v=3.42.6", "js/reports.js?v=3.42.6", "js/insights.js?v=3.42.6", "js/admin-pickup.js?v=3.42.6", "js/close.js?v=3.42.6", "js/books-pro.js?v=3.42.6", "js/vendor/qrcode.js",
   "fonts/cairo-arabic-400-normal.woff2", "fonts/cairo-arabic-700-normal.woff2", "icons/app-192.png", "icons/logo.svg"];
 self.addEventListener("install", e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener("activate", e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
