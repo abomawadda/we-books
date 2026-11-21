@@ -249,4 +249,35 @@ assert.strictEqual(bkNormNow.Cover_Price, '', 'unpriced book cover cleared');
 assert.strictEqual(rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT2.Price_List_ID && p.Book_ID === bk1.Book_ID).Cover_Price, 120, 'old term price untouched');
 checks += 12;
 
+// ============================================================================
+// الاختبار العاشر: إدارة ملفات الموظفين (HR CRUD: إضافة / تعديل / منع التكرار / منع الحذف مع وجود حركات / حذف آمن)
+// ============================================================================
+const hrNew = ok(api('SAVE_EMPLOYEE', {
+  empId: '55100', fullName: 'سعيد محمود عبد الله', mobile: '01099887766', natIdLast4: '4321',
+  department: 'المنصورة شرق', jobTitle: 'أخصائي أول', gradeTitle: 'الدرجة الأولى',
+  unionOrg: 'النقابة العامة', memberState: 'معاش', employmentStatus: 'ساري',
+  installmentAllowed: true, maxCreditLimit: 3000, email: 'saeed@example.com'
+}, coord), 'create HR employee').employee;
+assert.strictEqual(hrNew.Emp_ID, '55100');
+assert.strictEqual(hrNew.Grade_Title, 'الدرجة الأولى');
+// منع تكرار الكود الوظيفي عند الإضافة
+fail(api('SAVE_EMPLOYEE', { empId: '55100', fullName: 'مكرر الاسم', mobile: '01099887755', natIdLast4: '1111' }, coord), 'duplicate empId rejected', /مسجّل بالفعل/);
+// منع تكرار الموبايل لموظف آخر
+fail(api('SAVE_EMPLOYEE', { empId: '55101', fullName: 'موبايل مكرر', mobile: '01099887766', natIdLast4: '1111' }, coord), 'duplicate mobile rejected', /مسجّل بالفعل/);
+// دخول المحال للمعاش من بوابة المعاشات ومنعه من بوابة الشركة
+ok(api('LOGIN_EMPLOYEE', { empId: '55100', natIdLast4: '4321', mobile: '01099887766', category: 'retiree' }), 'HR retiree enters retiree portal');
+fail(api('LOGIN_EMPLOYEE', { empId: '55100', natIdLast4: '4321', mobile: '01099887766', category: 'emp' }), 'HR retiree blocked from emp portal', /معاش/);
+// تعديل بيانات HR للموظف
+const hrUpd = ok(api('SAVE_EMPLOYEE', {
+  origEmpId: '55100', empId: '55100', fullName: 'سعيد محمود عبد الله', mobile: '01099887766', natIdLast4: '4321',
+  department: 'طلخا', jobTitle: 'مدير إدارة', memberState: 'معاش', employmentStatus: 'ساري', notes: 'تم التحديث'
+}, coord), 'update HR employee').employee;
+assert.strictEqual(hrUpd.Department, 'طلخا');
+// منع حذف موظف له حجوزات سابقة (1001)
+fail(api('DELETE_EMPLOYEE', { empId: '1001' }, coord), 'delete employee with reservations blocked', /لا يمكن حذف/);
+// حذف موظف بلا حجوزات (55100) بنجاح
+ok(api('DELETE_EMPLOYEE', { empId: '55100' }, coord), 'delete clean employee succeeds');
+assert.ok(!rows(S.EMPLOYEES).some(e => e.Emp_ID === '55100'), 'deleted employee removed');
+checks += 11;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);

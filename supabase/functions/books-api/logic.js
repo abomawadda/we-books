@@ -660,6 +660,8 @@ const ACTION_ACL = {
   SAVE_TRACK_CURRICULUM: ["Coordinator"],
   SAVE_STAGES_LIST: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
+  SAVE_EMPLOYEE: ["Coordinator"],
+  DELETE_EMPLOYEE: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
   DELETE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
@@ -767,6 +769,8 @@ function callServerApi(action, payload, sessionToken) {
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.withReprice_(session, () => E.bulkImportBooks(session, payload.booksArray || []));
       case "BULK_IMPORT_EMPLOYEES": return E.bulkImportEmployees(session, payload.employeesArray || []);
+      case "SAVE_EMPLOYEE": return E.saveEmployee(session, payload);
+      case "DELETE_EMPLOYEE": return E.deleteEmployee(session, payload.empId);
       case "SAVE_PHASE": return E.savePhase(session, payload);
       case "DELETE_PHASE": return E.deletePhase(session, payload);
       case "DELETE_SUPPLIER": return E.deleteSupplier(session, payload);
@@ -2686,6 +2690,91 @@ const OperationsEngine = {
       DB_Engine.overwriteTableData(S.BOOKS, Object.keys(map).map(k => map[k]));
       DB_Engine.logAudit(session.userId, session.role, "Catalog", "BULK_IMPORT_BOOKS", "-", null, { added: added, updated: updated });
       return { success: true, message: "تم استيراد الكتب (إضافة " + added + " | تحديث " + updated + ")" + (errors.length ? " — أخطاء: " + errors.join("؛ ") : "") };
+    });
+  },
+
+  /** إضافة أو تعديل ملف موظف (موارد بشرية) مع التحقق من عدم التكرار وتسجيل التدقيق */
+  saveEmployee: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), p = payload || {};
+      const origId = Util.str(p.origEmpId);
+      const id = Util.str(p.empId || origId).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+      const name = Util.str(p.fullName).slice(0, 120);
+      Util.require(id, "أدخل الكود الوظيفي / رقم العضوية.");
+      Util.require(name.length >= 3, "أدخل اسم الموظف بشكل صحيح.");
+      const all = DB_Engine.getAllRecords(S.EMPLOYEES);
+      const existing = origId ? all.find(e => Util.str(e.Emp_ID) === origId) : all.find(e => Util.str(e.Emp_ID) === id);
+      if (!origId && existing && !p.allowUpdate) {
+        Util.require(false, "الكود الوظيفي «" + id + "» مسجّل بالفعل باسم (" + existing.Full_Name + "). عدّل ملفه بدلاً من تكراره.");
+      }
+      const natRaw = Util.str(p.natIdLast4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "");
+      const nat4 = natRaw ? natRaw.slice(-4).padStart(4, "0") : (existing ? Util.str(existing.National_ID_Last4) : "");
+      if (natRaw) Util.require(natRaw.length >= 4, "آخر 4 أرقام من الرقم القومي يجب أن تكون 4 أرقام صحيحة.");
+      const mobIn = Util.str(p.mobile);
+      const mob = mobIn ? AuthEngine.normalizeMobile(mobIn) : (existing ? Util.str(existing.Mobile) : "");
+      if (mobIn) {
+        Util.require(/^01[0-9]{9}$/.test(mob), "رقم الموبايل غير صحيح (11 رقماً يبدأ بـ 01).");
+        const mobDup = all.find(e => Util.str(e.Emp_ID) !== (existing ? Util.str(existing.Emp_ID) : id) && AuthEngine.normalizeMobile(e.Mobile) === mob);
+        Util.require(!mobDup, "رقم الموبايل مسجّل بالفعل للموظف (" + (mobDup ? mobDup.Emp_ID + " — " + mobDup.Full_Name : "") + ").");
+      }
+      const mob2In = Util.str(p.mobile2);
+      const mob2 = mob2In ? AuthEngine.normalizeMobile(mob2In) : "";
+      if (mob2In) Util.require(/^01[0-9]{9}$/.test(mob2), "رقم الموبايل الإضافي غير صحيح.");
+
+      const empStatus = Util.str(p.employmentStatus) === "موقوف" ? "موقوف" : "ساري";
+      const instAllowed = p.installmentAllowed === false || String(p.installmentAllowed) === "false" ? false : true;
+      const maxLim = Math.max(0, Util.num(p.maxCreditLimit));
+      const now = Util.now();
+      const rec = Object.assign({}, existing || {}, {
+        Emp_ID: existing ? Util.str(existing.Emp_ID) : id,
+        Full_Name: name,
+        National_ID_Last4: nat4,
+        Mobile: mob,
+        Mobile2: mob2,
+        Email: Util.str(p.email).slice(0, 120),
+        Address: Util.str(p.address).slice(0, 220),
+        Department: Util.str(p.department).slice(0, 120),
+        Job_Title: Util.str(p.jobTitle).slice(0, 120),
+        Grade_Title: Util.str(p.gradeTitle).slice(0, 80),
+        Union_Org: Util.str(p.unionOrg).slice(0, 60),
+        Member_State: Util.str(p.memberState).slice(0, 40),
+        Hire_Date: Util.str(p.hireDate).slice(0, 20),
+        Retirement_Date: Util.str(p.retirementDate).slice(0, 20),
+        Insurance_No: Util.str(p.insuranceNo).slice(0, 40),
+        Qualification: Util.str(p.qualification).slice(0, 80),
+        Marital_Status: Util.str(p.maritalStatus).slice(0, 30),
+        Employment_Status: empStatus,
+        Installment_Allowed: instAllowed,
+        Max_Credit_Limit: maxLim,
+        Notes: Util.str(p.notes).slice(0, 300),
+        Updated_At: now
+      });
+      if (existing) {
+        DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", existing.Emp_ID, rec);
+        DB_Engine.logAudit(session.userId, session.role, "Employees", "SAVE_EMPLOYEE", existing.Emp_ID, existing, rec);
+        return { success: true, message: "تم تحديث ملف الموظف (" + rec.Full_Name + ") بنجاح.", employee: rec };
+      }
+      DB_Engine.insertRecordsBatch(S.EMPLOYEES, [rec]);
+      DB_Engine.logAudit(session.userId, session.role, "Employees", "SAVE_EMPLOYEE", rec.Emp_ID, null, rec);
+      return { success: true, message: "تمت إضافة الموظف (" + rec.Full_Name + " — " + rec.Emp_ID + ") بنجاح.", employee: rec };
+    });
+  },
+
+  /** حذف موظف بأمان: يُمنع الحذف إذا كان له حجوزات أو فواتير أو مدفوعات سابقة */
+  deleteEmployee: function(session, empId) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), id = Util.str(empId);
+      Util.require(id, "حدد الكود الوظيفي للموظف.");
+      const all = DB_Engine.getAllRecords(S.EMPLOYEES);
+      const emp = all.find(e => Util.str(e.Emp_ID) === id);
+      Util.require(emp, "الموظف غير موجود: " + id);
+      const hasRes = DB_Engine.getAllRecords(S.RES_HEADERS).some(r => Util.str(r.Emp_ID) === id);
+      const hasInv = DB_Engine.getAllRecords(S.EMP_INVOICES).some(v => Util.str(v.Emp_ID) === id);
+      const hasPay = DB_Engine.getAllRecords(S.EMP_PAYMENTS).some(p => Util.str(p.Emp_ID) === id);
+      Util.require(!hasRes && !hasInv && !hasPay, "لا يمكن حذف موظف له حجوزات أو فواتير أو إيصالات سابقة — يمكنك إيقاف حسابه (موقوف) للحفاظ على السجل المالي.");
+      DB_Engine.overwriteTableData(S.EMPLOYEES, all.filter(e => Util.str(e.Emp_ID) !== id));
+      DB_Engine.logAudit(session.userId, session.role, "Employees", "DELETE_EMPLOYEE", id, emp, null);
+      return { success: true, message: "تم حذف الموظف (" + emp.Full_Name + " — " + id + ") بنجاح." };
     });
   },
 
