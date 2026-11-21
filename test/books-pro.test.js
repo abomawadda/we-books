@@ -377,5 +377,25 @@ assert.strictEqual(supPortal1.supplierName, supRow.Supplier_Name);
 ok(api('SUPPLIER_UPDATE_PO_ITEM', { supplierToken: supLink.token, bookId: bk1.Book_ID, status: 'Partial', availQty: 7, shipDate: '2028-12-01', note: 'متاح 7 نسخ فقط' }, ''), 'supplier updates book availability');
 checks += 6;
 
+// ============================================================================
+// الاختبار السادس عشر: دخول موظف المعاش من بوابته + منع توجيهه بالخطأ لبوابة الموظفين (v3.46.1)
+// ============================================================================
+ok(api('SAVE_EMPLOYEE', {
+  empId: '44221', fullName: 'سعيد محمود عبد الله', nationalId: '26001011203344',
+  mobile: '01066554433', department: 'سنترال المنصورة', jobTitle: 'مهندس اتصالات',
+  memberState: 'معاش', employmentStatus: 'معاش'
+}, coord), 'create MyNekaba retiree with 5-digit ID and Employment_Status=معاش');
+const dupRet = api('REGISTER_MEMBER', { category: 'retiree', name: 'سعيد محمود عبد الله', nationalId: '26001011203344', mobile: '01066554433', org: 'سنترال المنصورة' }, '');
+assert.strictEqual(dupRet.success, false, 'duplicate retiree self-reg blocked');
+assert.strictEqual(dupRet.portalCategory, 'retiree', 'duplicate points to retiree portal, NOT emp');
+assert.strictEqual(dupRet.empId, '44221', 'duplicate returns existing Emp_ID');
+const wrongPortal = api('LOGIN_EMPLOYEE', { empId: '44221', natIdLast4: '3344', mobile: '01066554433', category: 'emp' }, '');
+assert.strictEqual(wrongPortal.success, false);
+assert.strictEqual(wrongPortal.wrongCategory, 'retiree', 'wrong portal tells UI to switch to retiree');
+const okRet = ok(api('LOGIN_EMPLOYEE', { empId: '44221', natIdLast4: '3344', mobile: '01066554433', category: 'retiree' }, ''), 'retiree logs in cleanly from retiree portal');
+assert.strictEqual(okRet.user.category, 'retiree');
+checks += 6;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);
+
 

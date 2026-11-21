@@ -49,8 +49,17 @@ Shell.loginEmployee = async function () {
   if (!id || !nat || !mob) return toast("اكتب الرقم الوظيفي وآخر 4 أرقام من القومي والموبايل", "warning");
   const r = await call("LOGIN_EMPLOYEE", { empId: id, natIdLast4: nat, mobile: mob, category: cat }, { block: true });
   if (!r.success) {
-    if (r.wrongCategory) return toast(r.message, "warning");
-    if (/إيقاف|المحاولات/.test(r.message || "")) return toast(r.message, "danger");
+    if (r.wrongCategory) {
+      Shell.loginTab = r.wrongCategory; Shell.regMode = "login"; Shell.renderLogin();
+      setTimeout(() => {
+        const e1 = $("#lgEmp"), e2 = $("#lgNat"), e3 = $("#lgMob");
+        if (e1) e1.value = id;
+        if (e2) e2.value = nat;
+        if (e3) e3.value = mob;
+      }, 30);
+      return toast(r.message + " (تم تحويلك تلقائياً للبوابة الصحيحة — اضغط دخول الآن)", "warning", 6000);
+    }
+    if (/إيقاف|المحاولات|موقوف/.test(r.message || "")) return toast(r.message, "danger");
     return loginTrouble(r.message);
   }
   const rem = $("#lgRemember");

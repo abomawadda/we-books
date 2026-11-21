@@ -389,31 +389,46 @@ const AuthEngine = {
     const id = Util.str(emp && emp.Emp_ID);
     const jt = normArText(emp && emp.Job_Title);
     const ms = normArText(emp && emp.Member_State);
+    const es = normArText(emp && emp.Employment_Status);
+    if (ms === "وفاه" || ms.indexOf("وفا") !== -1 || es === "وفاه" || es.indexOf("وفا") !== -1) return "deceased";
     if (/^6\d{6}$/.test(id) || jt === normArText("شركات التعهيد")) return "outsource";
     if (/^7\d{6}$/.test(id) || jt === normArText("زائر")) return "guest";
     if (/^8\d{6}$/.test(id)
       || jt === "معاش" || jt.indexOf("معاش") !== -1
       || ms === "معاش" || ms.indexOf("معاش") !== -1
-      || ms === "استقاله" || ms.indexOf("استقال") !== -1 || ms.indexOf("مستقيل") !== -1) return "retiree";
-    if (ms === "وفاه" || ms.indexOf("وفا") !== -1) return "deceased";
+      || ms === "استقاله" || ms.indexOf("استقال") !== -1 || ms.indexOf("مستقيل") !== -1
+      || es === "معاش" || es.indexOf("معاش") !== -1
+      || es === "استقاله" || es.indexOf("استقال") !== -1 || es.indexOf("مستقيل") !== -1) return "retiree";
     return "emp";
   },
 
+  /** هل الحساب موقوف إدارياً؟ يسمح بـ (ساري / نشط / معاش / استقالة / فارغ) ويمنع (موقوف / محظور / ملغي / مغلق / مفصول) */
+  isEmployeeBlocked_: function(emp) {
+    const es = normArText(emp && emp.Employment_Status);
+    const ms = normArText(emp && emp.Member_State);
+    if (ms.indexOf("موقوف") !== -1 || ms.indexOf("محظور") !== -1) return true;
+    if (!es || es === "ساري" || es === "سارى" || es === "نشط" || es.indexOf("معاش") !== -1 || es.indexOf("استقال") !== -1 || es.indexOf("مستقيل") !== -1) return false;
+    return true;
+  },
+
   authenticateEmployee: function(empIdInput, natIdLast4Input, mobileInput, categoryInput) {
-    const empId = Util.str(empIdInput);
-    const nat4 = Util.str(natIdLast4Input).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    const toEn = s => Util.str(s).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d)));
+    const empId = toEn(empIdInput);
+    const nat4 = toEn(natIdLast4Input).replace(/\D/g, "");
     const mobile = this.normalizeMobile(mobileInput);
     if (!empId || nat4.length !== 4 || !mobile) {
       return { success: false, message: "أدخل الرقم الوظيفي، وآخر 4 أرقام من الرقم القومي، ورقم الموبايل بشكل صحيح." };
     }
     this.checkThrottle_("EMP", empId);
-    const emp = DB_Engine.getAllRecords(SYSTEM_CONFIG.SHEETS.EMPLOYEES).find(e => Util.str(e.Emp_ID) === empId);
-    const ok = emp && Util.str(emp.National_ID_Last4).padStart(4, "0") === nat4.padStart(4, "0") && this.normalizeMobile(emp.Mobile) === mobile;
+    const emp = DB_Engine.getAllRecords(SYSTEM_CONFIG.SHEETS.EMPLOYEES).find(e => toEn(e.Emp_ID) === empId);
+    const empNat4 = toEn(Util.str(emp && emp.National_ID_Last4) || Util.str(emp && emp.National_ID).slice(-4)).replace(/\D/g, "");
+    const mobMatch = emp && (this.normalizeMobile(emp.Mobile) === mobile || (Util.str(emp.Mobile2) && this.normalizeMobile(emp.Mobile2) === mobile));
+    const ok = emp && empNat4.length > 0 && empNat4.padStart(4, "0") === nat4.padStart(4, "0") && mobMatch;
     if (!ok) {
       this.registerFail_("EMP", empId);
       return { success: false, message: "البيانات غير مطابقة للسجلات." };
     }
-    if (Util.str(emp.Employment_Status) !== "ساري") {
+    if (this.isEmployeeBlocked_(emp)) {
       return { success: false, message: "هذا الحساب موقوف. يرجى مراجعة إدارة المبادرة." };
     }
     const actualCat = this.employeeCategory_(emp);
@@ -1337,7 +1352,7 @@ const OperationsEngine = {
       Util.require(empId, "حدد الموظف.");
       const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === empId);
       Util.require(emp, "الموظف غير مسجل.");
-      Util.require(Util.str(emp.Employment_Status) === "ساري", "حساب الموظف موقوف.");
+      Util.require(!AuthEngine.isEmployeeBlocked_(emp) && AuthEngine.employeeCategory_(emp) !== "deceased", "حساب الموظف موقوف.");
 
       const phaseId = Util.str(payload.phaseId);
       const phase = this.getPhase_(phaseId);
@@ -1695,10 +1710,19 @@ const OperationsEngine = {
       Util.require(p.category === "guest" || org.length >= 2, p.category === "outsource" ? "اختر الشركة." : "اكتب آخر جهة عمل.");
       if (p.category === "outsource") Util.require(["Tedata", "IBS", "Proserve", "عقود يومية"].indexOf(org) !== -1, "اختر الشركة من القائمة.");
       const emps = DB_Engine.getAllRecords(S.EMPLOYEES);
-      const dup = emps.find(e => AuthEngine.normalizeMobile(e.Mobile) === mobile);
+      const dup = emps.find(e => AuthEngine.normalizeMobile(e.Mobile) === mobile || (Util.str(e.Mobile2) && AuthEngine.normalizeMobile(e.Mobile2) === mobile));
       if (dup) {
-        const self = /^[678]\d{6}$/.test(Util.str(dup.Emp_ID));
-        return { success: false, exists: true, message: self ? "الموبايل ده مسجّل قبل كده — ادخل برقم عضويتك " + dup.Emp_ID + "." : "الموبايل ده مسجّل كعضو في النقابة — ادخل من «موظف» برقمك الوظيفي." };
+        const dupCat = AuthEngine.employeeCategory_(dup);
+        if (dupCat === "deceased") return { success: false, exists: true, message: "هذا الحساب غير متاح للدخول." };
+        const CAT_LABEL = { emp: "المصرية للاتصالات", retiree: "معاش / استقالة", outsource: "شركات التعهيد", guest: "زائر" };
+        const lbl = CAT_LABEL[dupCat] || dupCat;
+        const sameCat = dupCat === Util.str(p.category);
+        return {
+          success: false, exists: true, portalCategory: dupCat, empId: Util.str(dup.Emp_ID),
+          message: sameCat
+            ? "أنت مسجّل بالفعل في فئة «" + lbl + "» — ادخل من تبويب «دخول» برقمك " + dup.Emp_ID + "."
+            : "الموبايل ده مسجّل بالفعل في فئة «" + lbl + "» — ادخل من بوابة «" + lbl + "» برقمك " + dup.Emp_ID + "."
+        };
       }
       const max = emps.map(e => Util.str(e.Emp_ID)).filter(id => id.length === 7 && id[0] === cat[0]).reduce((m, id) => Math.max(m, parseInt(id, 10)), parseInt(cat[0] + "000000", 10));
       const id = String(max + 1);
@@ -3013,11 +3037,24 @@ const OperationsEngine = {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
       const tables = [S.PHASES, S.RES_HEADER, S.RES_ITEMS, S.RES_AUDIT, S.PO_SNAPSHOT, S.SUP_INV_HEADER, S.SUP_INV_ITEMS, S.INVENTORY,
-        S.DELIVERY_RETURNS, S.EMP_INVOICES, S.INSTALLMENTS, S.EMP_PAYMENTS, S.SUP_LEDGER, S.EXPENSES, S.AUDIT_TRAIL, S.COUNTERS, S.CASH_CLOSINGS];
+        S.DELIVERY_RETURNS, S.EMP_INVOICES, S.INSTALLMENTS, S.EMP_PAYMENTS, S.SUP_LEDGER, S.EXPENSES, S.AUDIT_TRAIL, S.COUNTERS, S.CASH_CLOSINGS,
+        S.PRICE_LISTS, S.PRICE_ITEMS, S.EMP_CHANGE_REQUESTS];
       const counts = {};
       tables.forEach(n => { counts[n] = DB_Engine.getAllRecords(n).length; DB_Engine.overwriteTableData(n, []); });
+      // تصفير الإعدادات التشغيلية المؤقتة (طابور التحويلات، مواعيد الاستلام، روابط المكتبات، تتبع التوريد)
+      const clearKeys = { PICKUP_SCHEDULE: "", PAYMENT_CLAIMS_QUEUE: "[]", SUPPLIER_PORTAL_TOKENS: "{}", PO_TRACKING: "{}" };
+      const stRows = DB_Engine.getAllRecords(S.SETTINGS);
+      Object.keys(clearKeys).forEach(k => {
+        if (stRows.some(r => r.Setting_Key === k)) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", k, { Setting_Value: clearKeys[k], Updated_At: Util.now() });
+      });
+      // مسح مسودات السلة القديمة من سجلات الموظفين مع الإبقاء الكامل على بيانات الموظفين وأبنائهم
+      const emps = DB_Engine.getAllRecords(S.EMPLOYEES);
+      if (emps.some(e => Util.str(e.Cart_Draft))) {
+        emps.forEach(e => { e.Cart_Draft = ""; });
+        DB_Engine.overwriteTableData(S.EMPLOYEES, emps);
+      }
       DB_Engine.logAudit(session.userId, session.role, "System", "RESET_OPERATIONAL_DATA", "ALL", counts, null);
-      return { success: true, message: "تم تصفير بيانات التشغيل وبقيت بيانات الموظفين والكتب والأسعار والمكتبات.", counts: counts };
+      return { success: true, message: "تم تصفير كافة البيانات التجريبية والمراحل وقوائم الأسعار القديمة، وبقيت بيانات الموظفين والكتب وأسعارها الحالية كأساس للموسم الجديد.", counts: counts };
     });
   },
 
