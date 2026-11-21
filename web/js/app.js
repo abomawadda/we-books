@@ -8,7 +8,7 @@ const ACL = {
   SAVE_SETTING: [], RESET_OPERATIONAL_DATA: [], SAVE_SUPPLIER: ["Coordinator"], DELETE_SUPPLIER: ["Coordinator"], SAVE_BOOK: ["Coordinator"], DELETE_BOOK: ["Coordinator"], BULK_IMPORT_BOOKS: ["Coordinator"], BULK_PRICE_BOOKS: ["Coordinator"], BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"], DELETE_PHASE: ["Coordinator"], SET_PHASE_STATUS: ["Coordinator"], GENERATE_PO_SNAPSHOT: ["Coordinator"], CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"], RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"], MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"], CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
-  EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
+  EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], TOGGLE_PARCEL_PACKED: ["Coordinator", "Warehouse", "Store"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
   RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], TRANSFER_EMPLOYEE_CREDIT: ["Finance"], SAVE_PO_TRACKING: ["Coordinator", "Store", "Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [], GET_AUDIT_LOG: ["Coordinator"], POST_ANNOUNCEMENT: ["Coordinator"],
   RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"]
 };

@@ -635,6 +635,8 @@ const ACTION_ACL = {
   EMP_FEEDBACK: ["EMPLOYEE"],
   SAVE_CART_DRAFT: ["EMPLOYEE"],
   SAVE_WISHLIST: ["EMPLOYEE"],
+  BOOK_PICKUP_SLOT: ["EMPLOYEE"],
+  TOGGLE_PARCEL_PACKED: ["Coordinator", "Warehouse", "Store"],
   RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
@@ -746,6 +748,8 @@ function callServerApi(action, payload, sessionToken) {
       case "EMP_FEEDBACK": return E.empFeedback(session, payload);
       case "SAVE_CART_DRAFT": return E.saveCartDraft(session, payload);
       case "SAVE_WISHLIST": return E.saveWishlist(session, payload);
+      case "BOOK_PICKUP_SLOT": return E.bookPickupSlot(session, payload);
+      case "TOGGLE_PARCEL_PACKED": return E.toggleParcelPacked(session, payload);
       case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
@@ -3495,6 +3499,49 @@ const OperationsEngine = {
       Util.require(val.length <= 25000, "قائمة الرغبات كبيرة جداً.");
       DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Cart_Draft: val });
       return { success: true, count: cnt, wishlist: clean };
+    });
+  },
+  /** حجز موعد استلام شخصي للموظف مع التحقق من السعة القصوى للفترة */
+  bookPickupSlot: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId);
+      const slotIdx = parseInt(payload && payload.slotIdx, 10);
+      const rows = DB_Engine.getAllRecords(S.SETTINGS);
+      const row = rows.find(r => r.Setting_Key === "PICKUP_SCHEDULE");
+      let sc = null; try { sc = JSON.parse((row && row.Setting_Value) || "null"); } catch (e) { sc = null; }
+      Util.require(sc && Array.isArray(sc.slots) && sc.slots.length, "لم تُحدد مواعيد استلام حالياً.");
+      Util.require(!isNaN(slotIdx) && slotIdx >= 0 && slotIdx < sc.slots.length, "موعد الاستلام المختار غير صالح.");
+      sc.bookings = sc.bookings && typeof sc.bookings === "object" ? sc.bookings : {};
+      sc.packed = sc.packed && typeof sc.packed === "object" ? sc.packed : {};
+      const slot = sc.slots[slotIdx], cap = parseInt(slot.cap, 10) || 0;
+      if (cap > 0) {
+        const taken = Object.keys(sc.bookings).filter(k => k !== empId && Number(sc.bookings[k]) === slotIdx).length;
+        Util.require(taken < cap, "عذراً، هذا الموعد اكتمل بالكامل (" + cap + " موظف). اختر موعداً آخر متاحاً.");
+      }
+      sc.bookings[empId] = slotIdx;
+      const val = JSON.stringify(sc);
+      if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PICKUP_SCHEDULE", { Setting_Value: val, Last_Updated: Util.now() });
+      else DB_Engine.insertRecordsBatch(S.SETTINGS, [{ Setting_Key: "PICKUP_SCHEDULE", Setting_Value: val, Data_Type: "JSON", Description: "مواعيد الاستلام", Last_Updated: Util.now() }]);
+      return { success: true, slotIdx: slotIdx, message: "تم تأكيد موعد استلامك بنجاح 🗓️" };
+    });
+  },
+  /** تحديث حالة تجهيز طرد الموظف مسبقاً (Pre-Packing Queue) في يوم التسليم */
+  toggleParcelPacked: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(payload && payload.empId);
+      Util.require(empId, "حدد الموظف.");
+      const rows = DB_Engine.getAllRecords(S.SETTINGS);
+      const row = rows.find(r => r.Setting_Key === "PICKUP_SCHEDULE");
+      let sc = null; try { sc = JSON.parse((row && row.Setting_Value) || "null"); } catch (e) { sc = null; }
+      if (!sc || typeof sc !== "object") sc = { place: "", note: "", slots: [], depts: {}, bookings: {}, packed: {} };
+      sc.packed = sc.packed && typeof sc.packed === "object" ? sc.packed : {};
+      const next = payload && payload.packed !== undefined ? Util.bool(payload.packed) : !sc.packed[empId];
+      if (next) sc.packed[empId] = Util.now();
+      else delete sc.packed[empId];
+      const val = JSON.stringify(sc);
+      if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PICKUP_SCHEDULE", { Setting_Value: val, Last_Updated: Util.now() });
+      else DB_Engine.insertRecordsBatch(S.SETTINGS, [{ Setting_Key: "PICKUP_SCHEDULE", Setting_Value: val, Data_Type: "JSON", Description: "مواعيد الاستلام", Last_Updated: Util.now() }]);
+      return { success: true, empId: empId, packed: next, message: next ? "تم تسجيل تجهيز الطرد ✓" : "تم إلغاء علامة تجهيز الطرد" };
     });
   },
   empFeedback: function(session, payload) {

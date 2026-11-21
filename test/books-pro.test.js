@@ -334,4 +334,21 @@ const empPortalWl = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, empTok), 'portal expo
 assert.strictEqual(empPortalWl.employee.wishlist[bk1.Book_ID], 2, 'wishlist preserved alongside cartDraft');
 checks += 3;
 
+// ============================================================================
+// الاختبار الرابع عشر: حجز موعد الاستلام (BOOK_PICKUP_SLOT) + طابور التجهيز المسبق (TOGGLE_PARCEL_PACKED)
+// ============================================================================
+ok(api('SAVE_SETTING', {
+  key: 'PICKUP_SCHEDULE',
+  value: JSON.stringify({ place: 'مقر النقابة', note: '', slots: [{ date: '2028-11-26', from: '10:00', to: '11:00', cap: 1 }, { date: '2028-11-26', from: '11:00', to: '12:00', cap: 5 }], depts: {}, bookings: {}, packed: {} })
+}, A), 'admin publishes pickup schedule with capacity');
+const bkSlot = ok(api('BOOK_PICKUP_SLOT', { slotIdx: 0 }, empTok), 'employee books slot 0');
+assert.strictEqual(bkSlot.slotIdx, 0);
+const pkToggle = ok(api('TOGGLE_PARCEL_PACKED', { empId: '1001', packed: true }, coord), 'coordinator marks parcel packed');
+assert.strictEqual(pkToggle.packed, true);
+const schedRow = rows(S.SETTINGS).find(r => r.Setting_Key === 'PICKUP_SCHEDULE');
+const schedObj = JSON.parse(schedRow.Setting_Value);
+assert.strictEqual(schedObj.bookings['1001'], 0, 'slot booking persisted');
+assert.ok(schedObj.packed['1001'], 'parcel packed timestamp persisted');
+checks += 5;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);
