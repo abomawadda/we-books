@@ -201,4 +201,52 @@ assert.ok(dash.catalog.stages.includes('التعليم الفني'), 'dynamic st
 assert.ok(dash.catalog.tracksRegistry.some(t => t.name === 'بكالوريا — طب وعلوم حياة'), 'new track exposed');
 checks += 5;
 
+// ============================================================================
+// الاختبار التاسع: منع التكرار بالتطبيع العربي + بدء تيرم جديد بلا أسعار + تنبيه الانحراف + تعليق غير المسعّر
+// ============================================================================
+// منع تكرار نفس الكتاب عند اختلاف الهمزة أو التاء المربوطة أو المسافات (حتى في الاستيراد الجماعي)
+const bkNorm = ok(api('SAVE_BOOK', {
+  grade: '1 إعدادي', publisher: 'الأضواء', subject: 'عربي', bookPart: 'شرح', schoolTypes: 'حكومي',
+  coverPrice: 130, supplierDiscountPct: 20
+}, coord), 'create canonical book').book;
+const bulkDup = ok(api('BULK_IMPORT_BOOKS', {
+  booksArray: [{ Book_ID: 'M1-DUP99', Grade: '1 اعدادي', Book_Name: 'الاضواء — عربي (شرح)', Publisher: 'الاضواء', Subject: 'عربي', Book_Part: 'شرح', School_Types: 'حكومي', Cover_Price: 140, Supplier_Discount_Pct: 20 }]
+}, coord), 'bulk import runs duplicate check');
+assert.ok(!rows(S.BOOKS).some(b => b.Book_ID === 'M1-DUP99'), 'arabic normalized duplicate NOT added to catalog');
+assert.ok(/إضافة 0/.test(bulkDup.message) && /مكرر/.test(bulkDup.message), 'arabic normalized duplicate reported in message');
+
+// بدء تيرم جديد بالكتالوج الثابت بلا أسعار مع الاحتفاظ بالمرجع
+const plBlank = ok(api('SAVE_PRICE_LIST', {
+  academicYear: '2028/2029', term: 'الترم الأول',
+  blankPrices: true, copyFromListId: plT2.Price_List_ID
+}, coord), 'create blank new-term list');
+assert.strictEqual(plBlank.copiedCount, 0, 'blankPrices copies 0 prices');
+assert.strictEqual(plBlank.priceList.Copied_From_ID, plT2.Price_List_ID, 'reference list retained');
+assert.strictEqual(rows(S.PRICE_ITEMS).filter(p => p.Price_List_ID === plBlank.priceList.Price_List_ID).length, 0, 'no price rows created');
+
+// تنبيه انحراف السعر عن السعر المرجعي (> +40% أو < -20%)
+const savedWarn = ok(api('SAVE_PRICE_ITEMS', {
+  priceListId: plBlank.priceList.Price_List_ID,
+  items: [{ bookId: bk1.Book_ID, coverPrice: 250, supplierDiscountPct: 20 }] // المرجع في plT2 = 120 (+108%)
+}, coord), 'save deviated price');
+assert.ok(Array.isArray(savedWarn.warnings) && savedWarn.warnings.length === 1, 'deviation warning returned');
+assert.strictEqual(savedWarn.warnings[0].refCover, 120, 'refCover is 120 from plT2');
+
+// اعتماد التيرم الجديد مع تعليق الكتب غير المسعّرة بحالة «جاري التسعير» دون المساس بأسعار التيرم السابق
+const appBlank = ok(api('TRANSITION_PRICE_LIST', {
+  priceListId: plBlank.priceList.Price_List_ID, toStatus: 'Approved',
+  syncToCatalog: true, resetUnpricedToPricing: true
+}, coord), 'approve blank term with resetUnpricedToPricing');
+assert.strictEqual(appBlank.synced, 1, 'only priced book synced as Available');
+assert.ok(appBlank.resetCount >= 1, 'unpriced books reset to Pricing');
+const bk1Now = rows(S.BOOKS).find(b => b.Book_ID === bk1.Book_ID);
+const bkNormNow = rows(S.BOOKS).find(b => b.Book_ID === bkNorm.Book_ID);
+assert.strictEqual(bk1Now.Book_Status, 'Available');
+assert.strictEqual(bk1Now.Cover_Price, 250);
+assert.strictEqual(bkNormNow.Book_Status, 'Pricing', 'unpriced book moved to Pricing');
+assert.strictEqual(bkNormNow.Cover_Price, '', 'unpriced book cover cleared');
+// التحقق أن أسعار التيرم السابق في 24_Book_Prices لم تُمسّ
+assert.strictEqual(rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT2.Price_List_ID && p.Book_ID === bk1.Book_ID).Cover_Price, 120, 'old term price untouched');
+checks += 12;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);
