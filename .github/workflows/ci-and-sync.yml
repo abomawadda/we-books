@@ -1,6 +1,7 @@
 name: CI Tests & Auto-Sync logic_commit
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
   push:
@@ -8,7 +9,7 @@ on:
 
 jobs:
   verify:
-    name: Syntax Check & Test Suites (384+ checks)
+    name: Syntax Check & Test Suites (394+ checks)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,7 +18,7 @@ jobs:
           node-version: "22"
       - name: JS Syntax Check (All Frontend & Backend Modules)
         run: |
-          for f in web/js/*.js supabase/functions/books-api/logic.js; do
+          for f in web/js/*.js web/sw.js supabase/functions/books-api/logic.js; do
             node --check "$f"
           done
       - name: Run Full Scenario Tests
@@ -28,7 +29,7 @@ jobs:
   sync-logic-commit:
     name: Auto-Update Supabase logic_commit
     needs: verify
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Update books.config.logic_commit in Supabase
@@ -41,12 +42,24 @@ jobs:
             echo "Skipping auto-sync: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY secret not set."
             exit 0
           fi
-          curl -fsS -X PATCH "${SUPABASE_URL}/rest/v1/config?key=eq.logic_commit" \
-            -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
-            -H "Content-Type: application/json" \
-            -H "Accept-Profile: books" \
-            -H "Content-Profile: books" \
-            -H "Prefer: return=minimal" \
-            -d "{\"value\":\"${COMMIT_SHA}\"}"
+          URL="${SUPABASE_URL%/}"
+          if [[ "$SUPABASE_SERVICE_ROLE_KEY" == sb_secret_* ]]; then
+            curl -fsS -X PATCH "${URL}/rest/v1/config?key=eq.logic_commit" \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept-Profile: books" \
+              -H "Content-Profile: books" \
+              -H "Prefer: return=minimal" \
+              -d "{\"value\":\"${COMMIT_SHA}\"}"
+          else
+            curl -fsS -X PATCH "${URL}/rest/v1/config?key=eq.logic_commit" \
+              -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept-Profile: books" \
+              -H "Content-Profile: books" \
+              -H "Prefer: return=minimal" \
+              -d "{\"value\":\"${COMMIT_SHA}\"}"
+          fi
           echo "Successfully synced logic_commit to ${COMMIT_SHA}"
+
