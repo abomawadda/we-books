@@ -440,10 +440,10 @@ function trkOpen() {
     const r = await call("SET_BOOK_TRACKS", { rows }, { block: true }); toast(r.message, r.success ? "success" : "danger"); if (r.success) { TRK.dirty = {}; await Admin.load(); re(); }
   });
 }
-// زر «الشُّعب» في صفحة الكتب + شارة الشعبة على بطاقة الكتاب
+// التبويب المخصص للشُّعب موجود الآن داخل صفحة الكتب مباشرة (BK_UI.tab = "tracks")
 _wrapA("/a/books", view => {
-  if (!can("SAVE_BOOK")) return;
-  const head = view.querySelector(".flex.flex-wrap.gap-2, [data-act=bulkPrice]"); const btn = `<button class="btn btn-outline btn-sm" data-act="tracksMgr">${ic("graduation-cap")} الشُّعب (علمي/أدبي/بكالوريا)</button>`;
+  if (!can("SAVE_BOOK") || view.querySelector('[data-act="bkTab"]')) return;
+  const btn = `<button class="btn btn-outline btn-sm" data-act="tracksMgr">${ic("graduation-cap")} الشُّعب (علمي/أدبي/بكالوريا)</button>`;
   const bp = view.querySelector("[data-act=bulkPrice]"); if (bp) bp.insertAdjacentHTML("afterend", btn);
 });
 

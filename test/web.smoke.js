@@ -8,7 +8,7 @@ const { ctx } = makeContext(clock);
 ctx.__init(true);
 
 const WEB = path.join(__dirname, '..', 'web');
-const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/close.js', 'js/help.js', 'js/entry.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
+const scripts = ['js/icons.js', 'js/core.js', 'js/app.js', 'js/art.js', 'js/docs.js', 'js/employee.js', 'js/admin.js', 'js/reports.js', 'js/insights.js', 'js/pickup.js', 'js/admin-pickup.js', 'js/close.js', 'js/books-pro.js', 'js/help.js', 'js/entry.js', 'js/emp-extra.js'].map(f => fs.readFileSync(path.join(WEB, f), 'utf8'));
 let html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8').replace(/<script src=[^>]+><\/script>/g, '').replace(/<link[^>]+>/g, '');
 html = html.replace('</body>', () => '<script>window.APP_CONFIG={API_URL:"https://x/exec"}</script>' + scripts.map(s => '<script>' + s.replace(/<\/script>/g, '<\\/script>') + '</script>').join('') + '</body>');
 
@@ -255,6 +255,14 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   const cmDelBtn = d.querySelector('[data-act="cmDelItem"]');
   check(cmEditBtn && cmDelBtn, 'catalog manager provides edit and delete action buttons for publishers and subjects');
   await closeAll();
+
+  // فحص تبويبات قسم الكتب المطوّر: قوائم الأسعار التاريخية + المراحل والصفوف والشُّعب
+  await click('[data-act="bkTab"][data-id="pricing"]'); await settle();
+  check(/قوائم الأسعار التاريخية/.test(view()), 'books pricing history tab rendered');
+  await click('[data-act="bkTab"][data-id="tracks"]'); await settle();
+  check(/سجل شُعب وتخصصات/.test(view()), 'books dynamic stages & tracks tab rendered');
+  await click('[data-act="bkTab"][data-id="catalog"]'); await settle();
+  check(d.querySelectorAll('table tbody tr').length > 0, 'books catalog tab restored');
 
   // دورة التوريد
   await go('/a/po'); await click('[data-act="freezePO"]'); await ok(); expectNoErrorToasts('freeze');
