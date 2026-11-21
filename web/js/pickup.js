@@ -11,18 +11,26 @@ async function qrSvg(text, cell) { const q = (await qrLib())(0, "M"); q.addData(
 // ---------------------------------------------------------------- عند الموظف
 function pickupInfo() {
   const items = Emp.phaseItems(), inv = Emp.invoice(), ph = (APP.emp || {}).activePhase || {};
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { alayh: inv ? n(inv.Remaining_Balance) : 0, lah: 0, netDue: inv ? n(inv.Remaining_Balance) : 0, netCredit: 0 };
   const ready = items.reduce((s, i) => s + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
-  const down = inv ? Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) : 0;
+  const grossDown = inv ? Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) : 0;
+  const down = Math.max(0, Math.round((grossDown - acc.lah) * 100) / 100);
+  const creditUsed = Math.max(0, Math.round((grossDown - down) * 100) / 100);
   const sc = parseSched(((APP.emp || {}).settings || {}).PICKUP_SCHEDULE), slot = slotFor(sc, ((APP.emp || {}).employee || {}).dept);
-  return { ready, down, inv, ph, sc, slot, remaining: inv ? n(inv.Remaining_Balance) : 0 };
+  return { ready, down, grossDown, creditUsed, lah: acc.lah, inv, ph, sc, slot, remaining: acc.netDue };
 }
 function pickupCard() {
   const p = pickupInfo(); if (!p.ready) return "";
+  const creditNote = p.creditUsed > 0
+    ? (p.down > 0 ? `<div class="text-[11.5px] text-emerald-700 mt-0.5 num">بعد خصم رصيد لك ${fmt(p.creditUsed)} ج.م (من أصل ${fmt(p.grossDown)} ج.م)</div>`
+      : `<div class="text-[11.5px] text-emerald-700 mt-0.5 num">مغطى بالكامل من رصيدك الدائن (${fmt(p.lah)} ج.م)</div>`)
+    : "";
     return `<section class="card overflow-hidden mb-4 ring-2 ring-emerald-200">
     <div class="p-4 sm:p-5 flex items-center gap-4">
       <button class="w-24 h-24 shrink-0 rounded-2xl bg-white ring-1 ring-slate-200 p-1.5 flex items-center justify-center" data-act="myQr" aria-label="كبّر رمز الاستلام"><span id="qrMini" class="block w-full h-full">${UI.skeleton(1)}</span></button>
       <div class="flex-1 min-w-0"><div class="text-[12px] font-bold text-emerald-700">📦 كتبك جاهزة — ${booksWord(p.ready)}</div>
-        <div class="font-display font-bold text-[17px] text-slate-900 leading-snug mt-0.5">${p.down ? `هات معاك <span class="num text-rose-600">${fmt(p.down)}</span> ج.م (${planIsInst(Emp.invoice()) ? "المقدم" : "كامل المبلغ"})` : "مفيش مبلغ مطلوب — تعالى استلم على طول"}</div>
+        <div class="font-display font-bold text-[17px] text-slate-900 leading-snug mt-0.5">${p.down ? `هات معاك <span class="num text-rose-600">${fmt(p.down)}</span> ج.م (${planIsInst(Emp.invoice()) ? "صافي المقدم" : "صافي المبلغ"})` : "مفيش مبلغ مطلوب — تعالى استلم على طول"}</div>
+        ${creditNote}
         <div class="text-[12.5px] text-slate-500 mt-1">${p.slot ? "" : p.ph.Delivery_Start_Date ? `التسليم من ${esc(day(p.ph.Delivery_Start_Date))}` : ""}</div></div>
     </div>
     ${p.slot || (p.sc && p.sc.place) ? `<div class="mx-4 mb-3 rounded-2xl bg-brand-50 text-brand-900 p-3 text-[13.5px] leading-relaxed">${p.slot ? `🗓️ <b>موعدك:</b> ${esc(slotTxt(p.slot))}<br>` : ""}${p.sc.place ? `📍 <b>المكان:</b> ${esc(p.sc.place)}<br>` : ""}${p.sc.note ? `💡 ${esc(p.sc.note)}` : ""}</div>` : ""}

@@ -307,4 +307,21 @@ assert.strictEqual(empPortal.employee.profile.email, 'new1001@example.com');
 assert.strictEqual(empPortal.employee.editPermitted, true);
 checks += 9;
 
+// ============================================================================
+// الاختبار الثاني عشر: تبويب الأسرة في ملف الموارد البشرية ومزامنته التلقائية مع حساب الموظف
+// ============================================================================
+const famSave = ok(api('SAVE_EMPLOYEE_FAMILY', {
+  empId: '1001',
+  kids: [
+    { name: 'يوسف', gender: 'b', grade: '4 ابتدائي', type: 'عربي', track: '', rel: '' },
+    { name: 'مريم', gender: 'g', grade: '1 إعدادي', type: 'لغات', track: '', rel: '' }
+  ]
+}, coord), 'admin saves employee family');
+assert.strictEqual(famSave.kids.length, 2);
+const empPortalFam = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, empTok), 'employee portal receives synced family');
+assert.strictEqual(empPortalFam.employee.kids.length, 2, 'employee sees 2 synced family members');
+assert.strictEqual(empPortalFam.employee.kids[0].name, 'يوسف');
+assert.strictEqual(empPortalFam.employee.kids[1].grade, '1 إعدادي');
+checks += 4;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);

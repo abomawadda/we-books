@@ -666,6 +666,7 @@ const ACTION_ACL = {
   DELETE_EMPLOYEE: ["Coordinator"],
   TOGGLE_EMP_EDIT_PERMIT: ["Coordinator"],
   REVIEW_EMP_CHANGE_REQUEST: ["Coordinator"],
+  SAVE_EMPLOYEE_FAMILY: ["Coordinator"],
   SUBMIT_EMP_CHANGE_REQUEST: ["EMPLOYEE"],
   SAVE_PHASE: ["Coordinator"],
   DELETE_PHASE: ["Coordinator"],
@@ -779,6 +780,7 @@ function callServerApi(action, payload, sessionToken) {
       case "TOGGLE_EMP_EDIT_PERMIT": return E.toggleEmpEditPermit(session, payload);
       case "SUBMIT_EMP_CHANGE_REQUEST": return E.submitEmpChangeRequest(session, payload);
       case "REVIEW_EMP_CHANGE_REQUEST": return E.reviewEmpChangeRequest(session, payload);
+      case "SAVE_EMPLOYEE_FAMILY": return E.saveEmployeeFamily(session, payload);
       case "SAVE_PHASE": return E.savePhase(session, payload);
       case "DELETE_PHASE": return E.deletePhase(session, payload);
       case "DELETE_SUPPLIER": return E.deleteSupplier(session, payload);
@@ -2897,6 +2899,28 @@ const OperationsEngine = {
       }
       DB_Engine.updateRecordByPK(S.EMP_CHANGE_REQUESTS, "Req_ID", reqId, { Status: decision, Reviewed_At: now, Reviewed_By: actor, Review_Note: note });
       return { success: true, message: decision === "Approved" ? "تم اعتماد وتطبيق تعديلات الموظف (" + req.Emp_Name + ") بنجاح." : "تم رفض طلب تعديل الموظف (" + req.Emp_Name + ")." };
+    });
+  },
+
+  /** حفظ/تحديث قائمة أسرة الموظف من ملف الموارد البشرية (تتزامن تلقائياً مع «أبنائي / أسرتي» لدى الموظف) */
+  saveEmployeeFamily: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), id = Util.str(payload && payload.empId);
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === id);
+      Util.require(emp, "الموظف غير موجود.");
+      const arr = Array.isArray(payload && payload.kids) ? payload.kids : [];
+      Util.require(arr.length <= 15, "الحد الأقصى 15 فرداً في الأسرة.");
+      const clean = arr.map(k => ({
+        name: Util.str(k && k.name).replace(/[|<>—]/g, " ").slice(0, 40),
+        gender: k && k.gender === "g" ? "g" : "b",
+        grade: Util.str(k && k.grade).slice(0, 40),
+        type: Util.str((k && (k.type || k.schoolType)) || "").slice(0, 30),
+        track: Util.str(k && k.track).slice(0, 40),
+        rel: Util.str(k && k.rel).replace(/[|<>—]/g, " ").slice(0, 30)
+      })).filter(k => k.name || k.grade);
+      DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", id, { Kids_JSON: JSON.stringify({ y: this.schoolYear_(), kids: clean }), Updated_At: Util.now() });
+      DB_Engine.logAudit(session.userId, session.role, "Employees", "SAVE_EMPLOYEE_FAMILY", id, { count: this.kidsOf_(emp).length }, { count: clean.length });
+      return { success: true, message: "تم تحديث بيانات الأسرة (" + clean.length + " فرد) ومزامنتها تلقائياً مع حساب الموظف.", kids: clean };
     });
   },
 

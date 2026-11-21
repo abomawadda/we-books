@@ -213,11 +213,20 @@ function carryNotice(ph) {
   return null;
 }
 
+/** ملخص الحساب الصافي للموظف عبر كل الفواتير (المتبقي عليه − الرصيد الدائن له) ليظهر منطقياً وموحداً في كل الشاشات */
+function empNetAccount() {
+  const invs = (APP.emp && APP.emp.myInvoices) || [];
+  const alayh = Math.round(invs.reduce((s, i) => s + n(i.Remaining_Balance), 0) * 100) / 100;
+  const lah = Math.round(invs.reduce((s, i) => s + n(i.Credit_Balance), 0) * 100) / 100;
+  const net = Math.round((alayh - lah) * 100) / 100;
+  return { alayh, lah, net, netDue: Math.max(0, net), netCredit: Math.max(0, -net) };
+}
+
 Router.add("/e/home", view => {
   const r = APP.emp, u = APP.user, ph = r.activePhase;
   const name = fullName3(u.fullName);
   if (!ph) { view.innerHTML = Art.empty("calendar", "لا يوجد حجز مفتوح حالياً", "تابع إشعارات الإدارة لمعرفة موعد الحجز الجديد 🔔", `<button data-act="contact" class="btn btn-soft btn-sm mt-4">${ic("headset")} تواصل مع المسؤول</button>`); return; }
-  const items = Emp.activeItems(), inv = Emp.invoice(), inst = Emp.installments();
+  const items = Emp.activeItems(), inv = Emp.invoice(), inst = Emp.installments(), acc = empNetAccount();
   const reqQty = sum(items, "Requested_Qty"), alloc = sum(items, "Allocated_Qty"), deliv = sum(items, "Delivered_Qty");
   const paidPct = inv && n(inv.Net_Final_Invoice_Amount) ? n(inv.Total_Paid_Amount) / n(inv.Net_Final_Invoice_Amount) * 100 : 0;
   const left = Emp.daysLeft(), next = inst.find(i => n(i.Remaining_Inst_Amount) > 0), t = Emp.totals();
@@ -231,12 +240,13 @@ Router.add("/e/home", view => {
   let msg;
   if (ph.Booking_Open && !reqQty) msg = { icon: "sparkles", title: "الحجز مفتوح دلوقتي! 🎉", sub: left !== null ? (left <= 0 ? "النهارده آخر يوم للحجز" : `باقي ${left} يوم على قفل الحجز`) : "اختار كتب أولادك بخصم العاملين", cta: "ابدأ الحجز خطوة بخطوة", href: "#/e/wiz", act: "wizStart" };
   else if (ph.Booking_Open) msg = { icon: "circle-check", title: `حجزك محفوظ — ${booksWord(reqQty)}`, sub: "عايز تضيف أو تغيّر؟ " + (left !== null ? (left <= 0 ? "النهارده آخر يوم للتعديل" : `التعديل متاح ${left} يوم كمان`) : "التعديل متاح طول فترة الحجز"), cta: "راجع وعدّل حجزك", href: "#/e/wiz", act: "wizStart" };
-  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك — جهّز ${planIsInst(inv || APP.plan) ? "المقدم" : "المبلغ"} وتعالى استلم` + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
-  else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتب " + (ph.Phase_Name || "المرحلة دي") + " 🎉", sub: next ? "باقي أقساط بسيطة — تابعها من مدفوعاتي" : "بالتوفيق لأولادك في السنة الجديدة", cta: next ? "مدفوعاتي" : "حجوزاتي", href: next ? "#/e/pay" : "#/e/orders" };
+  else if (ready) msg = { icon: "package-check", title: "كتبك جاهزة للتسليم 📦", sub: `${booksWord(ready)} في انتظارك` + (acc.netDue > 0 ? ` — الصافي المطلوب ${fmt(acc.netDue)} ج.م` : " — مفيش مبلغ مطلوب، تعالى استلم") + (carry ? `\n${carry.text}` : ""), cta: "رمز الاستلام", href: "", act: "myQr" };
+  else if (reqQty && deliv >= reqQty) msg = { icon: "circle-check", title: "استلمت كل كتب " + (ph.Phase_Name || "المرحلة دي") + " 🎉", sub: acc.netDue > 0 ? `صافي المتبقي عليك ${fmt(acc.netDue)} ج.م — تابعه من مدفوعاتي` : "بالتوفيق لأولادك في السنة الجديدة", cta: acc.netDue > 0 ? "مدفوعاتي" : "حجوزاتي", href: acc.netDue > 0 ? "#/e/pay" : "#/e/orders" };
   else if (reqQty) msg = { icon: STAGES[Math.max(0, step)][1], title: STAGES[Math.max(0, step)][0] + " ⏳", sub: carry ? carry.text : "تابع كل خطوة لحظة بلحظة من «تتبّع طلبك» تحت", cta: "تابع طلبك", href: "#/e/orders" };
-  else msg = { icon: psi.icon, title: psi.title, sub: carry ? carry.text : psi.sub, cta: "", href: "" };
+  else msg = { icon: psi.icon, title: psi.title, sub: carry ? carry.text : "لم تسجّل حجزاً في هذه المرحلة — " + psi.sub, cta: "", href: "" };
 
   const anns = (r.announcements || []).slice(0, 4);
+  const netNextDue = next ? Math.max(0, Math.round((n(next.Remaining_Inst_Amount) - acc.lah) * 100) / 100) : 0;
   view.innerHTML = `
   ${anns.length ? `<div class="flex items-center gap-2 mb-2 text-[13px] font-bold text-slate-700">${ic("megaphone", "text-brand-600")} إشعارات الإدارة</div>` : ""}
   ${anns.map(a => `<div class="mb-3 rounded-2xl p-3.5 flex gap-3 ${a.tone === "warning" ? "bg-amber-50 ring-1 ring-amber-200 text-amber-900" : a.tone === "success" ? "bg-emerald-50 ring-1 ring-emerald-200 text-emerald-900" : "bg-brand-50 ring-1 ring-brand-100 text-brand-900"}"><span class="text-xl mt-0.5">${ic("megaphone")}</span><div class="flex-1 min-w-0"><b class="block text-[14.5px]">${esc(a.title)}</b>${a.body ? `<p class="text-[13px] mt-0.5 whitespace-pre-line opacity-90">${esc(a.body)}</p>` : ""}<div class="text-[11px] opacity-60 mt-1 num">${esc(String(a.at || "").slice(0, 10))}</div></div></div>`).join("")}
@@ -270,19 +280,22 @@ Router.add("/e/home", view => {
   ${countdownHTML(nextMilestone(ph))}
   ${items.length ? `<section class="card card-pad mt-4 lg:mt-6"><div class="flex items-center justify-between mb-4"><h2 class="card-title">${ic("truck", "text-brand-600")} تتبّع طلبك</h2><a href="#/e/orders" class="text-[12.5px] font-semibold text-brand-700">التفاصيل ←</a></div>
     <div class="flex items-center gap-3"><div class="hidden sm:block w-28 shrink-0">${Art[["books", "calendar", "truck", "box", "party"][deliv >= reqQty && reqQty ? 4 : (ready || deliv) ? 3 : Math.max(0, step)]]("w-full h-auto")}</div><div class="flex-1 min-w-0">${tracker(items)}</div></div></section>` : ""}
-  ${next ? `<section class="card card-pad mt-4 lg:mt-6">
+  ${next && acc.netDue > 0 ? `<section class="card card-pad mt-4 lg:mt-6">
       <div class="flex items-center justify-between"><h2 class="card-title">${ic("wallet", "text-brand-600")} القسط القادم</h2><a href="#/e/pay" class="text-[12.5px] font-semibold text-brand-700">كل الأقساط ←</a></div>
       <div class="mt-3 rounded-2xl ${next.Status === "Overdue" ? "bg-rose-50 ring-1 ring-rose-100" : "bg-brand-50"} p-4 flex flex-wrap items-end justify-between gap-2">
         <div><div class="text-[13px] ${next.Status === "Overdue" ? "text-rose-700" : "text-brand-700"} font-semibold">${esc(next.Admin_Custom_Notes || "قسط")} · ${next.Status === "Overdue" ? "متأخر من" : "موعده"} ${esc(day(next.Due_Date))}</div>
-        <div class="text-3xl font-bold text-slate-900 num mt-1">${money(next.Remaining_Inst_Amount)}</div></div>
-        ${inv && n(inv.Remaining_Balance) ? `<div class="text-[12.5px] text-slate-500">إجمالي المتبقي <b class="num text-slate-800">${moneyTxt(inv.Remaining_Balance)}</b></div>` : ""}</div>
+        <div class="text-3xl font-bold text-slate-900 num mt-1">${money(netNextDue)}</div>
+        ${acc.lah > 0 ? `<div class="text-[11.5px] text-emerald-700 mt-0.5">بعد خصم رصيد لك (${moneyTxt(acc.lah)}) من ${moneyTxt(next.Remaining_Inst_Amount)}</div>` : ""}</div>
+        <div class="text-[12.5px] text-slate-500">صافي المتبقي عليك <b class="num text-slate-800">${moneyTxt(acc.netDue)}</b></div></div>
     </section>` : ""}
 
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mt-4 lg:mt-6">
     ${UI.kpi("كتب محجوزة", fmt(reqQty), { icon: "book-open", tone: "brand", foot: Emp.dirty ? "عندك تعديلات لم تُحفظ" : rels.length ? `منها لـ ${rels.length} من الأقارب` : "" })}
     ${UI.kpi("جاهز للتسليم", fmt(alloc) + (reqQty ? ` <span class="text-sm text-slate-400">/ ${fmt(reqQty)}</span>` : ""), { icon: "package-check", tone: "green", pct: reqQty ? alloc / reqQty * 100 : 0, foot: deliv ? `استلمت ${fmt(deliv)}` : "" })}
     ${UI.kpi("وفّرت", inv ? money(inv.Total_Savings) : money(t.cover - t.net), { icon: "piggy-bank", tone: "green", foot: "مقارنة بالسعر قبل الخصم" })}
-    ${UI.kpi("المتبقي عليك", inv ? money(inv.Remaining_Balance) : money(0), { icon: "hand-coins", tone: inv && n(inv.Remaining_Balance) ? "amber" : "green", foot: inv && n(inv.Credit_Balance) ? `لك رصيد ${moneyTxt(inv.Credit_Balance)}` : "" })}
+    ${acc.netCredit > 0
+      ? UI.kpi("صافي رصيدك (لك)", money(acc.netCredit), { icon: "wallet", tone: "green", foot: acc.alayh > 0 ? `لك ${fmt(acc.lah)} − عليك ${fmt(acc.alayh)}` : "رصيد محفوظ لك" })
+      : UI.kpi("صافي المتبقي عليك", money(acc.netDue), { icon: "hand-coins", tone: acc.netDue > 0 ? "amber" : "green", foot: acc.lah > 0 && acc.alayh > 0 ? `فاتورة ${fmt(acc.alayh)} − رصيد لك ${fmt(acc.lah)}` : acc.netDue === 0 && acc.alayh === 0 ? "حسابك متزن" : "" })}
   </div>
 
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 mt-4 lg:mt-6">
@@ -805,21 +818,25 @@ function betweenView() {
   const cur = Math.max(0, steps.findIndex(x => x[0] === st));
   const items = Emp.activeItems(), qty = k => items.reduce((a, i) => a + n(i[k]), 0);
   const booked = qty("Requested_Qty"), got = qty("Delivered_Qty") - qty("Returned_Qty"), ready = items.reduce((a, i) => a + Math.max(0, n(i.Allocated_Qty) - n(i.Delivered_Qty)), 0);
-  const inv = Emp.invoice(), rem = inv ? n(inv.Remaining_Balance) : 0;
+  const acc = empNetAccount(), rem = acc.netDue;
   const now = new Date(), nx = (r.phases || []).filter(p => p.Phase_ID !== ph.Phase_ID && toDate(p.Start_DateTime) && toDate(p.Start_DateTime) > now).sort((a, b) => toDate(a.Start_DateTime) - toDate(b.Start_DateTime))[0];
   const openPh = (r.phases || []).find(p => p.Booking_Open && p.Phase_ID !== ph.Phase_ID);
   const days = nx ? Math.ceil((toDate(nx.Start_DateTime) - now) / 864e5) : null;
   const ks = myKids();
   const stat = (v, t, tone) => `<div class="rounded-2xl bg-white/10 px-2 py-2.5 text-center"><div class="font-display font-bold text-[22px] num ${tone || ""}">${fmt(v)}</div><div class="text-[11px] text-brand-200">${t}</div></div>`;
+  const heroTitle = !booked
+    ? (st === "Completed" ? "المرحلة خلصت ✨" : "الحجز مغلق حالياً — لم تحجز في هذه المرحلة")
+    : (st === "Completed" ? "المرحلة خلصت ✨" : st === "Delivering" ? "دلوقتي وقت التسليم 📦" : "الحجز اتقفل — كتبك في الطريق 🚚");
+  const heroSub = !booked ? "لم تسجّل حجزاً في هذه المرحلة. سجّل أبناءك الآن وتابع موعد فتح المرحلة القادمة." : "";
   return `<div class="max-w-xl mx-auto">
     <section class="rounded-3xl p-5 mb-4 text-white relative overflow-hidden shadow-soft" style="background:linear-gradient(140deg,#552c83,#2e1650)">
       <span class="absolute -left-10 -top-10 w-40 h-40 rounded-full bg-white/5"></span><span class="absolute -right-6 -bottom-12 w-32 h-32 rounded-full bg-gold-400/10"></span>
-      <div class="relative flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center shrink-0">${ic(psi.icon || "package-check", "!w-6 !h-6")}</span>
-        <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${esc(ph.Phase_Name || "")}</div><div class="font-display font-bold text-[18px] leading-snug">${st === "Completed" ? "المرحلة خلصت ✨" : st === "Delivering" ? "دلوقتي وقت التسليم 📦" : "الحجز اتقفل — كتبك في الطريق 🚚"}</div></div></div>
-      <ol class="relative flex items-start mt-5">${steps.map((x, i) => `<li class="flex-1 flex flex-col items-center text-center relative">${i ? `<span class="absolute right-1/2 w-full h-0.5 ${i <= cur ? "bg-gold-400" : "bg-white/15"}" style="top:15px"></span>` : ""}
+      <div class="relative flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center shrink-0">${ic(booked ? (psi.icon || "package-check") : "calendar-clock", "!w-6 !h-6")}</span>
+        <div class="flex-1 min-w-0"><div class="text-[12px] text-brand-200">${esc(ph.Phase_Name || "")}</div><div class="font-display font-bold text-[18px] leading-snug">${heroTitle}</div>${heroSub ? `<div class="text-[12.5px] text-brand-100/90 mt-1">${heroSub}</div>` : ""}</div></div>
+      ${booked ? `<ol class="relative flex items-start mt-5">${steps.map((x, i) => `<li class="flex-1 flex flex-col items-center text-center relative">${i ? `<span class="absolute right-1/2 w-full h-0.5 ${i <= cur ? "bg-gold-400" : "bg-white/15"}" style="top:15px"></span>` : ""}
         <span class="relative z-10 w-8 h-8 rounded-full flex items-center justify-center ${i < cur ? "bg-gold-400 text-brand-950" : i === cur ? "bg-white text-brand-800 ring-4 ring-gold-400/40" : "bg-white/10 text-white/50"}">${ic(i < cur ? "check" : x[2], "!w-4 !h-4")}</span>
         <span class="text-[10.5px] mt-1.5 ${i === cur ? "text-gold-300 font-bold" : i < cur ? "text-white/80" : "text-white/40"}">${x[1]}</span></li>`).join("")}</ol>
-      ${booked ? `<div class="relative grid grid-cols-3 gap-2 mt-5">${stat(booked, "حجزت")}${stat(got, "استلمت", "text-emerald-300")}${stat(ready, "جاهز ليك", ready ? "text-gold-300" : "")}</div>` : ""}
+      <div class="relative grid grid-cols-3 gap-2 mt-5">${stat(booked, "حجزت")}${stat(got, "استلمت", "text-emerald-300")}${stat(ready, "جاهز ليك", ready ? "text-gold-300" : "")}</div>` : ""}
     </section>
     ${openPh ? `<button class="w-full mb-4 rounded-3xl p-4 text-right flex items-center gap-3 ring-2 ring-emerald-300 bg-emerald-50 active:scale-[.99] transition" data-act="setPhase" data-id="${esc(openPh.Phase_ID)}"><span class="text-[30px]">🎉</span><span class="flex-1"><b class="block text-emerald-900 text-[15px]">الحجز مفتوح في «${esc(openPh.Phase_Name)}»</b><span class="block text-[12.5px] text-emerald-700">ادخل احجز دلوقتي</span></span>${ic("chevron-left", "text-emerald-600")}</button>`
       : `<section class="card p-4 mb-4 flex items-center gap-3"><span class="w-12 h-12 rounded-2xl bg-gold-50 text-gold-600 flex items-center justify-center shrink-0">${ic("calendar-clock", "!w-6 !h-6")}</span>
@@ -827,7 +844,7 @@ function betweenView() {
           <span class="block text-[12.5px] text-slate-500">${nx ? (days <= 1 ? "الحجز بيفتح بكرة" : `الحجز بيفتح بعد <b class="num text-brand-700">${days}</b> يوم · <span class="num">${esc(String(nx.Start_DateTime).slice(0, 10))}</span>`) : "أول ما تتحدد هنبلغك في الجرس 🔔 وتلاقيها هنا"}</span></div></section>`}
     ${ready || rem || carry ? `<section class="card p-4 mb-4"><h3 class="font-bold text-[14px] text-slate-900 mb-2 flex items-center gap-2">${ic("list-checks", "text-brand-600")} المطلوب منك دلوقتي</h3><ul class="space-y-2 text-[13px]">
       ${ready ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-gold-50 text-gold-600 flex items-center justify-center">${ic("package-check", "!w-4 !h-4")}</span><span class="flex-1">${booksWord(ready)} جاهزة للاستلام</span><button class="btn btn-primary btn-xs" data-act="myQr">رمز الاستلام</button></li>` : ""}
-      ${rem ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">${ic("wallet", "!w-4 !h-4")}</span><span class="flex-1">متبقي عليك <b class="num">${fmt(rem)}</b> ج.م</span><a class="btn btn-outline btn-xs" href="#/e/pay">مدفوعاتي</a></li>` : ""}
+      ${rem > 0 ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-rose-50 text-rose-600 flex items-center justify-center">${ic("wallet", "!w-4 !h-4")}</span><span class="flex-1">صافي المتبقي عليك <b class="num">${fmt(rem)}</b> ج.م${acc.lah > 0 ? ` <span class="text-[11px] text-emerald-700">(بعد خصم رصيد لك ${fmt(acc.lah)})</span>` : ""}</span><a class="btn btn-outline btn-xs" href="#/e/pay">مدفوعاتي</a></li>` : ""}
       ${carry ? `<li class="flex items-center gap-2"><span class="w-7 h-7 rounded-lg bg-violet-50 text-violet-600 flex items-center justify-center">${ic("arrow-left-right", "!w-4 !h-4")}</span><span class="flex-1 leading-snug">${esc(carry.text)}</span></li>` : ""}</ul></section>` : ""}
     <section class="card p-4 mb-4"><h3 class="font-bold text-[14px] text-slate-900 mb-1 flex items-center gap-2">${ic("sparkles", "text-gold-500")} جهّز للمرحلة الجاية</h3>
       <p class="text-[12.5px] text-slate-500 mb-3">${ks.length ? "راجع صفوف ولادك عشان أول ما الحجز يفتح تحجز في دقيقة." : "سجّل ولادك وصفوفهم من دلوقتي، وأول ما الحجز يفتح الكتب تكون جاهزة ليك."}</p>
@@ -1394,7 +1411,7 @@ Router.add("/e/wiz", view => {
   if (WZ.step === "pay") refreshCartViews();
 });
 const bagRenderInline = () => { const el = $("#wzBag"); if (el) el.innerHTML = bagHTML(); };
-on("wizStart", () => { if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
+on("wizStart", () => { if (!Emp.open()) { toast("الحجز مغلق حالياً", "info"); return Router.go("/e/books"); } if (!wzLoad()) { wzClear(); if (Emp.activeItems().length) WZ.step = "review"; } Router.go("/e/wiz"); });
 on("wzHideGuide", () => { wzMarkGuideOff(); WZ.forceGuide = false; Shell.rerender(); });
 on("wzGuidePick", v => { wzMarkGuideOff(); WZ.forceGuide = false; if (v === "kids") { Shell.rerender(); KD._addRel = false; kidsEditor(false); } else if (v === "skip") { Shell.rerender(); gbOpen(); } else { Shell.rerender(); } });
 on("wzSel", v => { const ks = myKids(); WZ.sel = WZ.sel || ks.map((_, i) => i); const i = +v; WZ.sel = WZ.sel.includes(i) ? WZ.sel.filter(x => x !== i) : WZ.sel.concat(i).sort((a, b) => a - b); wzSave(); Shell.rerender(); });
@@ -1607,12 +1624,18 @@ Router.add("/e/pay", view => {
 });
 
 // ============================================================ حسابي
+let ME_MORE = false;
 Router.add("/e/me", view => {
-  const r = APP.emp, u = APP.user, p = (r.employee && r.employee.profile) || {};
+  const r = APP.emp, u = APP.user, p = (r.employee && r.employee.profile) || {}, acc = empNetAccount();
   const canReqEdit = !!(r.employee && r.employee.editPermitted);
   const myReqs = (r.myChangeRequests || []).slice().sort((a, b) => String(b.Created_At || "").localeCompare(String(a.Created_At || "")));
   const REQ_LBL = { Mobile: "الموبايل الأساسي", Mobile2: "موبايل إضافي", Email: "البريد الإلكتروني", Address: "العنوان", Qualification: "المؤهل", Specialization: "التخصص", Marital_Status: "الحالة الاجتماعية", Department: "جهة العمل", Job_Title: "الوظيفة" };
   const row = (icon, lbl, val) => `<div class="flex items-center gap-3 px-4 py-3"><span class="w-9 h-9 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">${ic(icon, "!w-4 !h-4")}</span><span class="flex-1 text-slate-500 text-[13.5px]">${lbl}</span><span class="font-semibold text-slate-900 text-[13.5px] text-left break-words">${val}</span></div>`;
+  const netRowVal = acc.netCredit > 0
+    ? `<span class="text-emerald-700">لك رصيد ${moneyTxt(acc.netCredit)}</span>`
+    : acc.netDue > 0
+      ? `<span class="text-rose-600">عليك ${moneyTxt(acc.netDue)}${acc.lah > 0 ? ` <span class="text-[11px] text-emerald-700 font-normal">(بعد خصم ${fmt(acc.lah)})</span>` : ""}</span>`
+      : `<span class="text-emerald-700">متزن (0 ج.م)</span>`;
   const reqsHtml = myReqs.length ? `<section class="card card-pad space-y-2">
     <div class="text-xs font-bold text-slate-700 flex items-center gap-1.5">${ic("inbox", "text-brand-600 !w-4 !h-4")} طلبات تعديل بياناتي</div>
     ${myReqs.slice(0, 5).map(rq => {
@@ -1626,11 +1649,28 @@ Router.add("/e/me", view => {
     }).join("")}
   </section>` : "";
 
+  const moreFields = [
+    p.gradeTitle ? row("award", "الدرجة الوظيفية", esc(p.gradeTitle)) : "",
+    p.unionOrg ? row("users", "التنظيم النقابي", esc(p.unionOrg)) : "",
+    p.hireDate ? row("calendar", "تاريخ التعيين", `<span class="num font-mono">${esc(p.hireDate)}</span>`) : "",
+    p.retirementDate ? row("calendar-clock", "تاريخ المعاش", `<span class="num font-mono">${esc(p.retirementDate)}</span>`) : "",
+    p.insuranceNo ? row("shield", "الرقم التأميني", `<span class="num font-mono">${esc(p.insuranceNo)}</span>`) : "",
+    p.mobile2 ? row("smartphone", "موبايل إضافي", `<span class="num font-mono" dir="ltr">${esc(p.mobile2)}</span>`) : "",
+    p.email ? row("mail", "البريد الإلكتروني", `<span class="text-xs font-mono break-all" dir="ltr">${esc(p.email)}</span>`) : "",
+    p.address ? row("map-pin", "العنوان", esc(p.address)) : "",
+    p.qualification ? row("graduation-cap", "المؤهل الدراسي", esc(p.qualification + (p.specialization ? " — " + p.specialization : ""))) : "",
+    p.maritalStatus ? row("heart", "الحالة الاجتماعية", esc(p.maritalStatus)) : "",
+    row("calendar-check", "التقسيط", r.employee.installmentAllowed ? "مسموح" : "غير مسموح"),
+    row("scale", "الحد الائتماني", moneyTxt(r.employee.creditLimit)),
+    row("badge-percent", "خصم العاملين", fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT) + "%"),
+    row("smartphone", "حساب التحويل", esc(r.settings.CASH_ACCOUNT_HOLDER || "—"))
+  ].filter(Boolean).join("");
+
   view.innerHTML = `
   <div class="max-w-2xl mx-auto space-y-4">
     <section class="hero rounded-4xl text-white p-6 shadow-lift">
       <div class="flex items-center gap-4">
-        ${UI.avatar(p.fullName || u.fullName, "w-16 h-16 text-xl !bg-white/15 !text-white ring-2 ring-white/25")}
+        ${UI.avatar(p.fullName || u.fullName, "w-16 h-16 text-xl ring-2 ring-white/25")}
         <div class="min-w-0 flex-1">
           <h1 class="font-bold leading-snug break-words" style="font-size:clamp(16px,4.6vw,22px)">${esc(p.fullName || u.fullName)}</h1>
           <div class="text-brand-200 text-xs sm:text-sm mt-0.5">${esc([p.jobTitle || u.jobTitle, p.department || u.department].filter(Boolean).join(" · ") || "—")}</div>
@@ -1645,49 +1685,27 @@ Router.add("/e/me", view => {
 
     <section class="card overflow-hidden">
       <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between gap-2">
-        <span class="font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("briefcase", "text-brand-600 !w-4 !h-4")} بياناتي الوظيفية والنقابية</span>
+        <span class="font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("id-card", "text-brand-600 !w-4 !h-4")} بياناتي الأساسية</span>
         ${canReqEdit
-          ? `<button type="button" class="btn btn-primary btn-xs" data-act="empReqEdit">${ic("pencil")} طلب تعديل بياناتي</button>`
-          : `<span class="text-[11px] text-slate-400">${ic("lock", "inline !w-3 !h-3")} التعديل بتصريح من الإدارة</span>`}
+          ? `<button type="button" class="btn btn-primary btn-xs" data-act="empReqEdit">${ic("pencil")} طلب تعديل</button>`
+          : `<span class="text-[11px] text-slate-400">${ic("lock", "inline !w-3 !h-3")} التعديل بتصريح</span>`}
       </header>
       <div class="divide-y divide-slate-100">
         ${row("building-2", "جهة العمل / الإدارة", esc(p.department || u.department || "—"))}
         ${row("briefcase", "الوظيفة", esc(p.jobTitle || u.jobTitle || "—"))}
-        ${p.gradeTitle ? row("award", "الدرجة الوظيفية", esc(p.gradeTitle)) : ""}
-        ${p.unionOrg ? row("users", "التنظيم النقابي", esc(p.unionOrg)) : ""}
-        ${p.memberState ? row("badge-check", "الحالة النقابية", esc(p.memberState)) : ""}
-        ${p.hireDate ? row("calendar", "تاريخ التعيين", `<span class="num font-mono">${esc(p.hireDate)}</span>`) : ""}
-        ${p.retirementDate ? row("calendar-clock", "تاريخ المعاش", `<span class="num font-mono">${esc(p.retirementDate)}</span>`) : ""}
-        ${p.insuranceNo ? row("shield", "الرقم التأميني", `<span class="num font-mono">${esc(p.insuranceNo)}</span>`) : ""}
+        ${row("phone", "الموبايل", `<span class="num font-mono" dir="ltr">${esc(p.mobile || u.mobile || "—")}</span>`)}
+        ${row("wallet", "صافي الحساب", `<a href="#/e/pay" class="hover:underline">${netRowVal}</a>`)}
       </div>
-    </section>
-
-    <section class="card overflow-hidden">
-      <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("user", "text-brand-600 !w-4 !h-4")} بياناتي الشخصية والتواصل</header>
-      <div class="divide-y divide-slate-100">
-        ${row("phone", "الموبايل الأساسي", `<span class="num font-mono" dir="ltr">${esc(p.mobile || u.mobile || "—")}</span>`)}
-        ${p.mobile2 ? row("smartphone", "موبايل إضافي", `<span class="num font-mono" dir="ltr">${esc(p.mobile2)}</span>`) : ""}
-        ${p.email ? row("mail", "البريد الإلكتروني", `<span class="text-xs font-mono break-all" dir="ltr">${esc(p.email)}</span>`) : ""}
-        ${p.address ? row("map-pin", "العنوان", esc(p.address)) : ""}
-        ${p.qualification ? row("graduation-cap", "المؤهل الدراسي", esc(p.qualification + (p.specialization ? " — " + p.specialization : ""))) : ""}
-        ${p.maritalStatus ? row("heart", "الحالة الاجتماعية", esc(p.maritalStatus)) : ""}
-      </div>
+      ${ME_MORE ? `<div class="divide-y divide-slate-100 border-t border-slate-100 bg-slate-50/40">${moreFields}</div>` : ""}
+      <button type="button" data-act="meToggleMore" class="w-full px-4 py-2.5 bg-slate-50/80 hover:bg-slate-100/80 border-t border-slate-100 text-xs font-bold text-brand-700 flex items-center justify-center gap-1.5 transition">
+        ${ic(ME_MORE ? "chevron-up" : "chevron-down", "!w-4 !h-4")} ${ME_MORE ? "إخفاء التفاصيل الإضافية" : "عرض المزيد من بياناتي"}
+      </button>
     </section>
 
     ${reqsHtml}
 
-    <section class="card overflow-hidden">
-      <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("wallet", "text-brand-600 !w-4 !h-4")} إعدادات المبادرة</header>
-      <div class="divide-y divide-slate-100">
-        ${row("calendar-check", "التقسيط", r.employee.installmentAllowed ? "مسموح" : "غير مسموح")}
-        ${row("scale", "الحد الائتماني", moneyTxt(r.employee.creditLimit))}
-        ${row("badge-percent", "خصم العاملين", fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT) + "%")}
-        ${row("smartphone", "حساب التحويل", esc(r.settings.CASH_ACCOUNT_HOLDER || "—"))}
-      </div>
-    </section>
-
     <section class="card divide-y divide-slate-100">
-      <button data-act="kidsEdit" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-xl">👦</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">أبنائي</b><span class="block text-[12px] text-slate-500">${myKids().length ? myKids().map((k, i) => esc(kidName(k, i)) + " (" + esc(gradeShort(k.grade)) + ")").join("، ") : "أضف أبناءك لحجز أسرع"}</span></span>${ic("chevron-left", "text-slate-300")}</button>
+      <button data-act="kidsEdit" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-xl">👨‍👩‍👧</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">أسرتي وأبنائي (${fmt(myKids().length)})</b><span class="block text-[12px] text-slate-500">${myKids().length ? myKids().map((k, i) => esc(kidName(k, i)) + (k.grade ? " (" + esc(gradeShort(k.grade)) + ")" : "")).join("، ") : "أضف أفراد أسرتك وأبناءك لحجز أسرع"}</span></span>${ic("chevron-left", "text-slate-300")}</button>
       <button data-act="faq" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">${ic("info")}</span><span class="flex-1 font-semibold">أسئلة شائعة</span>${ic("chevron-left", "text-slate-300")}</button>
       <button data-act="contact" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">${ic("headset")}</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">تواصل مع المسؤول</b><span class="block text-[12px] text-slate-500">واتساب · اتصال · بريد</span></span>${ic("chevron-left", "text-slate-300")}</button>
       <button data-act="pickPhase" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center">${ic("calendar-range")}</span><span class="flex-1 font-semibold">تغيير المرحلة</span>${ic("chevron-left", "text-slate-400")}</button>
@@ -1696,6 +1714,7 @@ Router.add("/e/me", view => {
     </section>
   </div>`;
 });
+on("meToggleMore", () => { ME_MORE = !ME_MORE; Shell.rerender(); });
 on("empReqEdit", async () => {
   const p = (APP.emp && APP.emp.employee && APP.emp.employee.profile) || {};
   const v = await UI.form({
