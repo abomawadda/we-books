@@ -35,7 +35,10 @@ const SYSTEM_CONFIG = {
     EXPENSES: "19_Initiative_Expenses",
     AUDIT_TRAIL: "20_System_Audit_Trail",
     COUNTERS: "21_Doc_Counters",
-    CASH_CLOSINGS: "22_Cash_Closings"
+    CASH_CLOSINGS: "22_Cash_Closings",
+    PRICE_LISTS: "23_Price_Lists",
+    PRICE_ITEMS: "24_Book_Prices",
+    TRACK_CURRICULUM: "25_Track_Curriculum"
   },
   ROLES: ["Admin", "Coordinator", "Finance", "Warehouse"],
   PHASE_STATUSES: ["Draft", "Open", "Closed", "Ordered", "Receiving", "Delivering", "Completed"],
@@ -156,9 +159,9 @@ function getDatabaseSchemaDefinition_() {
     { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON", "Cart_Draft"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL", "Tracks"] },
-    { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override"] },
+    { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override", "Academic_Year", "Term"] },
     { name: S.RES_HEADER, color: "#6d28d9", headers: ["Res_ID", "Phase_ID", "Emp_ID", "Created_At", "Last_Modified_At", "Payment_Method_Selected", "Down_Payment_Type", "Down_Payment_Input", "Calculated_Down_Payment", "Installment_Count", "Installment_Value", "Total_Cover_Value", "Total_Emp_Value", "Res_Status", "Invoice_Adjustment", "Adjustment_Reason", "Created_By", "Cancel_Request", "Feedback", "Payment_Channel"] },
-    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request", "Delivered_At"] },
+    { name: S.RES_ITEMS, color: "#7e22ce", headers: ["Res_Item_ID", "Res_ID", "Phase_ID", "Emp_ID", "Book_ID", "Priority_Timestamp", "Requested_Qty", "Allocated_Qty", "Delivered_Qty", "Returned_Qty", "Net_Billable_Qty", "Unit_Cover_Price", "Unit_Emp_Price", "Total_Emp_Line_Amount", "Allocation_Status", "Unallocated_Reason", "Is_Manual_Exception", "Exception_By", "Exception_Reason", "Tranche_No", "Carried_From_Item_ID", "Beneficiary", "Waitlist_Choice", "Return_Request", "Delivered_At", "Academic_Year", "Term", "Track", "Price_ID"] },
     { name: S.RES_AUDIT, color: "#9333ea", headers: ["Log_ID", "Res_ID", "Emp_ID", "Book_ID", "Action_Type", "Old_Qty", "New_Qty", "Priority_Timestamp_Applied", "Action_Timestamp", "Rule_Applied"] },
     { name: S.PO_SNAPSHOT, color: "#b45309", headers: ["PO_ID", "Phase_ID", "Supplier_ID", "Book_ID", "Total_Requested_Qty", "Carryover_Stock_Qty", "Net_Order_To_Supplier_Qty", "Frozen_At", "Frozen_By", "Pending_From_Previous_Qty", "Received_Qty_To_Date", "Outstanding_Qty", "Line_Status"] },
     { name: S.SUP_INV_HEADER, color: "#c2410c", headers: ["Sup_Inv_ID", "Internal_Ref_No", "Supplier_Invoice_No", "Supplier_ID", "Phase_ID", "Invoice_Date", "Gross_Total_Cover", "Total_After_Item_Discount", "Volume_Discount_Pct", "Volume_Discount_Amount", "Net_Payable_Amount", "Status", "Approved_By", "Approved_At", "Supplier_Stated_Net", "Variance_Amount", "Damaged_Claim_Amount"] },
@@ -172,7 +175,10 @@ function getDatabaseSchemaDefinition_() {
     { name: S.EXPENSES, color: "#9f1239", headers: ["Expense_ID", "Expense_Date", "Phase_ID", "Expense_Category", "Amount", "Beneficiary_Name", "Allocation_Method", "Receipt_Doc_No", "Recorded_By", "Notes"] },
     { name: S.AUDIT_TRAIL, color: "#475569", headers: ["Audit_ID", "Timestamp", "User_ID", "User_Role", "Module_Name", "Action_Performed", "Record_Primary_Key", "Before_State_JSON", "After_State_JSON"] },
     { name: S.COUNTERS, color: "#64748b", headers: ["Counter_Key", "Prefix", "Last_Value", "Updated_At"] },
-    { name: S.CASH_CLOSINGS, color: "#0e7490", headers: ["Closing_ID", "Closing_Date", "Payment_Method", "System_Amount", "Counted_Amount", "Difference", "Receipts_Count", "Closed_By", "Closed_At", "Notes"] }
+    { name: S.CASH_CLOSINGS, color: "#0e7490", headers: ["Closing_ID", "Closing_Date", "Payment_Method", "System_Amount", "Counted_Amount", "Difference", "Receipts_Count", "Closed_By", "Closed_At", "Notes"] },
+    { name: S.PRICE_LISTS, color: "#1d4ed8", headers: ["Price_List_ID", "Academic_Year", "Term", "Title", "Status", "Notes", "Copied_From_ID", "Created_At", "Created_By", "Approved_At", "Approved_By", "Archived_At", "Archived_By", "Version"] },
+    { name: S.PRICE_ITEMS, color: "#2563eb", headers: ["Price_ID", "Price_List_ID", "Book_ID", "Academic_Year", "Term", "Stage", "Grade", "Track", "Cover_Price", "Supplier_Discount_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Status", "Version", "Previous_Price_ID", "Change_Reason", "Created_At", "Created_By", "Approved_At", "Approved_By"] },
+    { name: S.TRACK_CURRICULUM, color: "#0284c7", headers: ["Curr_ID", "Academic_Year", "Term", "Stage", "Grade", "Track_ID", "Track_Name", "Book_ID", "Is_Shared", "Is_Active", "Notes", "Updated_At", "Updated_By"] }
   ];
 }
 
@@ -641,6 +647,15 @@ const ACTION_ACL = {
   SET_BOOK_COVER: ["Coordinator"],
   SET_BOOK_TRACKS: ["Coordinator"],
   SET_PUBLISHER_LOGO: ["Coordinator"],
+  GET_PRICING_DATA: ADMIN_ROLES,
+  SAVE_PRICE_LIST: ["Coordinator", "Finance"],
+  SAVE_PRICE_ITEMS: ["Coordinator", "Finance"],
+  TRANSITION_PRICE_LIST: ["Coordinator", "Finance"],
+  REVISE_APPROVED_PRICE: ["Coordinator", "Finance"],
+  COMPARE_PRICE_LISTS: ADMIN_ROLES,
+  SAVE_TRACKS_REGISTRY: ["Coordinator"],
+  SAVE_TRACK_CURRICULUM: ["Coordinator"],
+  SAVE_STAGES_LIST: ["Coordinator"],
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_PHASE: ["Coordinator"],
   DELETE_PHASE: ["Coordinator"],
@@ -736,6 +751,15 @@ function callServerApi(action, payload, sessionToken) {
       case "SET_BOOK_TRACKS": return E.setBookTracks(session, payload);
       case "SET_BOOK_COVER": return E.setBookCover(session, payload.bookId, payload.url);
       case "SET_PUBLISHER_LOGO": return E.setPublisherLogo(session, payload.publisher, payload.url);
+      case "GET_PRICING_DATA": return E.getPricingData(payload);
+      case "SAVE_PRICE_LIST": return E.savePriceList(session, payload);
+      case "SAVE_PRICE_ITEMS": return E.savePriceItems(session, payload);
+      case "TRANSITION_PRICE_LIST": return E.transitionPriceList(session, payload);
+      case "REVISE_APPROVED_PRICE": return E.reviseApprovedPrice(session, payload);
+      case "COMPARE_PRICE_LISTS": return E.comparePriceLists(payload);
+      case "SAVE_TRACKS_REGISTRY": return E.saveTracksRegistry(session, payload);
+      case "SAVE_TRACK_CURRICULUM": return E.saveTrackCurriculum(session, payload);
+      case "SAVE_STAGES_LIST": return E.saveStagesList(session, payload);
       case "ADJUST_EMP_INVOICE": return E.adjustEmployeeInvoice(session, payload);
       case "DELETE_EMP_INVOICE": return E.deleteEmployeeInvoice(session, payload);
       case "BULK_IMPORT_BOOKS": return E.withReprice_(session, () => E.bulkImportBooks(session, payload.booksArray || []));
@@ -1043,7 +1067,7 @@ const OperationsEngine = {
     let n = 0;
     all.forEach(i => {
       const c = changed[Util.str(i.Book_ID)];
-      if (!c || this.isCancelledItem_(i) || done[Util.str(i.Phase_ID)]) return;
+      if (!c || this.isCancelledItem_(i) || done[Util.str(i.Phase_ID)] || Util.str(i.Price_ID)) return;
       if (Util.num(i.Unit_Emp_Price) === c[0] && Util.num(i.Unit_Cover_Price) === c[1]) return;
       log.push([i.Res_Item_ID, Util.num(i.Unit_Emp_Price), c[0]]);
       const dq = Util.num(i.Delivered_Qty) - Util.num(i.Returned_Qty);
@@ -1225,6 +1249,9 @@ const OperationsEngine = {
       supLedger: DB_Engine.getAllRecords(S.SUP_LEDGER),
       expenses: DB_Engine.getAllRecords(S.EXPENSES),
       cashClosings: DB_Engine.getAllRecords(S.CASH_CLOSINGS),
+      priceLists: DB_Engine.getAllRecords(S.PRICE_LISTS),
+      priceItems: DB_Engine.getAllRecords(S.PRICE_ITEMS),
+      trackCurriculum: DB_Engine.getAllRecords(S.TRACK_CURRICULUM),
       stockMap: this.getStockSnapshot_(resItems),
       returnPool: this.returnPool_(resItems), returnTerms: this.supplierReturnTerms_("")
     };
@@ -1259,11 +1286,16 @@ const OperationsEngine = {
       // المفتاح = الكتاب + المستفيد ("" = العضو وأبناؤه، أو اسم القريب وصلته)
       const SEP = "\u0001", keyOf = (b, ben) => b + SEP + ben, bookOf = k => k.split(SEP)[0], benOf = k => k.split(SEP)[1] || "";
       const allowRel = settings.ALLOW_RELATIVE_BOOKING !== false && String(settings.ALLOW_RELATIVE_BOOKING) !== "false";
-      const wanted = {};
+      const wanted = {}, trackOfKey = {};
       (payload.items || []).forEach(r => {
         const b = Util.str(r.bookId), q = parseInt(r.qty, 10) || 0;
         const ben = Util.str(r.beneficiary).replace(/\s+/g, " ").slice(0, 80);
-        if (b && q > 0) wanted[keyOf(b, ben)] = (wanted[keyOf(b, ben)] || 0) + q;
+        const trk = Util.str(r.track).slice(0, 60);
+        if (b && q > 0) {
+          const k = keyOf(b, ben);
+          wanted[k] = (wanted[k] || 0) + q;
+          if (trk) trackOfKey[k] = trk;
+        }
       });
       const bens = {}; Object.keys(wanted).forEach(k => { if (benOf(k)) bens[benOf(k)] = 1; });
       if (Object.keys(bens).length) {
@@ -1312,16 +1344,19 @@ const OperationsEngine = {
         const oldTotal = tranches.reduce((s, t) => s + Util.num(t.Requested_Qty), 0);
         const newTotal = wanted[key] || 0;
         const book = booksMap[bId];
-        const unitEmp = book ? FinancialEngine.roundUpEmployeePrice(book.Emp_Selling_Price) : 0;
+        const trk = trackOfKey[key] || "";
+        const resolved = this.resolveBookPrice_(bId, book, Util.str(phase.Academic_Year), Util.str(phase.Term), trk);
+        const unitEmp = resolved.empPrice;
 
         if (newTotal > oldTotal) {
           const nextNo = (maxTr[bId] = (maxTr[bId] || 0) + 1);
           tranches.push({
             Res_Item_ID: resId + "-" + bId + "-T" + nextNo, Res_ID: resId, Phase_ID: phaseId, Emp_ID: empId, Book_ID: bId,
             Priority_Timestamp: nowStr, Requested_Qty: newTotal - oldTotal, Allocated_Qty: 0, Delivered_Qty: 0, Returned_Qty: 0,
-            Net_Billable_Qty: 0, Unit_Cover_Price: Util.num(book.Cover_Price), Unit_Emp_Price: unitEmp, Total_Emp_Line_Amount: 0,
+            Net_Billable_Qty: 0, Unit_Cover_Price: resolved.coverPrice, Unit_Emp_Price: unitEmp, Total_Emp_Line_Amount: 0,
             Allocation_Status: "Pending", Unallocated_Reason: "", Is_Manual_Exception: false, Exception_By: "", Exception_Reason: "",
-            Tranche_No: nextNo, Carried_From_Item_ID: "", Beneficiary: ben
+            Tranche_No: nextNo, Carried_From_Item_ID: "", Beneficiary: ben,
+            Academic_Year: resolved.academicYear, Term: resolved.term, Track: resolved.track, Price_ID: resolved.priceId
           });
           logA(bId, oldTotal === 0 ? "ADD_NEW" : "INCREASE_QTY", oldTotal, newTotal, nowStr,
             oldTotal === 0 ? "حجز جديد بختم وقت أولي" : "زيادة: النسخ الإضافية بختم وقت جديد، والنسخ السابقة تحتفظ بأسبقيتها", ben);
@@ -1443,7 +1478,9 @@ const OperationsEngine = {
         Delivery_Start_Date: payload.deliveryStartDate || (existing ? existing.Delivery_Start_Date : ""),
         Allowed_Grades: payload.allowedGrades || "ALL",
         Phase_Status: payload.phaseStatus || (existing ? existing.Phase_Status : "Open"),
-        Manual_Override: Util.bool(payload.manualOverride)
+        Manual_Override: Util.bool(payload.manualOverride),
+        Academic_Year: Util.str(payload.academicYear) || (existing ? Util.str(existing.Academic_Year) : ""),
+        Term: Util.str(payload.term) || (existing ? Util.str(existing.Term) : "")
       };
       if (existing) DB_Engine.updateRecordByPK(S.PHASES, "Phase_ID", pId, obj);
       else DB_Engine.insertRecordsBatch(S.PHASES, [obj]);
@@ -1634,12 +1671,59 @@ const OperationsEngine = {
     if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", key, rec); else DB_Engine.insertRecordsBatch(S.SETTINGS, [rec]);
   },
 
+  /** قائمة المراحل الدراسية المرنة (من الإعداد BOOK_STAGES + أي مرحلة موجودة في الصفوف) */
+  stagesList_: function() {
+    const def = ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"];
+    const st = getSettings_();
+    let list = [];
+    const raw = Util.str(st.BOOK_STAGES);
+    if (raw) {
+      try { const p = JSON.parse(raw); if (Array.isArray(p)) list = p.map(x => Util.str(x)).filter(Boolean); }
+      catch (e) { list = raw.split(/[,،]/).map(x => x.trim()).filter(Boolean); }
+    }
+    if (!list.length) list = def.slice();
+    const seen = {}; list.forEach(s => seen[s] = 1);
+    this.gradesList_().forEach(g => { if (g.stage && !seen[g.stage]) { seen[g.stage] = 1; list.push(g.stage); } });
+    return list;
+  },
+
+  /** سجل الشعب المرن (TRACKS_REGISTRY) مع دمج تلقائي لأي شعب مسجلة سابقاً في GRADE_TRACKS */
+  tracksRegistry_: function() {
+    const st = getSettings_(), grades = this.gradesList_(), gStage = {};
+    grades.forEach(g => { gStage[g.label] = g.stage; });
+    let reg = [];
+    try {
+      const raw = st.TRACKS_REGISTRY;
+      const p = typeof raw === "string" ? JSON.parse(raw || "[]") : raw;
+      if (Array.isArray(p)) reg = p.filter(x => x && Util.str(x.name) && Util.str(x.grade));
+    } catch (e) { reg = []; }
+    const seen = {};
+    reg = reg.map((t, idx) => {
+      const g = Util.str(t.grade), nm = Util.str(t.name);
+      const id = Util.str(t.id) || ("TRK-" + (idx + 1));
+      seen[g + "|" + nm] = 1;
+      return { id: id, name: nm, grade: g, stage: Util.str(t.stage) || gStage[g] || "المرحلة الثانوية", isActive: t.isActive !== false, notes: Util.str(t.notes), updatedAt: Util.str(t.updatedAt) };
+    });
+    const legacy = this.gradeTracks_();
+    let seq = reg.length + 1;
+    Object.keys(legacy).forEach(g => {
+      (legacy[g] || []).forEach(nm => {
+        if (!seen[g + "|" + nm]) {
+          seen[g + "|" + nm] = 1;
+          reg.push({ id: "TRK-" + (seq++), name: nm, grade: g, stage: gStage[g] || "المرحلة الثانوية", isActive: true, notes: "", updatedAt: "" });
+        }
+      });
+    });
+    return reg;
+  },
+
   /** قوائم الكتالوج (الثابتة + القابلة للتعديل من الإعدادات) */
   catalogLists_: function() {
     const st = getSettings_();
     const list = k => Util.str(st[k]).split(/[,،]/).map(x => x.trim()).filter(Boolean);
-    return { grades: this.gradesList_(), schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
-      publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS"), tracks: this.gradeTracks_() };
+    return { grades: this.gradesList_(), stages: this.stagesList_(), schoolTypes: SYSTEM_CONFIG.CATALOG.SCHOOL_TYPES,
+      publishers: list("BOOK_PUBLISHERS"), subjects: list("BOOK_SUBJECTS"), parts: list("BOOK_PARTS"),
+      tracks: this.gradeTracks_(), tracksRegistry: this.tracksRegistry_() };
   },
   /** شُعب كل صف من الإعداد GRADE_TRACKS (JSON: {"2 ثانوي": ["علمي","أدبي",...]}) — فارغ = الصف بلا شعب */
   gradeTracks_: function() {
@@ -1661,6 +1745,441 @@ const OperationsEngine = {
       DB_Engine.logAudit(session.userId, session.role, "Catalog", "SET_BOOK_TRACKS", "BOOKS", null, { changed: n });
       return { success: true, message: n ? "تم تحديث شُعب " + n + " كتاب" : "لا تغيير", changed: n };
     });
+  },
+
+  /** حفظ قائمة المراحل الدراسية المرنة (دون تعديل الكود) */
+  saveStagesList: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const raw = Array.isArray(payload.stages) ? payload.stages : [];
+      const clean = []; const seen = {};
+      raw.forEach(s => { const v = Util.str(s).replace(/[,،|]/g, " ").slice(0, 60); if (v.length >= 2 && !seen[v]) { seen[v] = 1; clean.push(v); } });
+      Util.require(clean.length > 0, "يجب وجود مرحلة دراسية واحدة على الأقل.");
+      this.upsertSettingRow_(session, "BOOK_STAGES", JSON.stringify(clean), "JSON", "قائمة المراحل الدراسية (قابلة للتوسع من الإدارة)");
+      DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_STAGES_LIST", "BOOK_STAGES", null, { stages: clean });
+      return { success: true, message: "تم حفظ قائمة المراحل الدراسية (" + clean.length + " مراحل).", stages: clean };
+    });
+  },
+
+  /** إدارة سجل الشعب المرن (إضافة / تعديل / تفعيل / إيقاف / حذف) مع مزامنة GRADE_TRACKS للواجهة */
+  saveTracksRegistry: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const reg = this.tracksRegistry_().slice();
+      const grades = this.gradesList_(), gStage = {}; grades.forEach(g => { gStage[g.label] = g.stage; });
+      const op = Util.str(payload.op || "upsert");
+      if (op === "replace" && Array.isArray(payload.tracks)) {
+        const next = []; const seen = {};
+        payload.tracks.forEach((t, i) => {
+          const nm = Util.str(t.name).replace(/[،,]/g, " ").slice(0, 50), g = Util.str(t.grade);
+          if (!nm || !g || seen[g + "|" + nm]) return;
+          seen[g + "|" + nm] = 1;
+          next.push({ id: Util.str(t.id) || ("TRK-" + Date.now() + "-" + i), name: nm, grade: g, stage: Util.str(t.stage) || gStage[g] || "المرحلة الثانوية", isActive: t.isActive !== false, notes: Util.str(t.notes).slice(0, 200), updatedAt: Util.now() });
+        });
+        this.upsertSettingRow_(session, "TRACKS_REGISTRY", JSON.stringify(next), "JSON", "سجل الشعب والتخصصات الدراسية");
+        const legacy = {}; next.filter(x => x.isActive).forEach(x => { (legacy[x.grade] = legacy[x.grade] || []).push(x.name); });
+        this.upsertSettingRow_(session, "GRADE_TRACKS", JSON.stringify(legacy), "JSON", "شعب الصفوف النشطة");
+        DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_TRACKS_REGISTRY", "TRACKS_REGISTRY", null, { count: next.length });
+        return { success: true, message: "تم حفظ سجل الشعب (" + next.length + " شعبة).", tracksRegistry: next, tracks: legacy };
+      }
+      if (op === "delete") {
+        const id = Util.str(payload.id);
+        const idx = reg.findIndex(x => x.id === id);
+        Util.require(idx >= 0, "الشعبة غير موجودة.");
+        const removed = reg.splice(idx, 1)[0];
+        this.upsertSettingRow_(session, "TRACKS_REGISTRY", JSON.stringify(reg), "JSON", "سجل الشعب والتخصصات الدراسية");
+        const legacy = {}; reg.filter(x => x.isActive).forEach(x => { (legacy[x.grade] = legacy[x.grade] || []).push(x.name); });
+        this.upsertSettingRow_(session, "GRADE_TRACKS", JSON.stringify(legacy), "JSON", "شعب الصفوف النشطة");
+        DB_Engine.logAudit(session.userId, session.role, "Catalog", "DELETE_TRACK", id, removed, null);
+        return { success: true, message: "تم حذف الشعبة «" + removed.name + "».", tracksRegistry: reg, tracks: legacy };
+      }
+      const nm = Util.str(payload.name).replace(/[،,]/g, " ").slice(0, 50);
+      const g = Util.str(payload.grade);
+      Util.require(nm.length >= 2, "أدخل اسم الشعبة (حرفين على الأقل).");
+      Util.require(g, "اختر الصف الدراسي المرتبط بالشعبة.");
+      const id = Util.str(payload.id);
+      const existing = id ? reg.find(x => x.id === id) : null;
+      const dup = reg.find(x => x.grade === g && normArText(x.name) === normArText(nm) && (!existing || x.id !== existing.id));
+      Util.require(!dup, "الشعبة «" + nm + "» مسجلة بالفعل لنفس الصف.");
+      const rec = {
+        id: existing ? existing.id : ("TRK-" + Date.now() + "-" + (reg.length + 1)),
+        name: nm, grade: g, stage: Util.str(payload.stage) || gStage[g] || "المرحلة الثانوية",
+        isActive: payload.isActive === undefined ? (existing ? existing.isActive : true) : Util.bool(payload.isActive),
+        notes: Util.str(payload.notes !== undefined ? payload.notes : (existing ? existing.notes : "")).slice(0, 200),
+        updatedAt: Util.now()
+      };
+      if (existing) Object.assign(existing, rec); else reg.push(rec);
+      this.upsertSettingRow_(session, "TRACKS_REGISTRY", JSON.stringify(reg), "JSON", "سجل الشعب والتخصصات الدراسية");
+      const legacy = {}; reg.filter(x => x.isActive).forEach(x => { (legacy[x.grade] = legacy[x.grade] || []).push(x.name); });
+      this.upsertSettingRow_(session, "GRADE_TRACKS", JSON.stringify(legacy), "JSON", "شعب الصفوف النشطة");
+      DB_Engine.logAudit(session.userId, session.role, "Catalog", existing ? "UPDATE_TRACK" : "ADD_TRACK", rec.id, existing || null, rec);
+      return { success: true, message: (existing ? "تم تحديث الشعبة «" : "تمت إضافة الشعبة «") + nm + "» للصف " + g + ".", track: rec, tracksRegistry: reg, tracks: legacy };
+    });
+  },
+
+  /** ربط الكتب المقررة بالشعب لفترة دراسية محددة (عام دراسي + ترم) دون تكرار الكتاب الأساسي أو المساس بالأعوام السابقة */
+  saveTrackCurriculum: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const year = Util.str(payload.academicYear), term = Util.str(payload.term);
+      Util.require(year && term, "حدد العام الدراسي والترم أولاً.");
+      const rows = Array.isArray(payload.rows) ? payload.rows : [];
+      Util.require(rows.length > 0 && rows.length <= 2000, "لا توجد مقررات للحفظ.");
+      const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
+      const reg = this.tracksRegistry_(), trkByName = {};
+      reg.forEach(t => { trkByName[t.grade + "|" + t.name] = t; });
+      const existing = DB_Engine.getAllRecords(S.TRACK_CURRICULUM);
+      const bookIdsTouched = {};
+      rows.forEach(r => { if (books[Util.str(r.bookId)]) bookIdsTouched[Util.str(r.bookId)] = 1; });
+      // الاحتفاظ بباقي الأعوام والترمات والكتب غير المعدّلة تماماً دون مساس
+      const kept = existing.filter(c => !(Util.str(c.Academic_Year) === year && Util.str(c.Term) === term && bookIdsTouched[Util.str(c.Book_ID)]));
+      const added = [];
+      const now = Util.now(), actor = Util.actor(session);
+      rows.forEach(r => {
+        const bid = Util.str(r.bookId), bk = books[bid];
+        if (!bk) return;
+        const tList = (Array.isArray(r.tracks) ? r.tracks : []).map(x => Util.str(x)).filter(Boolean);
+        const isShared = r.isShared !== undefined ? Util.bool(r.isShared) : (tList.length === 0 || tList.length > 1);
+        if (!tList.length) {
+          added.push({
+            Curr_ID: "CUR-" + year.replace(/\D/g, "") + "-" + term + "-" + bid + "-ALL",
+            Academic_Year: year, Term: term, Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade),
+            Track_ID: "", Track_Name: "", Book_ID: bid, Is_Shared: true, Is_Active: true,
+            Notes: Util.str(r.notes).slice(0, 150), Updated_At: now, Updated_By: actor
+          });
+        } else {
+          tList.forEach((tn, idx) => {
+            const tm = trkByName[Util.str(bk.Grade) + "|" + tn];
+            added.push({
+              Curr_ID: "CUR-" + year.replace(/\D/g, "") + "-" + term + "-" + bid + "-" + (tm ? tm.id : ("T" + idx)),
+              Academic_Year: year, Term: term, Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade),
+              Track_ID: tm ? tm.id : "", Track_Name: tn, Book_ID: bid, Is_Shared: isShared, Is_Active: true,
+              Notes: Util.str(r.notes).slice(0, 150), Updated_At: now, Updated_By: actor
+            });
+          });
+        }
+        if (payload.syncToCatalog !== false) {
+          const joined = tList.join("،");
+          if (Util.str(bk.Tracks) !== joined) DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", bid, { Tracks: joined });
+        }
+      });
+      DB_Engine.overwriteTableData(S.TRACK_CURRICULUM, kept.concat(added));
+      DB_Engine.logAudit(session.userId, session.role, "Catalog", "SAVE_TRACK_CURRICULUM", year + "|" + term, null, { books: Object.keys(bookIdsTouched).length, entries: added.length });
+      return { success: true, message: "تم حفظ مقررات الشعب لفترة " + year + " (" + term + ") لعدد " + Object.keys(bookIdsTouched).length + " كتاب.", entries: added.length };
+    });
+  },
+
+  /** حسم السعر الفعلي لكتاب حسب الفترة الدراسية والشعبة (مع fallback تلقائي لكتالوج الكتب لعدم كسر أي عملية قديمة) */
+  resolveBookPrice_: function(bookId, book, academicYear, term, track) {
+    const bid = Util.str(bookId), yr = Util.str(academicYear), tm = Util.str(term), trk = Util.str(track);
+    if (yr && tm) {
+      const S = this.S();
+      const lists = DB_Engine.getAllRecords(S.PRICE_LISTS);
+      const pl = lists.find(l => Util.str(l.Academic_Year) === yr && Util.str(l.Term) === tm && Util.str(l.Status) === "Approved");
+      if (pl) {
+        const items = DB_Engine.getAllRecords(S.PRICE_ITEMS).filter(p => Util.str(p.Price_List_ID) === Util.str(pl.Price_List_ID) && Util.str(p.Book_ID) === bid && Util.str(p.Status) === "Approved");
+        const exact = trk ? items.find(p => Util.str(p.Track) === trk) : null;
+        const base = items.find(p => !Util.str(p.Track));
+        const pick = exact || base;
+        if (pick) {
+          return {
+            coverPrice: Util.num(pick.Cover_Price),
+            empPrice: FinancialEngine.roundUpEmployeePrice(pick.Emp_Selling_Price),
+            priceId: Util.str(pick.Price_ID),
+            academicYear: yr, term: tm, track: trk || Util.str(pick.Track)
+          };
+        }
+      }
+    }
+    return {
+      coverPrice: book ? Util.num(book.Cover_Price) : 0,
+      empPrice: book ? FinancialEngine.roundUpEmployeePrice(book.Emp_Selling_Price) : 0,
+      priceId: "", academicYear: yr, term: tm, track: trk
+    };
+  },
+
+  /** جلب بيانات التسعير التاريخي والمقررات والمراحل */
+  getPricingData: function(payload) {
+    const S = this.S(), p = payload || {};
+    let lists = DB_Engine.getAllRecords(S.PRICE_LISTS);
+    let items = DB_Engine.getAllRecords(S.PRICE_ITEMS);
+    let curr = DB_Engine.getAllRecords(S.TRACK_CURRICULUM);
+    if (p.priceListId) items = items.filter(i => Util.str(i.Price_List_ID) === Util.str(p.priceListId));
+    if (p.academicYear) {
+      lists = lists.filter(l => Util.str(l.Academic_Year) === Util.str(p.academicYear));
+      items = items.filter(i => Util.str(i.Academic_Year) === Util.str(p.academicYear));
+      curr = curr.filter(c => Util.str(c.Academic_Year) === Util.str(p.academicYear));
+    }
+    if (p.term) {
+      lists = lists.filter(l => Util.str(l.Term) === Util.str(p.term));
+      items = items.filter(i => Util.str(i.Term) === Util.str(p.term));
+      curr = curr.filter(c => Util.str(c.Term) === Util.str(p.term));
+    }
+    return { success: true, priceLists: lists, priceItems: items, trackCurriculum: curr, tracksRegistry: this.tracksRegistry_(), stages: this.stagesList_() };
+  },
+
+  /** إنشاء أو تعديل قائمة أسعار مسودة لفترة (عام دراسي + ترم) مع دعم النسخ من فترة سابقة أو من الكتالوج */
+  savePriceList: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const year = Util.str(payload.academicYear), term = Util.str(payload.term);
+      Util.require(year, "حدد العام الدراسي (مثلاً: 2026/2027).");
+      Util.require(term, "حدد الترم الدراسي (الأول أو الثاني).");
+      const lists = DB_Engine.getAllRecords(S.PRICE_LISTS);
+      const id = Util.str(payload.priceListId);
+      const existing = id ? lists.find(l => Util.str(l.Price_List_ID) === id) : null;
+      if (existing) {
+        Util.require(Util.str(existing.Status) === "Draft", "لا يمكن تعديل قائمة أسعار معتمدة أو مؤرشفة.");
+        const clash = lists.find(l => Util.str(l.Price_List_ID) !== id && Util.str(l.Academic_Year) === year && Util.str(l.Term) === term && Util.str(l.Status) !== "Archived");
+        Util.require(!clash, "توجد بالفعل قائمة أسعار نشطة لنفس العام الدراسي والترم.");
+        const upd = { Academic_Year: year, Term: term, Title: Util.str(payload.title) || ("أسعار " + year + " — " + term), Notes: Util.str(payload.notes).slice(0, 300) };
+        DB_Engine.updateRecordByPK(S.PRICE_LISTS, "Price_List_ID", id, upd);
+        DB_Engine.logAudit(session.userId, session.role, "Pricing", "UPDATE_PRICE_LIST", id, existing, upd);
+        return { success: true, message: "تم تحديث مسودة قائمة الأسعار.", priceList: Object.assign({}, existing, upd) };
+      }
+      const clash = lists.find(l => Util.str(l.Academic_Year) === year && Util.str(l.Term) === term && Util.str(l.Status) !== "Archived");
+      Util.require(!clash, "توجد بالفعل قائمة أسعار نشطة للفترة " + year + " (" + term + ") بكود " + (clash && clash.Price_List_ID) + ". أرشفها أولاً أو عدّلها.");
+      const newId = "PL-" + year.replace(/[^0-9]/g, "").slice(0, 8) + "-" + (lists.length + 1) + "-" + String(Date.now()).slice(-4);
+      const now = Util.now(), actor = Util.actor(session);
+      const copyFromId = Util.str(payload.copyFromListId);
+      const pl = {
+        Price_List_ID: newId, Academic_Year: year, Term: term,
+        Title: Util.str(payload.title) || ("قائمة أسعار " + year + " — " + term),
+        Status: "Draft", Notes: Util.str(payload.notes).slice(0, 300),
+        Copied_From_ID: copyFromId, Created_At: now, Created_By: actor,
+        Approved_At: "", Approved_By: "", Archived_At: "", Archived_By: "", Version: 1
+      };
+      DB_Engine.insertRecordsBatch(S.PRICE_LISTS, [pl]);
+
+      // نسخ الأسعار من قائمة سابقة أو من الكتالوج الحالي (بلا أي تأثير على القائمة السابقة أو الفواتير)
+      const pctAdj = Util.num(payload.pctAdjust);
+      const mult = pctAdj ? (1 + pctAdj / 100) : 1;
+      const st = getSettings_(), copied = [];
+      const booksMap = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { booksMap[Util.str(b.Book_ID)] = b; });
+      if (copyFromId) {
+        const srcItems = DB_Engine.getAllRecords(S.PRICE_ITEMS).filter(i => Util.str(i.Price_List_ID) === copyFromId && Util.str(i.Status) !== "Superseded");
+        srcItems.forEach((si, idx) => {
+          const bk = booksMap[Util.str(si.Book_ID)] || {};
+          const newCover = Math.max(0, FinancialEngine.roundCurrency(Util.num(si.Cover_Price) * mult));
+          const pr = FinancialEngine.calculateBookPricing(newCover, Util.num(si.Supplier_Discount_Pct), 0, si.Emp_Discount_Pct !== "" ? si.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
+          copied.push({
+            Price_ID: "PRC-" + newId + "-" + (idx + 1), Price_List_ID: newId, Book_ID: Util.str(si.Book_ID),
+            Academic_Year: year, Term: term, Stage: Util.str(bk.Stage || si.Stage), Grade: Util.str(bk.Grade || si.Grade), Track: Util.str(si.Track),
+            Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct, Standard_Net_Cost: pr.standardNetCost,
+            Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+            Status: "Draft", Version: 1, Previous_Price_ID: "", Change_Reason: "نسخ من " + copyFromId + (pctAdj ? " بتعديل " + pctAdj + "%" : ""),
+            Created_At: now, Created_By: actor, Approved_At: "", Approved_By: ""
+          });
+        });
+      } else if (payload.copyFromCatalog) {
+        Object.keys(booksMap).forEach((bid, idx) => {
+          const bk = booksMap[bid];
+          if (Util.str(bk.Book_Status) === "Discontinued" || !(Util.num(bk.Cover_Price) > 0)) return;
+          const newCover = Math.max(0, FinancialEngine.roundCurrency(Util.num(bk.Cover_Price) * mult));
+          const pr = FinancialEngine.calculateBookPricing(newCover, Util.num(bk.Supplier_Discount_Pct), 0, bk.Emp_Discount_Pct !== "" && bk.Emp_Discount_Pct !== undefined ? bk.Emp_Discount_Pct : st.UNIFIED_EMP_DISCOUNT_PCT);
+          copied.push({
+            Price_ID: "PRC-" + newId + "-" + (idx + 1), Price_List_ID: newId, Book_ID: bid,
+            Academic_Year: year, Term: term, Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade), Track: "",
+            Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct, Standard_Net_Cost: pr.standardNetCost,
+            Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+            Status: "Draft", Version: 1, Previous_Price_ID: "", Change_Reason: "نسخ من الكتالوج الحالي" + (pctAdj ? " بتعديل " + pctAdj + "%" : ""),
+            Created_At: now, Created_By: actor, Approved_At: "", Approved_By: ""
+          });
+        });
+      }
+      if (copied.length) DB_Engine.insertRecordsBatch(S.PRICE_ITEMS, copied);
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "CREATE_PRICE_LIST", newId, null, { year: year, term: term, copiedCount: copied.length, copyFromId: copyFromId });
+      return { success: true, message: "تم إنشاء مسودة قائمة الأسعار (" + pl.Title + ")" + (copied.length ? " مع نسخ " + copied.length + " سعر." : "."), priceList: pl, copiedCount: copied.length };
+    });
+  },
+
+  /** حفظ أو تعديل أسعار كتب داخل قائمة مسودة (منع التعديل العشوائي على القائمة المعتمدة أو المؤرشفة) */
+  savePriceItems: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const plId = Util.str(payload.priceListId);
+      const pl = DB_Engine.getAllRecords(S.PRICE_LISTS).find(l => Util.str(l.Price_List_ID) === plId);
+      Util.require(pl, "قائمة الأسعار غير موجودة.");
+      Util.require(Util.str(pl.Status) === "Draft", "لا يمكن التعديل المباشر على قائمة معتمدة أو مؤرشفة — استخدم «تعديل سعر موثّق» للحفاظ على النسخة السابقة.");
+      const rows = Array.isArray(payload.items) ? payload.items : [];
+      Util.require(rows.length > 0 && rows.length <= 2000, "لا توجد أسعار للحفظ.");
+      const st = getSettings_();
+      const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
+      const allPrices = DB_Engine.getAllRecords(S.PRICE_ITEMS);
+      const byScope = {};
+      allPrices.forEach(p => { if (Util.str(p.Price_List_ID) === plId && Util.str(p.Status) !== "Superseded") byScope[Util.str(p.Book_ID) + "|" + Util.str(p.Track)] = p; });
+      const now = Util.now(), actor = Util.actor(session);
+      const toInsert = [];
+      let updated = 0, added = 0;
+      const seenBatch = {};
+      rows.forEach((r, idx) => {
+        const bid = Util.str(r.bookId), bk = books[bid];
+        Util.require(bk, "الكتاب غير موجود: " + bid);
+        const trk = Util.str(r.track).slice(0, 60);
+        const scopeKey = bid + "|" + trk;
+        Util.require(!seenBatch[scopeKey], "تكرار لنفس الكتاب والشعبة في نفس الطلب: " + bid + (trk ? " (" + trk + ")" : ""));
+        seenBatch[scopeKey] = 1;
+        const cover = Util.num(r.coverPrice);
+        Util.require(cover > 0, "السعر قبل الخصم للكتاب " + bid + " يجب أن يكون أكبر من صفر.");
+        const disc = r.supplierDiscountPct !== undefined && r.supplierDiscountPct !== "" ? Util.num(r.supplierDiscountPct) : Util.num(bk.Supplier_Discount_Pct);
+        Util.require(disc >= 0 && disc < 100, "نسبة خصم المكتبة غير صحيحة للكتاب " + bid);
+        const empDisc = r.empDiscountPct !== undefined && r.empDiscountPct !== "" ? Util.num(r.empDiscountPct) : (bk.Emp_Discount_Pct !== "" && bk.Emp_Discount_Pct !== undefined ? Util.num(bk.Emp_Discount_Pct) : Util.num(st.UNIFIED_EMP_DISCOUNT_PCT));
+        const pr = FinancialEngine.calculateBookPricing(cover, disc, 0, empDisc);
+        const ex = byScope[scopeKey];
+        if (ex) {
+          DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", ex.Price_ID, {
+            Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade),
+            Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct,
+            Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+            Change_Reason: Util.str(r.reason || ex.Change_Reason).slice(0, 200)
+          });
+          updated++;
+        } else {
+          toInsert.push({
+            Price_ID: "PRC-" + plId + "-" + Date.now() + "-" + idx, Price_List_ID: plId, Book_ID: bid,
+            Academic_Year: Util.str(pl.Academic_Year), Term: Util.str(pl.Term),
+            Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade), Track: trk,
+            Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct,
+            Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+            Status: "Draft", Version: 1, Previous_Price_ID: "", Change_Reason: Util.str(r.reason).slice(0, 200),
+            Created_At: now, Created_By: actor, Approved_At: "", Approved_By: ""
+          });
+          added++;
+        }
+      });
+      if (toInsert.length) DB_Engine.insertRecordsBatch(S.PRICE_ITEMS, toInsert);
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "SAVE_PRICE_ITEMS", plId, null, { added: added, updated: updated });
+      return { success: true, message: "تم حفظ " + (added + updated) + " سعر في المسودة (جديد: " + added + "، محدّث: " + updated + ").", added: added, updated: updated };
+    });
+  },
+
+  /** اعتماد أو أرشفة قائمة أسعار (الاعتماد لا يعدّل أي فاتورة أو حجز سابق نهائياً) */
+  transitionPriceList: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const plId = Util.str(payload.priceListId), toStatus = Util.str(payload.toStatus);
+      Util.require(["Approved", "Archived"].indexOf(toStatus) !== -1, "حالة غير صالحة للقائمة.");
+      const pl = DB_Engine.getAllRecords(S.PRICE_LISTS).find(l => Util.str(l.Price_List_ID) === plId);
+      Util.require(pl, "قائمة الأسعار غير موجودة.");
+      const cur = Util.str(pl.Status);
+      const now = Util.now(), actor = Util.actor(session);
+      const allItems = DB_Engine.getAllRecords(S.PRICE_ITEMS);
+      const myItems = allItems.filter(i => Util.str(i.Price_List_ID) === plId && Util.str(i.Status) !== "Superseded");
+      if (toStatus === "Approved") {
+        Util.require(cur === "Draft", "يمكن اعتماد القوائم التي في حالة «مسودة» فقط.");
+        Util.require(myItems.length > 0, "لا يمكن اعتماد قائمة أسعار فارغة — أضف أسعار الكتب أولاً.");
+        myItems.forEach(i => {
+          Util.require(Util.num(i.Cover_Price) > 0, "الكتاب " + i.Book_ID + " بلا سعر صالح.");
+          DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", i.Price_ID, { Status: "Approved", Approved_At: now, Approved_By: actor });
+        });
+        DB_Engine.updateRecordByPK(S.PRICE_LISTS, "Price_List_ID", plId, { Status: "Approved", Approved_At: now, Approved_By: actor });
+        // مزامنة اختيارية لأسعار العرض بالكتالوج للفترة النشطة — بدون لمس أي حجز أو فاتورة سابقة!
+        let synced = 0;
+        if (payload.syncToCatalog) {
+          this.upsertSettingRow_(session, "ACTIVE_PERIOD", JSON.stringify({ academicYear: pl.Academic_Year, term: pl.Term, priceListId: plId }), "JSON", "الفترة الدراسية النشطة للأسعار");
+          myItems.filter(i => !Util.str(i.Track)).forEach(i => {
+            DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", i.Book_ID, {
+              Cover_Price: i.Cover_Price, Supplier_Discount_Pct: i.Supplier_Discount_Pct,
+              Standard_Net_Cost: i.Standard_Net_Cost, Emp_Discount_Pct: i.Emp_Discount_Pct,
+              Emp_Selling_Price: i.Emp_Selling_Price, Book_Status: "Available"
+            });
+            synced++;
+          });
+        }
+        DB_Engine.logAudit(session.userId, session.role, "Pricing", "APPROVE_PRICE_LIST", plId, { Status: cur }, { Status: "Approved", items: myItems.length, syncedToCatalog: synced });
+        return { success: true, message: "تم اعتماد قائمة الأسعار (" + pl.Title + ") لعدد " + myItems.length + " سعر" + (synced ? " وتحديث أسعار العرض لـ " + synced + " كتاب دون المساس بأي فاتورة سابقة." : " دون المساس بأي فاتورة سابقة."), approvedCount: myItems.length, synced: synced };
+      }
+      Util.require(cur !== "Archived", "القائمة مؤرشفة بالفعل.");
+      myItems.forEach(i => DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", i.Price_ID, { Status: "Archived" }));
+      DB_Engine.updateRecordByPK(S.PRICE_LISTS, "Price_List_ID", plId, { Status: "Archived", Archived_At: now, Archived_By: actor });
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "ARCHIVE_PRICE_LIST", plId, { Status: cur }, { Status: "Archived" });
+      return { success: true, message: "تمت أرشفة قائمة الأسعار (" + pl.Title + ") بنجاح — ستبقى متاحة للمراجعة دائماً." };
+    });
+  },
+
+  /** تعديل موثّق لسعر داخل قائمة معتمدة: يحفظ النسخة القديمة بحالة Superseded وينشئ نسخة جديدة برقم إصدار أعلى وسبب إلزامي */
+  reviseApprovedPrice: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S();
+      const plId = Util.str(payload.priceListId), bid = Util.str(payload.bookId), trk = Util.str(payload.track).slice(0, 60);
+      const reason = Util.str(payload.reason).slice(0, 250);
+      Util.require(reason.length >= 3, "اكتب سبب التعديل الموثّق (3 أحرف على الأقل) لحفظه في سجل التدقيق.");
+      const pl = DB_Engine.getAllRecords(S.PRICE_LISTS).find(l => Util.str(l.Price_List_ID) === plId);
+      Util.require(pl && Util.str(pl.Status) === "Approved", "التعديل الموثّق متاح فقط لقوائم الأسعار المعتمدة.");
+      const bk = DB_Engine.getAllRecords(S.BOOKS).find(b => Util.str(b.Book_ID) === bid);
+      Util.require(bk, "الكتاب غير موجود: " + bid);
+      const cover = Util.num(payload.coverPrice);
+      Util.require(cover > 0, "السعر الجديد يجب أن يكون أكبر من صفر.");
+      const st = getSettings_();
+      const allItems = DB_Engine.getAllRecords(S.PRICE_ITEMS);
+      const old = allItems.find(i => Util.str(i.Price_List_ID) === plId && Util.str(i.Book_ID) === bid && Util.str(i.Track) === trk && Util.str(i.Status) === "Approved");
+      const disc = payload.supplierDiscountPct !== undefined && payload.supplierDiscountPct !== "" ? Util.num(payload.supplierDiscountPct) : (old ? Util.num(old.Supplier_Discount_Pct) : Util.num(bk.Supplier_Discount_Pct));
+      const empDisc = payload.empDiscountPct !== undefined && payload.empDiscountPct !== "" ? Util.num(payload.empDiscountPct) : (old && old.Emp_Discount_Pct !== "" ? Util.num(old.Emp_Discount_Pct) : Util.num(st.UNIFIED_EMP_DISCOUNT_PCT));
+      const pr = FinancialEngine.calculateBookPricing(cover, disc, 0, empDisc);
+      const now = Util.now(), actor = Util.actor(session);
+      const nextVer = old ? (Util.num(old.Version) + 1) : 1;
+      if (old) DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", old.Price_ID, { Status: "Superseded" });
+      const newRec = {
+        Price_ID: "PRC-" + plId + "-V" + nextVer + "-" + Date.now(), Price_List_ID: plId, Book_ID: bid,
+        Academic_Year: Util.str(pl.Academic_Year), Term: Util.str(pl.Term),
+        Stage: Util.str(bk.Stage), Grade: Util.str(bk.Grade), Track: trk,
+        Cover_Price: pr.coverPrice, Supplier_Discount_Pct: pr.supplierDiscountPct,
+        Standard_Net_Cost: pr.standardNetCost, Emp_Discount_Pct: pr.empDiscountPct, Emp_Selling_Price: pr.empSellingPrice,
+        Status: "Approved", Version: nextVer, Previous_Price_ID: old ? old.Price_ID : "", Change_Reason: reason,
+        Created_At: now, Created_By: actor, Approved_At: now, Approved_By: actor
+      };
+      DB_Engine.insertRecordsBatch(S.PRICE_ITEMS, [newRec]);
+      DB_Engine.updateRecordByPK(S.PRICE_LISTS, "Price_List_ID", plId, { Version: Util.num(pl.Version) + 1 });
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "REVISE_APPROVED_PRICE", newRec.Price_ID, old || null, newRec);
+      return { success: true, message: "تم توثيق تعديل السعر للكتاب " + bid + " (الإصدار " + nextVer + ") مع الاحتفاظ بالنسخة السابقة دون تعديل أي فاتورة صادرة.", price: newRec, previousPriceId: old ? old.Price_ID : "" };
+    });
+  },
+
+  /** مقارنة قوائم الأسعار بين فترتين دراسيتين (الزيادة، النقص، الثبات، الفرق، ونسبة التغير %) */
+  comparePriceLists: function(payload) {
+    const S = this.S(), R = FinancialEngine.roundCurrency;
+    const idA = Util.str(payload.listAId), idB = Util.str(payload.listBId);
+    Util.require(idA && idB && idA !== idB, "اختر قائمتي أسعار مختلفتين للمقارنة.");
+    const lists = DB_Engine.getAllRecords(S.PRICE_LISTS);
+    const listA = lists.find(l => Util.str(l.Price_List_ID) === idA);
+    const listB = lists.find(l => Util.str(l.Price_List_ID) === idB);
+    Util.require(listA && listB, "إحدى قوائم الأسعار غير موجودة.");
+    const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
+    const allItems = DB_Engine.getAllRecords(S.PRICE_ITEMS).filter(i => Util.str(i.Status) !== "Superseded");
+    const mapA = {}, mapB = {}, keys = {};
+    allItems.forEach(i => {
+      const k = Util.str(i.Book_ID) + "|" + Util.str(i.Track);
+      if (Util.str(i.Price_List_ID) === idA) { mapA[k] = i; keys[k] = 1; }
+      if (Util.str(i.Price_List_ID) === idB) { mapB[k] = i; keys[k] = 1; }
+    });
+    const rows = [];
+    let increased = 0, decreased = 0, unchanged = 0, added = 0, removed = 0, pctSum = 0, pctCnt = 0;
+    Object.keys(keys).forEach(k => {
+      const a = mapA[k], b = mapB[k], ref = b || a;
+      const bk = books[Util.str(ref.Book_ID)] || {};
+      const pA = a ? Util.num(a.Cover_Price) : null, pB = b ? Util.num(b.Cover_Price) : null;
+      const eA = a ? Util.num(a.Emp_Selling_Price) : null, eB = b ? Util.num(b.Emp_Selling_Price) : null;
+      let diff = 0, pct = 0, dir = "unchanged";
+      if (pA === null && pB !== null) { dir = "added"; added++; diff = pB; }
+      else if (pA !== null && pB === null) { dir = "removed"; removed++; diff = -pA; }
+      else {
+        diff = R(pB - pA);
+        pct = pA > 0 ? R((diff / pA) * 100) : 0;
+        pctSum += pct; pctCnt++;
+        if (diff > 0.004) { dir = "increased"; increased++; }
+        else if (diff < -0.004) { dir = "decreased"; decreased++; }
+        else { dir = "unchanged"; unchanged++; }
+      }
+      rows.push({
+        bookId: Util.str(ref.Book_ID), bookName: Util.str(bk.Book_Name || ref.Book_ID),
+        stage: Util.str(bk.Stage || ref.Stage), grade: Util.str(bk.Grade || ref.Grade),
+        track: Util.str(ref.Track), coverA: pA, coverB: pB, empA: eA, empB: eB,
+        diff: diff, pctChange: pct, direction: dir
+      });
+    });
+    rows.sort((x, y) => Math.abs(y.diff) - Math.abs(x.diff) || x.bookId.localeCompare(y.bookId));
+    return {
+      success: true, listA: listA, listB: listB, rows: rows,
+      summary: { total: rows.length, increased: increased, decreased: decreased, unchanged: unchanged, added: added, removed: removed, avgPctChange: pctCnt ? R(pctSum / pctCnt) : 0 }
+    };
   },
 
   /** كود جديد للكتاب: كود الصف + رقم تسلسلي فريد داخل الصف (P4-007) دون تكرار أي كود موجود */

@@ -14,7 +14,7 @@ const S = ctx.__S;
 
 // 0) التأسيس
 ok(ctx.__init(true), 'init');
-assert.strictEqual(ss.getSheets().length, 22);
+assert.strictEqual(ss.getSheets().length, 25);
 // ترقية آمنة عند التشغيل مرة ثانية
 ok(ctx.__init(true), 'init again'); assert.strictEqual(rows(S.USERS).length, 4);
 

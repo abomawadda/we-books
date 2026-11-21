@@ -1,0 +1,204 @@
+// اختبارات إلزامية شاملة (8 سيناريوهات): التسعير التاريخي، المقارنة، الشُّعب المرنة، حماية الفواتير، وأداء البحث مع 3000 كتاب
+const assert = require('assert');
+const { makeContext } = require('./sb-mock');
+
+const clock = { now: new Date(2026, 8, 1, 10, 0, 0).getTime() }; // 1 سبتمبر 2026
+const { ctx } = makeContext(clock);
+const api = (a, p, t) => ctx.__api(a, p || {}, t);
+const rows = name => ctx.__DB.getAllRecords(name);
+const S = ctx.__S;
+
+let checks = 0;
+const ok = (res, lbl) => { if (!res || !res.success) { console.error('FAIL:', lbl, res && res.message); process.exit(1); } checks++; return res; };
+const fail = (res, lbl, re) => { if (!res || res.success) { console.error('EXPECTED FAIL:', lbl); process.exit(1); } if (re && !re.test(res.message)) { console.error('WRONG MSG:', lbl, res.message); process.exit(1); } checks++; return res; };
+
+// تأسيس البيانات الأساسية
+ok(ctx.__init(true), 'init');
+const A = ok(api('LOGIN_ADMIN', { username: 'admin', password: 'Admin@2026' }), 'admin login').sessionToken;
+const coord = ok(api('LOGIN_ADMIN', { username: 'coord', password: 'Coord@2026' }), 'coord login').sessionToken;
+const empTok = ok(api('LOGIN_EMPLOYEE', { empId: '1001', natIdLast4: '4512', mobile: '01012345678' }), 'emp login').sessionToken;
+const emp2Tok = ok(api('LOGIN_EMPLOYEE', { empId: '1002', natIdLast4: '8834', mobile: '01122334455' }), 'emp2 login').sessionToken;
+
+// إضافة كتابين للتجربة (كتاب أساسي + كتاب ثانوي مشترك)
+const bk1 = ok(api('SAVE_BOOK', { grade: '4 ابتدائي', publisher: 'الأضواء', subject: 'عربي', bookPart: 'شرح', schoolTypes: 'حكومي', coverPrice: 100, supplierDiscountPct: 20 }, coord), 'create bk1').book;
+const bk3s = ok(api('SAVE_BOOK', { grade: '3 ثانوي', publisher: 'المعاصر', subject: 'أحياء', bookPart: 'شرح', schoolTypes: 'حكومي', coverPrice: 150, supplierDiscountPct: 20 }, coord), 'create bk3s').book;
+const bkShared = ok(api('SAVE_BOOK', { grade: '3 ثانوي', publisher: 'الامتحان', subject: 'عربي', bookPart: 'شرح', schoolTypes: 'حكومي', coverPrice: 150, supplierDiscountPct: 20 }, coord), 'create bkShared').book;
+
+// ============================================================================
+// الاختبار الأول: اختلاف الأسعار بين الترمين + سلامة الفواتير لكل ترم
+// ============================================================================
+const plT1 = ok(api('SAVE_PRICE_LIST', { academicYear: '2026/2027', term: 'الترم الأول', title: 'أسعار 2026/2027 ترم 1' }, coord), 'create T1 list').priceList;
+// منع تكرار قائمة نشطة لنفس الفترة
+fail(api('SAVE_PRICE_LIST', { academicYear: '2026/2027', term: 'الترم الأول' }, coord), 'duplicate period rejected', /بالفعل/);
+ok(api('SAVE_PRICE_ITEMS', { priceListId: plT1.Price_List_ID, items: [
+  { bookId: bk1.Book_ID, coverPrice: 100, supplierDiscountPct: 20 },
+  { bookId: bk3s.Book_ID, coverPrice: 150, supplierDiscountPct: 20 }
+] }, coord), 'set T1 prices');
+ok(api('TRANSITION_PRICE_LIST', { priceListId: plT1.Price_List_ID, toStatus: 'Approved', syncToCatalog: true }, coord), 'approve T1');
+
+// مرحلة للترم الأول + حجز + توريد + تخصيص وإصدار فاتورة الترم الأول
+const phT1 = 'PH-T1';
+ok(api('SAVE_PHASE', { phaseId: phT1, phaseName: 'مرحلة ترم 1 — 2026/2027', startDate: '2026-09-01', endDate: '2026-09-20', deliveryStartDate: '2026-09-25', academicYear: '2026/2027', term: 'الترم الأول' }, coord), 'create phase T1');
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: phT1, items: [{ bookId: bk1.Book_ID, qty: 2 }], paymentMethod: 'CASH' }, empTok), 'reserve T1');
+const itemT1Before = rows(S.RES_ITEMS).find(i => i.Phase_ID === phT1 && i.Book_ID === bk1.Book_ID);
+assert.strictEqual(itemT1Before.Unit_Cover_Price, 100, 'T1 cover price snapshot = 100');
+assert.strictEqual(itemT1Before.Academic_Year, '2026/2027');
+assert.strictEqual(itemT1Before.Term, 'الترم الأول');
+assert.ok(itemT1Before.Price_ID, 'Price_ID recorded on T1 reservation item');
+checks += 4;
+
+// توريد وتخصيص وإصدار فاتورة للترم الأول
+ok(api('SET_PHASE_STATUS', { phaseId: phT1, status: 'Closed' }, coord), 'close phT1');
+ok(api('GENERATE_PO_SNAPSHOT', { phaseId: phT1 }, coord), 'po phT1');
+ok(api('SUBMIT_SUPPLIER_INVOICE', { phaseId: phT1, supplierId: 'SUP-01', supplierInvoiceNo: 'INV-T1', volumeDiscountPct: 0, items: [{ bookId: bk1.Book_ID, receivedQty: 2, coverPriceInvoiced: 100, itemDiscountPctInvoiced: 20 }] }, coord), 'sup inv T1');
+ok(api('RUN_ALLOCATION_ENGINE', { phaseId: phT1 }, coord), 'alloc T1');
+const invT1Before = rows(S.EMP_INVOICES).find(v => v.Phase_ID === phT1 && v.Emp_ID === '1001');
+assert.ok(invT1Before && invT1Before.Net_Final_Invoice_Amount > 0, 'T1 invoice issued');
+const invT1Amount = invT1Before.Net_Final_Invoice_Amount;
+checks++;
+
+// الآن إنشاء واعتماد قائمة أسعار الترم الثاني بسعر مختلف (120 جنيه)
+const plT2 = ok(api('SAVE_PRICE_LIST', { academicYear: '2026/2027', term: 'الترم الثاني', copyFromListId: plT1.Price_List_ID }, coord), 'create T2 list').priceList;
+ok(api('SAVE_PRICE_ITEMS', { priceListId: plT2.Price_List_ID, items: [{ bookId: bk1.Book_ID, coverPrice: 120, supplierDiscountPct: 20 }] }, coord), 'update bk1 T2 to 120');
+ok(api('TRANSITION_PRICE_LIST', { priceListId: plT2.Price_List_ID, toStatus: 'Approved', syncToCatalog: true }, coord), 'approve T2');
+
+// التحقق من استقلال السعرين تماماً + ثبات فاتورة الترم الأول
+const t1PriceRow = rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT1.Price_List_ID && p.Book_ID === bk1.Book_ID && p.Status === 'Approved');
+const t2PriceRow = rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT2.Price_List_ID && p.Book_ID === bk1.Book_ID && p.Status === 'Approved');
+assert.strictEqual(t1PriceRow.Cover_Price, 100, 'T1 price still 100');
+assert.strictEqual(t2PriceRow.Cover_Price, 120, 'T2 price is 120');
+const invT1AfterT2 = rows(S.EMP_INVOICES).find(v => v.Emp_Inv_ID === invT1Before.Emp_Inv_ID);
+assert.strictEqual(invT1AfterT2.Net_Final_Invoice_Amount, invT1Amount, 'T1 invoice untouched by T2 pricing');
+checks += 3;
+
+// مرحلة للترم الثاني: الحجز يلتقط سعر الترم الثاني (120)
+const phT2 = 'PH-T2';
+ok(api('SAVE_PHASE', { phaseId: phT2, phaseName: 'مرحلة ترم 2 — 2026/2027', startDate: '2026-10-01', endDate: '2026-10-20', deliveryStartDate: '2026-10-25', academicYear: '2026/2027', term: 'الترم الثاني' }, coord), 'create phase T2');
+clock.now = new Date(2026, 9, 5, 10, 0, 0).getTime();
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: phT2, items: [{ bookId: bk1.Book_ID, qty: 1 }], paymentMethod: 'CASH' }, empTok), 'reserve T2');
+const itemT2 = rows(S.RES_ITEMS).find(i => i.Phase_ID === phT2 && i.Book_ID === bk1.Book_ID);
+assert.strictEqual(itemT2.Unit_Cover_Price, 120, 'T2 reservation got 120');
+assert.strictEqual(itemT2.Term, 'الترم الثاني');
+checks += 2;
+
+// ============================================================================
+// الاختبار الثاني: بداية عام دراسي جديد + نسخ + تعديل + اعتماد + مقارنة + منع التعديل العشوائي
+// ============================================================================
+const plNext = ok(api('SAVE_PRICE_LIST', { academicYear: '2027/2028', term: 'الترم الأول', copyFromListId: plT2.Price_List_ID, pctAdjust: 12.5 }, coord), 'create 2027/2028 copied +12.5%').priceList;
+const copiedBk1 = rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plNext.Price_List_ID && p.Book_ID === bk1.Book_ID);
+assert.strictEqual(copiedBk1.Cover_Price, 135, '120 * 1.125 = 135');
+ok(api('TRANSITION_PRICE_LIST', { priceListId: plNext.Price_List_ID, toStatus: 'Approved', syncToCatalog: false }, coord), 'approve 2027/2028');
+// التحقق من عدم تغير أسعار العام السابق
+assert.strictEqual(rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT1.Price_List_ID && p.Book_ID === bk1.Book_ID).Cover_Price, 100);
+assert.strictEqual(rows(S.PRICE_ITEMS).find(p => p.Price_List_ID === plT2.Price_List_ID && p.Book_ID === bk1.Book_ID).Cover_Price, 120);
+// مقارنة فترتين
+const cmp = ok(api('COMPARE_PRICE_LISTS', { listAId: plT1.Price_List_ID, listBId: plNext.Price_List_ID }, coord), 'compare T1 vs 2027/2028');
+const cmpBk1 = cmp.rows.find(r => r.bookId === bk1.Book_ID);
+assert.strictEqual(cmpBk1.diff, 35, 'diff = +35');
+assert.strictEqual(cmpBk1.pctChange, 35, 'pctChange = +35%');
+assert.strictEqual(cmpBk1.direction, 'increased');
+assert.ok(cmp.summary.increased >= 1);
+// منع التعديل المباشر على قائمة معتمدة
+fail(api('SAVE_PRICE_ITEMS', { priceListId: plNext.Price_List_ID, items: [{ bookId: bk1.Book_ID, coverPrice: 140 }] }, coord), 'direct edit approved rejected', /معتمدة/);
+// التعديل الموثّق يحفظ النسخة القديمة كـ Superseded
+fail(api('REVISE_APPROVED_PRICE', { priceListId: plNext.Price_List_ID, bookId: bk1.Book_ID, coverPrice: 140, reason: '' }, coord), 'revise without reason rejected', /سبب/);
+const rev = ok(api('REVISE_APPROVED_PRICE', { priceListId: plNext.Price_List_ID, bookId: bk1.Book_ID, coverPrice: 140, reason: 'تعديل رسمي من دار النشر' }, coord), 'documented revision');
+assert.strictEqual(rev.price.Version, 2);
+assert.strictEqual(rows(S.PRICE_ITEMS).find(p => p.Price_ID === rev.previousPriceId).Status, 'Superseded');
+checks += 9;
+
+// ============================================================================
+// الاختبار الثالث والرابع والخامس: شعب الثانوية الجديدة + الكتب المشتركة بلا تكرار + اختلاف الأسعار بين الشعب
+// ============================================================================
+ok(api('SAVE_STAGES_LIST', { stages: ['رياض الأطفال', 'المرحلة الابتدائية', 'المرحلة الإعدادية', 'المرحلة الثانوية', 'التعليم الفني'] }, coord), 'add dynamic stage');
+// التحقق من منع تكرار الشعبة المسجلة مسبقاً (علمي علوم موجودة تلقائياً من الدمج مع GRADE_TRACKS)
+fail(api('SAVE_TRACKS_REGISTRY', { op: 'upsert', name: 'علمي علوم', grade: '3 ثانوي' }, coord), 'duplicate seeded track rejected', /مسجلة بالفعل/);
+const tBacc = ok(api('SAVE_TRACKS_REGISTRY', { op: 'upsert', name: 'بكالوريا — طب وعلوم حياة', grade: '3 ثانوي', notes: 'نظام البكالوريا الجديد' }, coord), 'add baccalaureate med track').track;
+const tBaccEng = ok(api('SAVE_TRACKS_REGISTRY', { op: 'upsert', name: 'بكالوريا — هندسة وحاسب', grade: '3 ثانوي', notes: 'نظام البكالوريا الجديد' }, coord), 'add baccalaureate eng track').track;
+// ربط كتاب مشترك بـ 3 شعب دون تكرار سجل الكتاب الأساسي
+const bookCountBefore = rows(S.BOOKS).filter(b => b.Book_ID === bkShared.Book_ID).length;
+ok(api('SAVE_TRACK_CURRICULUM', { academicYear: '2026/2027', term: 'الترم الأول', rows: [
+  { bookId: bk3s.Book_ID, tracks: ['علمي علوم', 'بكالوريا — طب وعلوم حياة'] },
+  { bookId: bkShared.Book_ID, tracks: ['علمي علوم', 'أدبي', 'بكالوريا — طب وعلوم حياة'] }
+] }, coord), 'save 2026/2027 curriculum');
+assert.strictEqual(rows(S.BOOKS).filter(b => b.Book_ID === bkShared.Book_ID).length, bookCountBefore, 'no duplicate Book_ID for shared book');
+// تغيير مقررات عام جديد لا يمس العام السابق
+ok(api('SAVE_TRACK_CURRICULUM', { academicYear: '2027/2028', term: 'الترم الأول', rows: [
+  { bookId: bk3s.Book_ID, tracks: ['بكالوريا — طب وعلوم حياة'] }
+], syncToCatalog: false }, coord), 'save 2027/2028 curriculum');
+const curr2026 = rows(S.TRACK_CURRICULUM).filter(c => c.Academic_Year === '2026/2027' && c.Book_ID === bk3s.Book_ID);
+const curr2027 = rows(S.TRACK_CURRICULUM).filter(c => c.Academic_Year === '2027/2028' && c.Book_ID === bk3s.Book_ID);
+assert.strictEqual(curr2026.length, 2, '2026/2027 curriculum intact (2 tracks)');
+assert.strictEqual(curr2027.length, 1, '2027/2028 curriculum independent (1 track)');
+
+// اختلاف سعر كتاب بين شعبتين في نفس الفترة
+const plT3 = ok(api('SAVE_PRICE_LIST', { academicYear: '2027/2028', term: 'الترم الثاني' }, coord), 'create 2027/2028 T2').priceList;
+ok(api('SAVE_PRICE_ITEMS', { priceListId: plT3.Price_List_ID, items: [
+  { bookId: bkShared.Book_ID, track: '', coverPrice: 150, supplierDiscountPct: 20 },
+  { bookId: bkShared.Book_ID, track: 'علمي علوم', coverPrice: 165, supplierDiscountPct: 20 }
+] }, coord), 'set general & track-specific prices');
+ok(api('TRANSITION_PRICE_LIST', { priceListId: plT3.Price_List_ID, toStatus: 'Approved', syncToCatalog: false }, coord), 'approve 2027/2028 T2');
+const phTrk = 'PH-TRK';
+ok(api('SAVE_PHASE', { phaseId: phTrk, phaseName: 'مرحلة شعب 2027/2028', startDate: '2027-01-10', endDate: '2027-01-25', deliveryStartDate: '2027-01-30', academicYear: '2027/2028', term: 'الترم الثاني' }, coord), 'phase tracks');
+clock.now = new Date(2027, 0, 15, 10, 0, 0).getTime();
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: phTrk, items: [{ bookId: bkShared.Book_ID, qty: 1, track: 'علمي علوم' }], paymentMethod: 'CASH' }, empTok), 'reserve sci track');
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: phTrk, items: [{ bookId: bkShared.Book_ID, qty: 1, track: 'أدبي' }], paymentMethod: 'CASH' }, emp2Tok), 'reserve lit track');
+const itSci = rows(S.RES_ITEMS).find(i => i.Phase_ID === phTrk && i.Emp_ID === '1001');
+const itLit = rows(S.RES_ITEMS).find(i => i.Phase_ID === phTrk && i.Emp_ID === '1002');
+assert.strictEqual(itSci.Unit_Cover_Price, 165, 'scientific track got 165');
+assert.strictEqual(itLit.Unit_Cover_Price, 150, 'literary track got general 150');
+checks += 5;
+
+// ============================================================================
+// الاختبار السادس: حماية الفواتير عند تغيير سعر الكتاب الحالي في الكتالوج
+// ============================================================================
+ok(api('SAVE_BOOK', { bookId: bk1.Book_ID, grade: bk1.Grade, publisher: bk1.Publisher, subject: bk1.Subject, bookPart: bk1.Book_Part, schoolTypes: bk1.School_Types, coverPrice: 250, supplierDiscountPct: 20 }, coord), 'change live catalog price via SAVE_BOOK');
+ok(api('BULK_PRICE_BOOKS', { rows: [{ bookId: bk1.Book_ID, coverPrice: 275, supplierDiscountPct: 20 }] }, coord), 'change live catalog price via BULK_PRICE_BOOKS');
+const invT1Final = rows(S.EMP_INVOICES).find(v => v.Emp_Inv_ID === invT1Before.Emp_Inv_ID);
+const itemT1Final = rows(S.RES_ITEMS).find(i => i.Res_Item_ID === itemT1Before.Res_Item_ID);
+assert.strictEqual(itemT1Final.Unit_Cover_Price, 100, 'period-locked item cover price remains 100');
+assert.strictEqual(invT1Final.Net_Final_Invoice_Amount, invT1Amount, 'historical invoice amount remains immutable');
+checks += 2;
+
+// ============================================================================
+// الاختبار السابع: البحث الذكي وأداء 3000 كتاب
+// ============================================================================
+function normArSearch(s) {
+  return String(s || '').replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[إأآا]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660)).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+const bigCatalog = [];
+for (let i = 1; i <= 3000; i++) {
+  bigCatalog.push({
+    Book_ID: 'S3-' + String(i).padStart(4, '0'),
+    Book_Name: i === 2500 ? 'المعاصر — أحياء (شرح)' : ('الأضواء — رياضيات ' + i),
+    Grade: i % 3 === 0 ? '3 ثانوي' : '4 ابتدائي',
+    Stage: i % 3 === 0 ? 'المرحلة الثانوية' : 'المرحلة الابتدائية',
+    Subject: i === 2500 ? 'أحياء' : 'رياضيات',
+    Publisher: i === 2500 ? 'المعاصر' : 'الأضواء',
+    Tracks: i === 2500 ? 'علمي علوم،بكالوريا — طب وعلوم حياة' : ''
+  });
+}
+const t0 = Date.now();
+const qTokens = normArSearch('معاصر احياء بكالوريا').split(' ');
+const found = bigCatalog.filter(x => {
+  const hay = normArSearch([x.Book_ID, x.Book_Name, x.Grade, x.Stage, x.Subject, x.Publisher, x.Tracks].join(' '));
+  return qTokens.every(t => hay.includes(t));
+});
+const elapsedMs = Date.now() - t0;
+assert.strictEqual(found.length, 1, 'normalized multi-token search found exact book');
+assert.strictEqual(found[0].Book_ID, 'S3-2500');
+assert.ok(elapsedMs < 150, '3000 books searched in ' + elapsedMs + 'ms (<150ms)');
+checks += 3;
+
+// ============================================================================
+// الاختبار الثامن: تكامل بيانات لوحة الإدارة
+// ============================================================================
+const dash = ok(api('GET_ADMIN_DASHBOARD_DATA', {}, A), 'admin dashboard data');
+assert.ok(Array.isArray(dash.priceLists) && dash.priceLists.length >= 4, 'priceLists exposed');
+assert.ok(Array.isArray(dash.priceItems) && dash.priceItems.length >= 6, 'priceItems exposed');
+assert.ok(Array.isArray(dash.trackCurriculum) && dash.trackCurriculum.length >= 4, 'trackCurriculum exposed');
+assert.ok(dash.catalog.stages.includes('التعليم الفني'), 'dynamic stage exposed');
+assert.ok(dash.catalog.tracksRegistry.some(t => t.name === 'بكالوريا — طب وعلوم حياة'), 'new track exposed');
+checks += 5;
+
+console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);

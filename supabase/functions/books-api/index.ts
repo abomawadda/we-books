@@ -200,7 +200,7 @@ async function health() {
   return { success: Object.values(jobs).every((j: any) => j.ok), jobs };
 }
 
-const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'ADMIN_EMP_PORTAL', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE']);
+const READ_ONLY = new Set(['GET_PUBLIC_INIT_DATA', 'GET_EMPLOYEE_PORTAL_DATA', 'ADMIN_EMP_PORTAL', 'GET_ADMIN_DASHBOARD_DATA', 'GET_SETTLEMENT_REPORT', 'LOGIN_EMPLOYEE', 'GET_PRICING_DATA', 'COMPARE_PRICE_LISTS']);
 const EXPIRED = { success: false, message: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى.' };
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'content-type, authorization, apikey, x-client-info' };
 const reply = (o: any, status = 200, gz = false) => {

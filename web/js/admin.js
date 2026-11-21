@@ -341,16 +341,32 @@ on("bookRes", id => {
 on("qBookRes", v => { Q.bookRes = v.trim(); rerenderList("bookResList", () => bookResList(Q.bookResId)); });
 on("exportBookRes", id => { const { b } = maps(); exportCSV("حاجزو " + ((b[id] || {}).Book_Name || id), ["الأسبقية", "رقم الموظف", "الاسم", "جهة العمل", "الموبايل", "محجوز", "مخصص", "مُسلَّم"], (Q.bookRes = "", bookResRows(id)).map(({ i, k, emp }) => [k, i.Emp_ID, emp.Full_Name, emp.Department, emp.Mobile, i.Requested_Qty, i.Allocated_Qty, i.Delivered_Qty])); });
 
-// حالة واجهة جدول الكتب الاحترافية: التعديل المباشر بالجدول + لوحة الإدخال السريع + الفلاتر
+// حالة واجهة جدول الكتب الاحترافية: التعديل المباشر بالجدول + لوحة الإدخال السريع + الفلاتر + التبويبات + التصفح
 const BK_UI = {
+  tab: "catalog",     // "catalog" | "pricing" | "tracks"
+  page: 1,
+  pageSize: 50,       // 50 | 100 | 0 (الكل)
   inlineMode: false,
   editingRow: null,
   dirty: {}, // { bookId: { coverPrice, supplierDiscountPct, empDiscountPct, bookStatus } }
   quickOpen: false,
-  openDropdown: null, // المفتاح المفتوح حالياً للقائمة المنسدلة: "pub" | "sub" | "grade" | "type" | "st"
+  openDropdown: null, // المفتاح المفتوح حالياً للقائمة المنسدلة: "pub" | "sub" | "grade" | "type" | "st" | "trk"
   msSearch: {},       // نص البحث الداخلي داخل القائمة المنسدلة
   qForm: { mode: "single", stage: "", grade: "4 ابتدائي", publisher: "", subject: "", bookPart: "شرح", schoolTypes: "حكومي", coverPrice: "", supplierDiscountPct: "" }
 };
+
+/** تطبيع ذكي للنص العربي والأرقام الهندية لدعم البحث مع اختلافات الكتابة (أ/إ/آ، ة/ه، ى/ي، التشكيل) */
+function normArSearch(s) {
+  return String(s || "")
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[إأآا]/g, "ا")
+    .replace(/ة/g, "ه")
+    .replace(/ى/g, "ي")
+    .replace(/[٠-٩]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
 
 function getFilterArr(f, key) {
   if (!f || f[key] === undefined || f[key] === null) return [];
@@ -360,18 +376,22 @@ function getFilterArr(f, key) {
 }
 
 function getBookFilterScope(excludeKey) {
-  const d = A(), f = Q.bookF || {}, q = (Q.books || "").trim().toLowerCase();
+  const d = A(), f = Q.bookF || {}, qNorm = normArSearch(Q.books || "");
+  const tokens = qNorm ? qNorm.split(" ").filter(Boolean) : [];
   const stages = getFilterArr(f, "stage");
   const grades = getFilterArr(f, "grade");
   const pubs = getFilterArr(f, "pub");
   const subs = getFilterArr(f, "sub");
   const types = getFilterArr(f, "type");
+  const trks = getFilterArr(f, "trk");
   const sts = getFilterArr(f, "st");
+  const actPl = (d.priceLists || []).find(l => l.Status === "Approved");
+  const periodMeta = actPl ? normArSearch((actPl.Academic_Year || "") + " " + (actPl.Term || "")) : "";
 
   return (d.books || []).filter(x => {
-    if (excludeKey !== "q" && q) {
-      const hay = (x.Book_ID + " " + x.Book_Name + " " + x.Grade + " " + x.Stage + " " + x.Subject + " " + x.Publisher + " " + (x.Book_Part || "")).toLowerCase();
-      if (!hay.includes(q)) return false;
+    if (excludeKey !== "q" && tokens.length) {
+      const hay = normArSearch([x.Book_ID, x.Book_Name, x.Grade, x.Stage, x.Subject, x.Publisher, x.Book_Part, x.Tracks, x.School_Types].join(" ")) + " " + periodMeta;
+      if (!tokens.every(t => hay.includes(t))) return false;
     }
     if (excludeKey !== "stage" && stages.length > 0 && !stages.includes(x.Stage)) return false;
     if (excludeKey !== "grade" && grades.length > 0 && !grades.includes(x.Grade)) return false;
@@ -380,6 +400,11 @@ function getBookFilterScope(excludeKey) {
     if (excludeKey !== "type" && types.length > 0) {
       const bTypes = String(x.School_Types || "").split(/[,،]/).map(s => s.trim());
       if (!types.some(t => bTypes.includes(t))) return false;
+    }
+    if (excludeKey !== "trk" && trks.length > 0) {
+      const bTrks = String(x.Tracks || "").split(/[,،]/).map(s => s.trim()).filter(Boolean);
+      const isShared = !bTrks.length;
+      if (!trks.some(t => t === "__shared" ? isShared : bTrks.includes(t))) return false;
     }
     if (excludeKey !== "st" && sts.length > 0 && !sts.includes(x.Book_Status)) return false;
     return true;
@@ -398,6 +423,7 @@ function validateBookFilters() {
   const scopeGrade = getBookFilterScope("grade");
   const scopeSub = getBookFilterScope("sub");
   const scopeType = getBookFilterScope("type");
+  const scopeTrk = getBookFilterScope("trk");
   const scopeSt = getBookFilterScope("st");
 
   if (f.pub !== undefined) {
@@ -419,6 +445,13 @@ function validateBookFilters() {
   if (f.type !== undefined) {
     const arr = getFilterArr(f, "type").filter(t => scopeType.some(b => String(b.School_Types || "").split(/[,،]/).map(s => s.trim()).includes(t)));
     f.type = arr;
+  }
+  if (f.trk !== undefined) {
+    const arr = getFilterArr(f, "trk").filter(t => scopeTrk.some(b => {
+      const bt = String(b.Tracks || "").split(/[,،]/).map(s => s.trim()).filter(Boolean);
+      return t === "__shared" ? !bt.length : bt.includes(t);
+    }));
+    f.trk = arr;
   }
   if (f.st !== undefined) {
     const arr = getFilterArr(f, "st").filter(st => scopeSt.some(b => b.Book_Status === st));
@@ -486,6 +519,14 @@ function booksTable() {
 
   if (BK_MOBILE()) return dirtyBanner + bookCardsMobile(list, rcMap, st, canEdit, stageTone);
   _bkMobLast = false;
+  const total = list.length;
+  const pageSize = BK_UI.pageSize > 0 ? BK_UI.pageSize : total || 1;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  if (BK_UI.page > totalPages) BK_UI.page = totalPages;
+  if (BK_UI.page < 1) BK_UI.page = 1;
+  const startIdx = (BK_UI.page - 1) * pageSize;
+  const pageList = BK_UI.pageSize > 0 ? list.slice(startIdx, startIdx + pageSize) : list;
+
   const tbl = UI.table([
     { t: "الكود", cls: "w-20 whitespace-nowrap", v: x => `<span class="inline-flex items-center justify-center rounded-lg px-2 py-0.5 text-[11.5px] font-bold num ring-1 ${stageTone(x.Stage || "")}">${esc(x.Book_ID)}</span>` },
     { t: "الكتاب · الناشر · المادة", v: x => `<div class="flex items-center gap-2">${coverThumb(x)}<div class="min-w-0 flex-1">
@@ -496,11 +537,12 @@ function booksTable() {
         ${x.Book_Part ? `<span class="inline-flex items-center rounded-md bg-amber-50 text-amber-800 px-1.5 py-0.5 text-[10px] font-semibold">${esc(x.Book_Part)}</span>` : ""}
       </div>
     </div></div>` },
-    { t: "الصف والمدرسة", cls: "whitespace-nowrap", v: x => `<div class="leading-tight">
+    { t: "الصف والشعبة", cls: "whitespace-nowrap", v: x => `<div class="leading-tight">
       <div class="font-bold text-slate-800 text-xs">${esc(x.Grade)}</div>
-      <div class="flex items-center gap-1 mt-0.5">
+      <div class="flex flex-wrap items-center gap-1 mt-0.5">
         <span class="text-[10px] text-slate-400">${esc((x.Stage || "").replace("المرحلة ", ""))}</span>
         <span class="inline-flex items-center rounded ring-1 ring-slate-200 bg-white px-1 py-0 text-[10px] font-semibold text-slate-600">${esc(x.School_Types || "حكومي")}</span>
+        ${x.Tracks ? `<span class="inline-flex items-center rounded bg-sky-50 text-sky-800 ring-1 ring-sky-200 px-1 py-0 text-[10px] font-semibold" title="الشعبة المقررة">${esc(String(x.Tracks).replace(/،/g, " · "))}</span>` : ""}
       </div>
     </div>` },
     { t: "الحالة", cls: "whitespace-nowrap", v: x => {
@@ -555,7 +597,6 @@ function booksTable() {
       return `<span class="text-xs font-semibold ${oh > 0 ? "text-slate-800" : "text-slate-400"}">${fmt(oh)}<span class="text-slate-300 mx-0.5">/</span><span class="${fr > 0 ? "text-emerald-700 font-bold" : ""}">${fmt(fr)}</span></span>`;
     } },
     { t: "إجراءات", actions: true, cls: "w-28", v: x => {
-      const hasUse = !!(rcMap[x.Book_ID] || (st[x.Book_ID] && st[x.Book_ID].onHand));
       const isRowEd = BK_UI.editingRow === x.Book_ID || !!BK_UI.dirty[x.Book_ID];
       return `<div class="inline-flex items-center justify-center gap-1">
         ${canEdit && isRowEd ? `<button type="button" class="act-ic act-ic-save" data-act="bkSaveRow" data-id="${esc(x.Book_ID)}" title="حفظ التعديل السريع لهذا الكتاب" aria-label="حفظ">${ic("check")}</button>` : ""}
@@ -565,7 +606,7 @@ function booksTable() {
         ${can("DELETE_BOOK") ? `<button type="button" class="act-ic act-ic-del" data-act="bookDel" data-id="${esc(x.Book_ID)}" title="حذف أو تعطيل الكتاب" aria-label="حذف">${ic("trash-2")}</button>` : ""}
       </div>`;
     } }
-  ], list, {
+  ], pageList, {
     maxH: 660,
     foot: footHtml,
     rowCls: x => BK_UI.dirty[x.Book_ID] ? "row-dirty" : (n(x.Emp_Selling_Price) < n(x.Standard_Net_Cost) && x.Book_Status !== "Pricing" ? "row-loss" : ""),
@@ -574,7 +615,22 @@ function booksTable() {
     empty: q ? "لا نتائج مطابقة للبحث أو الفلتر" : "الكتالوج فارغ",
     emptySub: q ? "جرّب تغيير المرحلة أو مسح الفلاتر." : "أضف الكتب من لوحة الإدخال السريع أعلاه أو من استوديو الإضافة."
   });
-  return dirtyBanner + tbl;
+  const pager = total > 50 ? `<div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-600 px-1">
+    <div class="flex items-center gap-2">
+      <span>عرض <b class="num text-slate-900">${fmt(startIdx + 1)}–${fmt(Math.min(startIdx + pageList.length, total))}</b> من <b class="num text-slate-900">${fmt(total)}</b> كتاب</span>
+      <select class="input !h-8 !w-auto !text-xs !py-0" data-change="bkPageSize">
+        <option value="50" ${BK_UI.pageSize === 50 ? "selected" : ""}>50 / صفحة</option>
+        <option value="100" ${BK_UI.pageSize === 100 ? "selected" : ""}>100 / صفحة</option>
+        <option value="0" ${BK_UI.pageSize === 0 ? "selected" : ""}>عرض الكل</option>
+      </select>
+    </div>
+    ${totalPages > 1 ? `<div class="flex items-center gap-1">
+      <button type="button" class="btn btn-outline btn-xs" data-act="bkPage" data-id="${BK_UI.page - 1}" ${BK_UI.page <= 1 ? "disabled" : ""}>السابق</button>
+      <span class="px-2 font-bold num text-slate-800">صفحة ${fmt(BK_UI.page)} / ${fmt(totalPages)}</span>
+      <button type="button" class="btn btn-outline btn-xs" data-act="bkPage" data-id="${BK_UI.page + 1}" ${BK_UI.page >= totalPages ? "disabled" : ""}>التالي</button>
+    </div>` : ""}
+  </div>` : "";
+  return dirtyBanner + tbl + pager;
 }
 
 // ---------------- بطاقات الكتب على الموبايل (بدل الجدول) ----------------
@@ -679,7 +735,7 @@ function quickBookEntryBarHTML() {
           <label class="label !text-[11.5px]">${qf.mode === "series" ? "المرحلة (سلسلة كاملة)" : "الصف الدراسي"}</label>
           ${qf.mode === "series"
             ? `<select class="input !h-10 !text-xs font-bold text-brand-800 bg-brand-50/40" data-change="qbField" data-k="stage">
-                ${["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية", "رياض الأطفال"].map(st => `<option value="${esc(st)}" ${qf.stage === st ? "selected" : ""}>كل صفوف ${esc(st)} (${grades.filter(g => g.stage === st).length} صفوف)</option>`).join("")}
+                ${((c.stages && c.stages.length) ? c.stages : ["المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية", "رياض الأطفال"]).map(st => `<option value="${esc(st)}" ${qf.stage === st ? "selected" : ""}>كل صفوف ${esc(st)} (${grades.filter(g => g.stage === st).length} صفوف)</option>`).join("")}
               </select>`
             : `<select class="input !h-10 !text-xs font-semibold" data-change="qbField" data-k="grade">
                 ${grades.map(g => `<option value="${esc(g.label)}" ${qf.grade === g.label ? "selected" : ""}>${esc(g.label)} (${esc(g.code)})</option>`).join("")}
@@ -796,6 +852,17 @@ function getMsDropdownItems(k) {
     });
     return Object.keys(counts).sort((a, b) => a.localeCompare(b, "ar")).map(t => ({ value: t, label: t, count: counts[t] || 0 }));
   }
+  if (k === "trk") {
+    const counts = {}; let sharedCnt = 0;
+    scope.forEach(b => {
+      const bt = String(b.Tracks || "").split(/[,،]/).map(s => s.trim()).filter(Boolean);
+      if (!bt.length) sharedCnt++;
+      else bt.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+    });
+    const out = Object.keys(counts).sort((a, b) => a.localeCompare(b, "ar")).map(t => ({ value: t, label: t, count: counts[t] }));
+    if (sharedCnt > 0) out.unshift({ value: "__shared", label: "مشترك (كل الشُّعب)", count: sharedCnt });
+    return out;
+  }
   if (k === "st") {
     const counts = {}; scope.forEach(b => { if (b.Book_Status) counts[b.Book_Status] = (counts[b.Book_Status] || 0) + 1; });
     const labels = { Available: "متاح للحجز", Pricing: "جاري التسعير", Not_Yet_Printed: "لم يُطبع بعد", Suspended: "موقوف مؤقتاً", Discontinued: "ملغى" };
@@ -809,7 +876,7 @@ function bookFilters() {
   const d = A(), c = d.catalog || {}, f = Q.bookF || {};
   validateBookFilters();
 
-  const stages = ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"];
+  const stages = (c.stages && c.stages.length) ? c.stages : ["رياض الأطفال", "المرحلة الابتدائية", "المرحلة الإعدادية", "المرحلة الثانوية"];
 
   // 1. نطاق المراحل: الكتب المتطابقة مع بقية الفلاتر (مثل الناشر أو المادة أو البحث)
   const scopeStage = getBookFilterScope("stage");
@@ -860,6 +927,10 @@ function bookFilters() {
     });
   });
   const availTypes = Object.keys(typeCounts).sort((a, b) => a.localeCompare(b, "ar"));
+
+  // 5ب. نطاق الشُّعب
+  const availTrks = getMsDropdownItems("trk");
+  const hasTracksData = availTrks.some(t => t.value !== "__shared") || (c.tracksRegistry && c.tracksRegistry.length > 0);
 
   // 6. نطاق الحالات
   const scopeSt = getBookFilterScope("st");
@@ -935,7 +1006,7 @@ function bookFilters() {
       </div>`;
   };
 
-  const hasFilters = !!(actStages.length || getFilterArr(f, "grade").length || getFilterArr(f, "pub").length || getFilterArr(f, "sub").length || getFilterArr(f, "type").length || getFilterArr(f, "st").length || Q.books);
+  const hasFilters = !!(actStages.length || getFilterArr(f, "grade").length || getFilterArr(f, "pub").length || getFilterArr(f, "sub").length || getFilterArr(f, "type").length || getFilterArr(f, "trk").length || getFilterArr(f, "st").length || Q.books);
   const matchCount = filteredBooksList().length;
 
   return `
@@ -946,17 +1017,18 @@ function bookFilters() {
           ${stageChips}
         </div>
         <div class="flex flex-wrap items-center gap-1.5">
-          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.quickOpen ? "btn-primary" : "btn-soft"} btn-xs" data-act="toggleQuickEntry">${ic("plus")} لوحة الإدخال السريع</button>` : ""}
-          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.inlineMode ? "btn-gold" : "btn-outline"} btn-xs" data-act="toggleInlineBooks">${ic("pencil")} ${BK_UI.inlineMode ? "إغلاق التعديل بالجدول" : "تعديل الأسعار بالجدول"}</button>` : ""}
-          <button type="button" class="btn btn-ghost btn-xs" data-act="exportBooks">${ic("download")} تصدير Excel</button>
+          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.quickOpen ? "btn-primary" : "btn-soft"} btn-xs" data-act="toggleQuickEntry">${ic("plus")} إدخال سريع</button>` : ""}
+          ${can("SAVE_BOOK") ? `<button type="button" class="btn ${BK_UI.inlineMode ? "btn-gold" : "btn-outline"} btn-xs" data-act="toggleInlineBooks">${ic("pencil")} ${BK_UI.inlineMode ? "إغلاق التعديل بالجدول" : "تعديل بالجدول"}</button>` : ""}
+          <button type="button" class="btn btn-ghost btn-xs" data-act="exportBooks">${ic("download")} Excel</button>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-2">
-        ${searchBox("qBooks", Q.books, "بحث بالاسم أو الكود أو الناشر أو المادة…")}
+        ${searchBox("qBooks", Q.books, "بحث ذكي بالاسم أو الكود أو الناشر أو المادة أو الشعبة…")}
         ${msDropdown("grade", "الصف الدراسي", actStages.length ? `صفوف محددة (${availGrades.length})` : `كل الصفوف (${availGrades.length})`, availGrades.map(g => ({ value: g, label: g, count: gradeCounts[g] || 0 })))}
         ${msDropdown("pub", "دار النشر", `كل دور النشر (${availPubs.length})`, availPubs.map(p => ({ value: p, label: p, count: pubCounts[p] || 0 })))}
         ${msDropdown("sub", "المادة الدراسية", `كل المواد (${availSubs.length})`, availSubs.map(s => ({ value: s, label: s, count: subCounts[s] || 0 })))}
         ${msDropdown("type", "نوع المدرسة", `كل المدارس (${availTypes.length})`, availTypes.map(t => ({ value: t, label: t, count: typeCounts[t] || 0 })))}
+        ${hasTracksData ? msDropdown("trk", "الشعبة الدراسية", `كل الشُّعب (${availTrks.length})`, availTrks) : ""}
         ${msDropdown("st", "حالة الكتاب", `كل الحالات (${availSt.length})`, availSt.map(item => ({ value: item.key, label: item.label, count: item.count })))}
         ${hasFilters ? `<button type="button" class="btn btn-ghost btn-xs text-rose-600 font-semibold" data-act="bkClearF">${ic("x")} مسح الفلاتر (<span id="bkMatchCount">${fmt(matchCount)}</span>)</button>` : `<span class="text-[11.5px] text-slate-400 font-semibold mr-1 num">مطابق: <span id="bkMatchCount">${fmt(matchCount)}</span></span>`}
       </div>
@@ -971,30 +1043,77 @@ Router.add("/a/books", view => {
   const totalReqCopies = Object.values(rcMap).reduce((s, c) => s + c.q, 0);
   const pubsCnt = new Set(d.books.map(b => b.Publisher).filter(Boolean)).size;
   const subsCnt = new Set(d.books.map(b => b.Subject).filter(Boolean)).size;
+  const plCount = (d.priceLists || []).length;
+  const trkCount = ((d.catalog || {}).tracksRegistry || []).length;
+  const missingCovers = d.books.filter(x => !x.Cover_URL).length;
 
-  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب مسجل · سعر الموظف = السعر قبل الخصم − ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
-    lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("sliders-horizontal")} قوائم الكتالوج</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="pubLogos">${ic("store")} شعارات الناشرين</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="coversBulk">${ic("upload")} رفع أغلفة${(() => { const m = d.books.filter(x => !x.Cover_URL).length; return m ? ` <span class="text-[11px] text-slate-400 num">(${m} بلا صورة)</span>` : ""; })()}</button>`) + lockedBtn("BULK_IMPORT_BOOKS", `<button class="btn btn-outline btn-sm" data-act="importBooks">${ic("file-spreadsheet")} استيراد من Excel</button>`) + lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة جديدة</button>`))
-    + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+  const moreMenu = (can("SAVE_BOOK") || can("BULK_IMPORT_BOOKS")) ? `
+    <details class="relative inline-block">
+      <summary class="btn btn-outline btn-sm cursor-pointer list-none inline-flex items-center gap-1">${ic("sliders-horizontal")} أدوات أخرى ${ic("chevron-down", "!w-3.5 !h-3.5")}</summary>
+      <div class="absolute left-0 top-full mt-1.5 z-40 min-w-[210px] rounded-2xl bg-white shadow-lift ring-1 ring-slate-200 p-1.5 space-y-0.5 text-right">
+        ${can("SAVE_BOOK") ? `<button type="button" class="w-full text-right px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2" data-act="pubLogos">${ic("store", "!w-3.5 !h-3.5")} شعارات الناشرين</button>` : ""}
+        ${can("SAVE_BOOK") ? `<button type="button" class="w-full text-right px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center justify-between gap-2" data-act="coversBulk"><span class="flex items-center gap-2">${ic("upload", "!w-3.5 !h-3.5")} رفع أغلفة الكتب</span>${missingCovers ? `<span class="text-[10.5px] text-slate-400 num">${missingCovers}</span>` : ""}</button>` : ""}
+        ${can("BULK_IMPORT_BOOKS") ? `<button type="button" class="w-full text-right px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2" data-act="importBooks">${ic("file-spreadsheet", "!w-3.5 !h-3.5")} استيراد من Excel</button>` : ""}
+        <button type="button" class="w-full text-right px-3 py-2 rounded-xl hover:bg-slate-50 text-xs font-semibold text-slate-700 flex items-center gap-2" data-act="exportBooks">${ic("download", "!w-3.5 !h-3.5")} تصدير الكتالوج Excel</button>
+      </div>
+    </details>` : "";
+
+  const tabBtn = (id, icon, label, badge) => {
+    const act = BK_UI.tab === id;
+    return `<button type="button" class="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-[13px] font-bold transition whitespace-nowrap ${act ? "bg-brand-700 text-white shadow-xs" : "text-slate-600 hover:bg-slate-100"}" data-act="bkTab" data-id="${id}" aria-pressed="${act}">${ic(icon, "!w-4 !h-4")} <span>${label}</span>${badge ? `<span class="rounded-full px-1.5 py-0 text-[10.5px] num ${act ? "bg-white/20 text-white" : "bg-slate-200/80 text-slate-700"}">${badge}</span>` : ""}</button>`;
+  };
+
+  let bodyHtml = "";
+  if (BK_UI.tab === "pricing" && window.BooksPro) {
+    bodyHtml = window.BooksPro.renderPricing();
+  } else if (BK_UI.tab === "tracks" && window.BooksPro) {
+    bodyHtml = window.BooksPro.renderTracks();
+  } else {
+    bodyHtml = `<div class="grid grid-cols-2 lg:grid-cols-4 gap-2.5 mb-3.5">
         ${UI.kpi("إجمالي الكتب المسجلة", fmt(d.books.length), { icon: "library-big", tone: "brand", foot: `${fmt(pubsCnt)} دار نشر · ${fmt(subsCnt)} مادة دراسية` })}
         ${UI.kpi("متاح للحجز الآن", fmt(availCnt), { icon: "circle-check", tone: "green", foot: pricingCnt ? `${fmt(pricingCnt)} كتاب جاري تسعيره` : "جميع الكتب مسعّرة وجاهزة" })}
         ${UI.kpi("النسخ المحجوزة بالمرحلة", fmt(totalReqCopies), { icon: "shopping-cart", tone: "blue", foot: `في ${esc(phaseObj().Phase_Name || "المرحلة المختارة")}` })}
-        ${UI.kpi("الخصم الموحد للموظف", fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT) + "%", { icon: "badge-percent", tone: loss ? "red" : "amber", foot: loss ? `تنبيه: ${loss} كتاب أقل من التكلفة` : `عقد المكتبة الرئيسية: ${esc((d.suppliers[0] || {}).Supplier_Name || "—")}` })}
+        ${UI.kpi("الخصم الموحد للموظف", fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT) + "%", { icon: "badge-percent", tone: loss ? "red" : "amber", foot: loss ? `تنبيه: ${loss} كتاب أقل من التكلفة` : `عقد المكتبة: ${esc((d.suppliers[0] || {}).Supplier_Name || "—")}` })}
       </div>`
-    + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-200 text-rose-800 p-3.5 mb-4 text-sm flex items-center gap-2">${ic("triangle-alert", "text-rose-600")}<span class="font-semibold">${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية — يمكنك تعديلها مباشرة من الجدول أدناه.</span></div>` : "")
-    + `<div id="quickEntryWrap">${quickBookEntryBarHTML()}</div>`
-    + `<section class="card card-pad"><div id="bookFiltersWrap" class="mb-3.5">${bookFilters()}</div><div id="booksList">${booksTable()}</div></section>`;
+      + (loss ? `<div class="rounded-2xl bg-rose-50 ring-1 ring-rose-200 text-rose-800 p-3 mb-3.5 text-sm flex items-center gap-2">${ic("triangle-alert", "text-rose-600")}<span class="font-semibold">${loss} كتاب سعر الموظف فيه أقل من التكلفة الصافية — يمكنك تعديلها مباشرة من الجدول أدناه.</span></div>` : "")
+      + `<div id="quickEntryWrap">${quickBookEntryBarHTML()}</div>`
+      + `<section class="card card-pad"><div id="bookFiltersWrap" class="mb-3">${bookFilters()}</div><div id="booksList">${booksTable()}</div></section>`;
+  }
+
+  view.innerHTML = UI.pageHead("الكتب والأسعار", `${d.books.length} كتاب · خصم الموظف ${fmt(d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT)}%`,
+    lockedBtn("SAVE_BOOK", `<button class="btn btn-primary btn-sm" data-act="bookForm">${ic("plus")} كتاب / سلسلة</button>`)
+    + lockedBtn("BULK_PRICE_BOOKS", `<button class="btn btn-gold btn-sm" data-act="bulkPrice">${ic("badge-percent")} تسعير جماعي</button>`)
+    + lockedBtn("SAVE_BOOK", `<button class="btn btn-outline btn-sm" data-act="catalogMgr">${ic("book-open")} القوائم</button>`)
+    + moreMenu)
+    + `<div class="flex items-center gap-1.5 overflow-x-auto bg-white rounded-2xl p-1.5 ring-1 ring-slate-200/80 mb-3.5 shadow-xs">
+        ${tabBtn("catalog", "library-big", "الكتالوج والبحث", fmt(d.books.length))}
+        ${tabBtn("pricing", "calendar", "قوائم الأسعار والتاريخ", plCount ? fmt(plCount) : "")}
+        ${tabBtn("tracks", "graduation-cap", "المراحل والصفوف والشُّعب", trkCount ? fmt(trkCount) : "")}
+      </div>`
+    + bodyHtml;
 });
+on("bkTab", t => { BK_UI.tab = t || "catalog"; Router.render(); });
+on("bkPage", p => { BK_UI.page = Math.max(1, parseInt(p, 10) || 1); rerenderList("booksList", booksTable); });
+on("bkPageSize", v => { BK_UI.pageSize = parseInt(v, 10) || 0; BK_UI.page = 1; rerenderList("booksList", booksTable); });
+let _qBooksTimer = null;
 on("qBooks", v => {
   Q.books = v.trim();
-  validateBookFilters();
-  const matchEl = $("#bkMatchCount");
-  if (matchEl) matchEl.textContent = fmt(filteredBooksList().length);
-  rerenderList("booksList", booksTable);
+  BK_UI.page = 1;
+  const run = () => {
+    validateBookFilters();
+    const matchEl = $("#bkMatchCount");
+    if (matchEl) matchEl.textContent = fmt(filteredBooksList().length);
+    rerenderList("booksList", booksTable);
+  };
+  if (_qBooksTimer) clearTimeout(_qBooksTimer);
+  if ((A().books || []).length > 150) _qBooksTimer = setTimeout(run, 100);
+  else run();
 });
 on("bookF", (v, el) => {
   const k = el.dataset.k;
   const selectedVals = Array.from(el.selectedOptions || []).map(o => o.value).filter(Boolean);
   Q.bookF = Object.assign({}, Q.bookF, { [k]: selectedVals.length ? selectedVals : (v ? [v] : []) });
+  BK_UI.page = 1;
   validateBookFilters();
   const fw = $("#bookFiltersWrap");
   if (fw) fw.innerHTML = bookFilters();
@@ -1010,6 +1129,7 @@ on("bkStageF", stg => {
     else curStages.push(stg);
     Q.bookF = Object.assign({}, Q.bookF, { stage: curStages, grade: [] });
   }
+  BK_UI.page = 1;
   validateBookFilters();
   const fw = $("#bookFiltersWrap");
   if (fw) fw.innerHTML = bookFilters();
@@ -1018,6 +1138,7 @@ on("bkStageF", stg => {
 on("bkClearF", () => {
   Q.books = "";
   Q.bookF = {};
+  BK_UI.page = 1;
   BK_UI.openDropdown = null;
   BK_UI.msSearch = {};
   const fw = $("#bookFiltersWrap");
