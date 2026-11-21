@@ -38,7 +38,8 @@ const SYSTEM_CONFIG = {
     CASH_CLOSINGS: "22_Cash_Closings",
     PRICE_LISTS: "23_Price_Lists",
     PRICE_ITEMS: "24_Book_Prices",
-    TRACK_CURRICULUM: "25_Track_Curriculum"
+    TRACK_CURRICULUM: "25_Track_Curriculum",
+    EMP_CHANGE_REQUESTS: "26_Emp_Change_Requests"
   },
   ROLES: ["Admin", "Coordinator", "Finance", "Warehouse"],
   PHASE_STATUSES: ["Draft", "Open", "Closed", "Ordered", "Receiving", "Delivering", "Completed"],
@@ -156,7 +157,7 @@ function getDatabaseSchemaDefinition_() {
   return [
     { name: S.SETTINGS, color: "#1e293b", headers: ["Setting_Key", "Setting_Value", "Data_Type", "Description", "Updated_At", "Updated_By"] },
     { name: S.USERS, color: "#334155", headers: ["User_ID", "Emp_ID", "Username", "Password_Hash", "Full_Name", "Role", "Is_Active", "Last_Login", "Password_Salt", "Must_Change_Password"] },
-    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID_Last4", "Mobile", "Department", "Job_Title", "Member_State", "Employment_Status", "Installment_Allowed", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON", "Cart_Draft"] },
+    { name: S.EMPLOYEES, color: "#0f766e", headers: ["Emp_ID", "Full_Name", "National_ID", "National_ID_Last4", "Mobile", "Mobile2", "Email", "Address", "Department", "Job_Title", "Grade_Title", "Union_Org", "Member_State", "Hire_Date", "Retirement_Date", "Insurance_No", "Qualification", "Specialization", "Marital_Status", "Gender", "Birth_Date", "Monthly_Dues", "Employment_Status", "Installment_Allowed", "Edit_Permitted", "Max_Credit_Limit", "Notes", "Updated_At", "Kids_JSON", "Cart_Draft"] },
     { name: S.SUPPLIERS, color: "#0369a1", headers: ["Supplier_ID", "Supplier_Name", "Contact_Person", "Phone", "Volume_Discount_Pct", "Return_Policy_Days", "Payment_Terms", "Contract_Notes", "Is_Active"] },
     { name: S.BOOKS, color: "#1d4ed8", headers: ["Book_ID", "Book_Name", "Stage", "Grade", "Subject", "Publisher", "Supplier_ID", "Cover_Price", "Supplier_Discount_Pct", "Initial_Purchase_Price", "Volume_Discount_Share_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Book_Status", "School_Types", "Book_Part", "Cover_URL", "Tracks"] },
     { name: S.PHASES, color: "#4338ca", headers: ["Phase_ID", "Phase_Name", "Start_DateTime", "End_DateTime", "Order_Send_Date", "Expected_Supply_Date", "Delivery_Start_Date", "Allowed_Grades", "Phase_Status", "Manual_Override", "Academic_Year", "Term"] },
@@ -178,7 +179,8 @@ function getDatabaseSchemaDefinition_() {
     { name: S.CASH_CLOSINGS, color: "#0e7490", headers: ["Closing_ID", "Closing_Date", "Payment_Method", "System_Amount", "Counted_Amount", "Difference", "Receipts_Count", "Closed_By", "Closed_At", "Notes"] },
     { name: S.PRICE_LISTS, color: "#1d4ed8", headers: ["Price_List_ID", "Academic_Year", "Term", "Title", "Status", "Notes", "Copied_From_ID", "Created_At", "Created_By", "Approved_At", "Approved_By", "Archived_At", "Archived_By", "Version"] },
     { name: S.PRICE_ITEMS, color: "#2563eb", headers: ["Price_ID", "Price_List_ID", "Book_ID", "Academic_Year", "Term", "Stage", "Grade", "Track", "Cover_Price", "Supplier_Discount_Pct", "Standard_Net_Cost", "Emp_Discount_Pct", "Emp_Selling_Price", "Status", "Version", "Previous_Price_ID", "Change_Reason", "Created_At", "Created_By", "Approved_At", "Approved_By"] },
-    { name: S.TRACK_CURRICULUM, color: "#0284c7", headers: ["Curr_ID", "Academic_Year", "Term", "Stage", "Grade", "Track_ID", "Track_Name", "Book_ID", "Is_Shared", "Is_Active", "Notes", "Updated_At", "Updated_By"] }
+    { name: S.TRACK_CURRICULUM, color: "#0284c7", headers: ["Curr_ID", "Academic_Year", "Term", "Stage", "Grade", "Track_ID", "Track_Name", "Book_ID", "Is_Shared", "Is_Active", "Notes", "Updated_At", "Updated_By"] },
+    { name: S.EMP_CHANGE_REQUESTS, color: "#7c3aed", headers: ["Req_ID", "Emp_ID", "Emp_Name", "Changes_JSON", "Reason", "Status", "Created_At", "Reviewed_At", "Reviewed_By", "Review_Note"] }
   ];
 }
 
@@ -662,6 +664,9 @@ const ACTION_ACL = {
   BULK_IMPORT_EMPLOYEES: ["Coordinator"],
   SAVE_EMPLOYEE: ["Coordinator"],
   DELETE_EMPLOYEE: ["Coordinator"],
+  TOGGLE_EMP_EDIT_PERMIT: ["Coordinator"],
+  REVIEW_EMP_CHANGE_REQUEST: ["Coordinator"],
+  SUBMIT_EMP_CHANGE_REQUEST: ["EMPLOYEE"],
   SAVE_PHASE: ["Coordinator"],
   DELETE_PHASE: ["Coordinator"],
   SET_PHASE_STATUS: ["Coordinator"],
@@ -771,6 +776,9 @@ function callServerApi(action, payload, sessionToken) {
       case "BULK_IMPORT_EMPLOYEES": return E.bulkImportEmployees(session, payload.employeesArray || []);
       case "SAVE_EMPLOYEE": return E.saveEmployee(session, payload);
       case "DELETE_EMPLOYEE": return E.deleteEmployee(session, payload.empId);
+      case "TOGGLE_EMP_EDIT_PERMIT": return E.toggleEmpEditPermit(session, payload);
+      case "SUBMIT_EMP_CHANGE_REQUEST": return E.submitEmpChangeRequest(session, payload);
+      case "REVIEW_EMP_CHANGE_REQUEST": return E.reviewEmpChangeRequest(session, payload);
       case "SAVE_PHASE": return E.savePhase(session, payload);
       case "DELETE_PHASE": return E.deletePhase(session, payload);
       case "DELETE_SUPPLIER": return E.deleteSupplier(session, payload);
@@ -1213,7 +1221,31 @@ const OperationsEngine = {
         EMP_RETURN_WINDOW_DAYS: settings.EMP_RETURN_WINDOW_DAYS || 7, PAY_INSTAPAY: settings.PAY_INSTAPAY || "", PAY_WALLET: settings.PAY_WALLET || "", PAY_INSTAPAY_LINK: settings.PAY_INSTAPAY_LINK || ""
       },
       pubLogos: this.publisherLogos_(), brand: this.brand_(settings), announcements: this.announcements_().filter(a => (!a.until || a.until >= Util.today()) && (!a.phaseId || (active && Util.str(active.Phase_ID) === a.phaseId))),
-      employee: { installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed), creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT, kids: this.kidsOf_(emp), dept: Util.str(emp.Department), gender: (() => { const s = Util.str(emp.National_ID_Last4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).padStart(4, "0"); const d = /^\d{4}$/.test(s) ? parseInt(s.charAt(2), 10) : NaN; return isNaN(d) ? "" : (d % 2 === 0 ? "F" : "M"); })(), cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })() },
+      employee: {
+        installmentAllowed: emp.Installment_Allowed === "" ? true : Util.bool(emp.Installment_Allowed),
+        creditLimit: Util.num(emp.Max_Credit_Limit) || settings.DEFAULT_CREDIT_LIMIT,
+        kids: this.kidsOf_(emp),
+        dept: Util.str(emp.Department),
+        editPermitted: Util.bool(emp.Edit_Permitted),
+        profile: {
+          empId: Util.str(emp.Emp_ID), fullName: Util.str(emp.Full_Name),
+          nationalIdLast4: Util.str(emp.National_ID_Last4),
+          mobile: Util.str(emp.Mobile), mobile2: Util.str(emp.Mobile2),
+          email: Util.str(emp.Email), address: Util.str(emp.Address),
+          department: Util.str(emp.Department), jobTitle: Util.str(emp.Job_Title),
+          gradeTitle: Util.str(emp.Grade_Title), unionOrg: Util.str(emp.Union_Org),
+          memberState: Util.str(emp.Member_State), hireDate: Util.str(emp.Hire_Date),
+          retirementDate: Util.str(emp.Retirement_Date), insuranceNo: Util.str(emp.Insurance_No),
+          qualification: Util.str(emp.Qualification), specialization: Util.str(emp.Specialization),
+          maritalStatus: Util.str(emp.Marital_Status), gender: Util.str(emp.Gender),
+          birthDate: Util.str(emp.Birth_Date), monthlyDues: Util.num(emp.Monthly_Dues),
+          employmentStatus: Util.str(emp.Employment_Status || "ساري"),
+          updatedAt: Util.str(emp.Updated_At)
+        },
+        gender: (() => { const s = Util.str(emp.National_ID_Last4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).padStart(4, "0"); const d = /^\d{4}$/.test(s) ? parseInt(s.charAt(2), 10) : NaN; return isNaN(d) ? "" : (d % 2 === 0 ? "F" : "M"); })(),
+        cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })()
+      },
+      myChangeRequests: DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS).filter(mine),
       books: this.sortBooks_(books),
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
@@ -1235,6 +1267,7 @@ const OperationsEngine = {
       settings: DB_Engine.getAllRecords(S.SETTINGS),
       settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
+      empChangeRequests: DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS),
       users: DB_Engine.getAllRecords(S.USERS).map(u => ({ User_ID: u.User_ID, Username: u.Username, Role: u.Role, Is_Active: u.Is_Active, Must_Change_Password: u.Must_Change_Password, Last_Login: u.Last_Login })),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
       books: (() => {
@@ -2707,9 +2740,16 @@ const OperationsEngine = {
       if (!origId && existing && !p.allowUpdate) {
         Util.require(false, "الكود الوظيفي «" + id + "» مسجّل بالفعل باسم (" + existing.Full_Name + "). عدّل ملفه بدلاً من تكراره.");
       }
+      const fullNidRaw = Util.str(p.nationalId).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "");
+      if (fullNidRaw) {
+        Util.require(/^[23][0-9]{13}$/.test(fullNidRaw), "الرقم القومي الكامل يجب أن يكون 14 رقماً صحيحاً يبدأ بـ 2 أو 3.");
+        const nidDup = all.find(e => Util.str(e.Emp_ID) !== (existing ? Util.str(existing.Emp_ID) : id) && Util.str(e.National_ID) === fullNidRaw);
+        Util.require(!nidDup, "الرقم القومي مسجّل بالفعل للموظف (" + (nidDup ? nidDup.Emp_ID + " — " + nidDup.Full_Name : "") + ").");
+      }
+      const fullNid = fullNidRaw || (existing ? Util.str(existing.National_ID) : "");
       const natRaw = Util.str(p.natIdLast4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/\D/g, "");
-      const nat4 = natRaw ? natRaw.slice(-4).padStart(4, "0") : (existing ? Util.str(existing.National_ID_Last4) : "");
-      if (natRaw) Util.require(natRaw.length >= 4, "آخر 4 أرقام من الرقم القومي يجب أن تكون 4 أرقام صحيحة.");
+      const nat4 = fullNidRaw ? fullNidRaw.slice(-4) : (natRaw ? natRaw.slice(-4).padStart(4, "0") : (existing ? Util.str(existing.National_ID_Last4) : ""));
+      if (!fullNidRaw && natRaw) Util.require(natRaw.length >= 4, "آخر 4 أرقام من الرقم القومي يجب أن تكون 4 أرقام صحيحة.");
       const mobIn = Util.str(p.mobile);
       const mob = mobIn ? AuthEngine.normalizeMobile(mobIn) : (existing ? Util.str(existing.Mobile) : "");
       if (mobIn) {
@@ -2723,11 +2763,13 @@ const OperationsEngine = {
 
       const empStatus = Util.str(p.employmentStatus) === "موقوف" ? "موقوف" : "ساري";
       const instAllowed = p.installmentAllowed === false || String(p.installmentAllowed) === "false" ? false : true;
+      const editPerm = p.editPermitted !== undefined ? (p.editPermitted === true || String(p.editPermitted) === "true") : (existing ? Util.bool(existing.Edit_Permitted) : false);
       const maxLim = Math.max(0, Util.num(p.maxCreditLimit));
       const now = Util.now();
       const rec = Object.assign({}, existing || {}, {
         Emp_ID: existing ? Util.str(existing.Emp_ID) : id,
         Full_Name: name,
+        National_ID: fullNid,
         National_ID_Last4: nat4,
         Mobile: mob,
         Mobile2: mob2,
@@ -2742,9 +2784,11 @@ const OperationsEngine = {
         Retirement_Date: Util.str(p.retirementDate).slice(0, 20),
         Insurance_No: Util.str(p.insuranceNo).slice(0, 40),
         Qualification: Util.str(p.qualification).slice(0, 80),
+        Specialization: Util.str(p.specialization).slice(0, 100),
         Marital_Status: Util.str(p.maritalStatus).slice(0, 30),
         Employment_Status: empStatus,
         Installment_Allowed: instAllowed,
+        Edit_Permitted: editPerm,
         Max_Credit_Limit: maxLim,
         Notes: Util.str(p.notes).slice(0, 300),
         Updated_At: now
@@ -2775,6 +2819,84 @@ const OperationsEngine = {
       DB_Engine.overwriteTableData(S.EMPLOYEES, all.filter(e => Util.str(e.Emp_ID) !== id));
       DB_Engine.logAudit(session.userId, session.role, "Employees", "DELETE_EMPLOYEE", id, emp, null);
       return { success: true, message: "تم حذف الموظف (" + emp.Full_Name + " — " + id + ") بنجاح." };
+    });
+  },
+
+  /** منح أو سحب تصريح تعديل البيانات للموظف (تخضع تعديلاته لموافقة الإدارة قبل التطبيق) */
+  toggleEmpEditPermit: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), id = Util.str(payload && payload.empId);
+      const allowed = payload && (payload.allowed === true || String(payload.allowed) === "true");
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === id);
+      Util.require(emp, "الموظف غير موجود.");
+      DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", id, { Edit_Permitted: allowed, Updated_At: Util.now() });
+      DB_Engine.logAudit(session.userId, session.role, "Employees", "TOGGLE_EMP_EDIT_PERMIT", id, { Edit_Permitted: Util.bool(emp.Edit_Permitted) }, { Edit_Permitted: allowed });
+      return { success: true, message: allowed ? "تم تفعيل تصريح تعديل البيانات للموظف (" + emp.Full_Name + "). أي تعديل يرسله سيخضع لموافقة الإدارة." : "تم إغلاق تصريح تعديل البيانات للموظف (" + emp.Full_Name + ")." };
+    });
+  },
+
+  /** إرسال طلب تعديل بيانات من الموظف (بعد منحه التصريح) ← يُحفظ بحالة Pending بانتظار موافقة الإدارة */
+  submitEmpChangeRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), id = Util.str(session.empId);
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === id);
+      Util.require(emp, "ملف الموظف غير موجود.");
+      Util.require(Util.bool(emp.Edit_Permitted), "غير مصرح بتعديل البيانات حالياً — اطلب من مسؤول المبادرة تفعيل تصريح التعديل لك.");
+      const ALLOWED = {
+        Mobile: "الموبايل الأساسي", Mobile2: "موبايل إضافي", Email: "البريد الإلكتروني",
+        Address: "العنوان", Qualification: "المؤهل الدراسي", Specialization: "التخصص",
+        Marital_Status: "الحالة الاجتماعية", Department: "جهة العمل / الإدارة", Job_Title: "الوظيفة"
+      };
+      const raw = (payload && payload.changes) || {};
+      const changes = {};
+      Object.keys(ALLOWED).forEach(k => {
+        if (raw[k] === undefined) return;
+        let v = Util.str(raw[k]).slice(0, 200);
+        if (k === "Mobile" || k === "Mobile2") {
+          if (v) { v = AuthEngine.normalizeMobile(v); Util.require(/^01[0-9]{9}$/.test(v), "رقم " + ALLOWED[k] + " غير صحيح (11 رقماً يبدأ بـ 01)."); }
+        }
+        if (v !== Util.str(emp[k])) changes[k] = { from: Util.str(emp[k]), to: v };
+      });
+      Util.require(Object.keys(changes).length > 0, "لم تُجرِ أي تعديل جديد على بياناتك.");
+      const reqId = "ECR-" + id + "-" + String(Date.now()).slice(-6);
+      const rec = {
+        Req_ID: reqId, Emp_ID: id, Emp_Name: Util.str(emp.Full_Name),
+        Changes_JSON: JSON.stringify(changes), Reason: Util.str(payload && payload.reason).slice(0, 250),
+        Status: "Pending", Created_At: Util.now(), Reviewed_At: "", Reviewed_By: "", Review_Note: ""
+      };
+      DB_Engine.insertRecordsBatch(S.EMP_CHANGE_REQUESTS, [rec]);
+      DB_Engine.logAudit(id, "EMPLOYEE", "Employees", "SUBMIT_EMP_CHANGE_REQUEST", reqId, null, changes);
+      return { success: true, message: "تم إرسال طلب تعديل بياناتك للإدارة للمراجعة والاعتماد.", request: rec };
+    });
+  },
+
+  /** مراجعة طلب تعديل بيانات موظف (اعتماد وتطبيق فوري على 03_Employees أو رفض مع سبب) */
+  reviewEmpChangeRequest: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), reqId = Util.str(payload && payload.reqId), decision = Util.str(payload && payload.decision);
+      Util.require(decision === "Approved" || decision === "Rejected", "قرار غير صالح.");
+      const req = DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS).find(r => Util.str(r.Req_ID) === reqId);
+      Util.require(req, "طلب التعديل غير موجود.");
+      Util.require(Util.str(req.Status) === "Pending", "تمت مراجعة هذا الطلب مسبقاً.");
+      const now = Util.now(), actor = Util.actor(session), note = Util.str(payload && payload.note).slice(0, 250);
+      if (decision === "Approved") {
+        const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === Util.str(req.Emp_ID));
+        Util.require(emp, "ملف الموظف غير موجود.");
+        let ch = {}; try { ch = JSON.parse(req.Changes_JSON || "{}"); } catch (_) {}
+        const patch = { Updated_At: now };
+        Object.keys(ch).forEach(k => { patch[k] = ch[k] && ch[k].to !== undefined ? ch[k].to : ch[k]; });
+        if (patch.Mobile) {
+          const all = DB_Engine.getAllRecords(S.EMPLOYEES);
+          const dup = all.find(e => Util.str(e.Emp_ID) !== Util.str(emp.Emp_ID) && AuthEngine.normalizeMobile(e.Mobile) === AuthEngine.normalizeMobile(patch.Mobile));
+          Util.require(!dup, "لا يمكن الاعتماد: الموبايل الجديد مسجّل لموظف آخر (" + (dup ? dup.Full_Name : "") + ").");
+        }
+        DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", emp.Emp_ID, patch);
+        DB_Engine.logAudit(session.userId, session.role, "Employees", "APPROVE_EMP_CHANGE_REQUEST", reqId, emp, patch);
+      } else {
+        DB_Engine.logAudit(session.userId, session.role, "Employees", "REJECT_EMP_CHANGE_REQUEST", reqId, null, { note: note });
+      }
+      DB_Engine.updateRecordByPK(S.EMP_CHANGE_REQUESTS, "Req_ID", reqId, { Status: decision, Reviewed_At: now, Reviewed_By: actor, Review_Note: note });
+      return { success: true, message: decision === "Approved" ? "تم اعتماد وتطبيق تعديلات الموظف (" + req.Emp_Name + ") بنجاح." : "تم رفض طلب تعديل الموظف (" + req.Emp_Name + ")." };
     });
   },
 
