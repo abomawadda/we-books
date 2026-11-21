@@ -522,8 +522,9 @@ on("payNow", () => {
   const msg = `السلام عليكم، حوّلت صافي المطلوب في مبادرة الكتب${due ? " بمبلغ " + due + " ج.م" : ""}\nالاسم: ${APP.user.fullName}\nالرقم: ${APP.user.empId}\n(مرفق صورة التحويل)`;
   const m = UI.open(`<div class="text-center mb-3"><div class="text-[13px] text-slate-500">الصافي المطلوب الآن</div><div class="font-display font-bold text-[28px] num text-brand-900">${fmt(due)} <span class="text-[13px]">ج.م</span></div>${acc.lah > 0 ? `<div class="text-[11.5px] text-emerald-700 num">بعد خصم رصيد لك ${fmt(acc.lah)} ج.م</div>` : ""}${holder ? `<div class="text-[12px] text-slate-500">باسم: <b>${esc(holder)}</b></div>` : ""}</div>
     <div class="grid gap-2">${row("⚡", "إنستاباي", s.PAY_INSTAPAY)}${row("📱", "محفظة إلكترونية", s.PAY_WALLET)}${!s.PAY_INSTAPAY && !s.PAY_WALLET ? `<div class="text-[13px] text-slate-600 text-center">ادفع نقداً للمسؤول، أو كلّمه ياخد منك التحويل.</div>` : ""}</div>
-    <a class="btn btn-success w-full mt-4 !h-12" target="_blank" rel="noopener" href="${esc(Brand.waLink(Brand.get().whatsapp || Brand.get().phone, msg))}">${ic("message-circle")} بعد التحويل ابعت الصورة على واتساب</a>
-    <p class="text-[11.5px] text-slate-500 text-center mt-2">الإيصال بيظهر هنا أول ما المسؤول يسجّل التحويل.</p>`, { title: "ادفع الآن" });
+    <button type="button" class="btn btn-primary w-full mt-4 !h-12" data-act="submitPayClaim">${ic("upload")} سجّل بيانات وصورة التحويل للاعتماد الفوري</button>
+    <a class="btn btn-outline w-full mt-2 !h-11" target="_blank" rel="noopener" href="${esc(Brand.waLink(Brand.get().whatsapp || Brand.get().phone, msg))}">${ic("message-circle")} أو ابعت الصورة على واتساب</a>
+    <p class="text-[11.5px] text-slate-500 text-center mt-2">الإيصال بيظهر هنا تلقائياً أول ما الخزينة تعتمد التحويل.</p>`, { title: "ادفع الآن" });
   $$("[data-copy]", m.root).forEach(b => b.addEventListener("click", () => { try { navigator.clipboard.writeText(b.dataset.copy); toast("اتنسخ 👌", "success"); } catch (_) {} }));
 });
 on("askRefund", () => {
@@ -1170,5 +1171,98 @@ _wrap("/e/home", view => {
   if (nudges.length) afterHead(view, nudges.join(""));
 });
 on("hrReqSeen", k => { const s = hrReqSeen(); s[k] = 1; try { localStorage.setItem(HR_REQ_SEEN, JSON.stringify(s)); } catch (_) {} Router.render(); });
+
+// ================================================================ طابور اعتماد التحويلات (إنستاباي / محفظة) + إشعارات الموبايل الفورية
+function compressImg(file) {
+  return new Promise(ok => {
+    if (!file) return ok("");
+    const rd = new FileReader();
+    rd.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const max = 560, r = Math.min(1, max / Math.max(img.width, img.height));
+        const c = document.createElement("canvas"); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        ok(c.toDataURL("image/jpeg", 0.62));
+      };
+      img.onerror = () => ok("");
+      img.src = rd.result;
+    };
+    rd.onerror = () => ok("");
+    rd.readAsDataURL(file);
+  });
+}
+on("submitPayClaim", async () => {
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { netDue: 0 };
+  const nx = nextInst(), grossDue = nx ? n(nx.Remaining_Inst_Amount) : acc.alayh;
+  const defAmt = acc.netDue > 0.004 ? Math.max(0, Math.min(acc.netDue, Math.round((grossDue - (acc.lah || 0)) * 100) / 100)) : 0;
+  let imgData = "";
+  const m = UI.open(`<form id="claimF" class="space-y-3">
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="label">المبلغ المحوّل (ج.م)</label><input name="amount" type="number" step="0.01" min="1" required class="input num font-bold" value="${defAmt || ""}"></div>
+      <div><label class="label">الوسيلة</label><select name="method" class="input"><option value="INSTAPAY">إنستاباي</option><option value="WALLET">محفظة إلكترونية</option></select></div>
+    </div>
+    <div><label class="label">رقم المرجع / العملية (من إشعار التحويل)</label><input name="ref" required minlength="4" class="input num" placeholder="مثال: 432198765432"></div>
+    <div><label class="label">صورة إشعار التحويل (اختياري)</label><input id="claimFile" type="file" accept="image/*" class="input !py-2 text-xs"><div id="claimPrev" class="mt-2 hidden"><img class="max-h-36 rounded-xl ring-1 ring-slate-200 mx-auto"></div></div>
+    <div><label class="label">ملاحظة (اختياري)</label><input name="note" class="input" placeholder="مثال: تحويل من حساب الزوجة"></div>
+    <button type="submit" class="btn btn-primary w-full !h-12">${ic("send")} إرسال التحويل للاعتماد بالخزينة</button>
+  </form>`, { title: "📤 تسجيل تحويل إنستاباي / محفظة", sub: "سيظهر فوراً في طابور الخزينة ليُعتمد ويصدر إيصالك تلقائياً" });
+  const fi = m.root.querySelector("#claimFile"), prev = m.root.querySelector("#claimPrev");
+  if (fi) fi.addEventListener("change", async () => {
+    const f = fi.files && fi.files[0]; if (!f) { imgData = ""; prev.classList.add("hidden"); return; }
+    imgData = await compressImg(f);
+    if (imgData) { prev.querySelector("img").src = imgData; prev.classList.remove("hidden"); }
+  });
+  m.root.querySelector("#claimF").addEventListener("submit", async ev => {
+    ev.preventDefault();
+    const fd = new FormData(ev.target);
+    const r = await call("SUBMIT_PAYMENT_CLAIM", { amount: n(fd.get("amount")), paymentMethod: fd.get("method"), transactionRef: String(fd.get("ref") || "").trim(), note: String(fd.get("note") || "").trim(), imgData }, { block: true });
+    toast(r.message, r.success ? "success" : "danger");
+    if (r.success) { m.close(); await reloadData(); }
+  });
+});
+_wrap("/e/pay", view => {
+  const claims = ((APP.emp && APP.emp.myPaymentClaims) || []).slice().reverse().slice(0, 6);
+  if (!claims.length) return;
+  const rows = claims.map(c => {
+    const st = c.status === "Approved" ? ["تم الاعتماد ✓", "green"] : c.status === "Rejected" ? ["مرفوض", "red"] : ["قيد المراجعة بالخزينة", "amber"];
+    return `<li class="flex items-center gap-2.5 py-2.5 text-[13px]">
+      <div class="flex-1 min-w-0">
+        <div class="flex flex-wrap items-center gap-1.5"><b class="num">${fmt(c.amount)} ج.م</b><span class="text-xs text-slate-500">· ${esc(ar(c.method))}</span>${pill("", st[0], st[1])}</div>
+        <div class="text-[11.5px] text-slate-400 num truncate">مرجع: ${esc(c.ref)} · ${esc(dt(c.createdAt))}${c.receiptNo ? " · إيصال " + esc(c.receiptNo) : ""}</div>
+        ${c.reviewNote ? `<div class="text-[11.5px] text-rose-600 mt-0.5">${esc(c.reviewNote)}</div>` : ""}
+      </div>
+    </li>`;
+  }).join("");
+  view.insertAdjacentHTML("beforeend", `<section class="card card-pad mt-4"><h3 class="card-title mb-2">${ic("upload", "text-brand-600")} تحويلاتي المرسلة للاعتماد</h3><ul class="divide-y divide-slate-100">${rows}</ul></section>`);
+});
+
+// تفعيل إشعارات الموبايل الفورية (Web Push / Native Notification API)
+const PUSH_KEY = "wb_push_enabled";
+const pushOn = () => { try { return localStorage.getItem(PUSH_KEY) === "1" && "Notification" in window && Notification.permission === "granted"; } catch (_) { return false; } };
+on("enablePushNotif", async () => {
+  if (!("Notification" in window)) return toast("هذا المتصفح لا يدعم إشعارات النظام", "warning");
+  if (pushOn()) { try { localStorage.removeItem(PUSH_KEY); } catch (_) {} toast("تم إيقاف إشعارات الموبايل", "info"); Router.render(); return; }
+  const perm = await Notification.requestPermission();
+  if (perm !== "granted") return toast("لم يتم السماح بالإشعارات من إعدادات المتصفح", "warning");
+  try { localStorage.setItem(PUSH_KEY, "1"); } catch (_) {}
+  toast("🔔 تم تفعيل إشعارات الموبايل الفورية بنجاح!", "success");
+  try {
+    const reg = navigator.serviceWorker && await navigator.serviceWorker.ready;
+    if (reg && reg.showNotification) reg.showNotification("مبادرة الكتب المخفضة 📚", { body: "تم تفعيل الإشعارات — سيصلك تنبيه فوري عند فتح الحجز أو تجهيز كتبك ✅", icon: "icons/app-192.png", dir: "rtl", lang: "ar" });
+  } catch (_) {}
+  Router.render();
+});
+_wrap("/e/me", view => {
+  const btn = view.querySelector('[data-act="faq"]');
+  if (!btn || !("Notification" in window)) return;
+  const onNow = pushOn();
+  btn.insertAdjacentHTML("beforebegin", `<button type="button" data-act="enablePushNotif" class="w-full flex items-center gap-3 px-4 py-3.5 text-right hover:bg-slate-50">
+    <span class="w-10 h-10 rounded-xl ${onNow ? "bg-emerald-50 text-emerald-700" : "bg-brand-50 text-brand-700"} flex items-center justify-center">${ic("bell-ring")}</span>
+    <span class="flex-1"><b class="block text-[14.5px] text-slate-900">إشعارات الموبايل الفورية</b><span class="text-[12px] text-slate-500">${onNow ? "مفعّلة ✓ — تصلك تنبيهات الحجز والتسليم والأقساط" : "فعّلها ليصلك تنبيه فوري حتى والتطبيق مغلق"}</span></span>
+    <span class="pill ${onNow ? "pill-green" : "pill-gray"} !text-[11px]">${onNow ? "مفعّل" : "تفعيل"}</span>
+  </button>`);
+});
+
 
 

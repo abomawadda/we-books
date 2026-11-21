@@ -9,8 +9,8 @@ const ACL = {
   SAVE_PHASE: ["Coordinator"], DELETE_PHASE: ["Coordinator"], SET_PHASE_STATUS: ["Coordinator"], GENERATE_PO_SNAPSHOT: ["Coordinator"], CANCEL_PO_BACKORDER: ["Coordinator"],
   SUBMIT_SUPPLIER_INVOICE: ["Coordinator", "Warehouse"], RUN_ALLOCATION_ENGINE: ["Coordinator", "Warehouse"], MANUAL_ALLOCATION_OVERRIDE: ["Coordinator"], CARRY_WAITLIST_TO_PHASE: ["Coordinator"],
   EXECUTE_BOOK_DELIVERY: ["Warehouse", "Coordinator"], TOGGLE_PARCEL_PACKED: ["Coordinator", "Warehouse", "Store"], CANCEL_UNDELIVERED_QTY: ["Warehouse", "Coordinator"], RECORD_BOOK_RETURN: ["Warehouse", "Coordinator"], RECORD_STOCK_ADJUSTMENT: ["Warehouse"],
-  RECORD_EMPLOYEE_PAYMENT: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], TRANSFER_EMPLOYEE_CREDIT: ["Finance"], SAVE_PO_TRACKING: ["Coordinator", "Store", "Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [], GET_AUDIT_LOG: ["Coordinator"], POST_ANNOUNCEMENT: ["Coordinator"],
-  RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"]
+  RECORD_EMPLOYEE_PAYMENT: ["Finance"], REVIEW_PAYMENT_CLAIM: ["Finance"], VOID_EMPLOYEE_PAYMENT: [], REFUND_EMPLOYEE_CREDIT: ["Finance"], TRANSFER_EMPLOYEE_CREDIT: ["Finance"], SAVE_PO_TRACKING: ["Coordinator", "Store", "Finance"], CUSTOMIZE_EMP_INSTALLMENTS: ["Finance"], ADJUST_EMP_INVOICE: ["Finance"], DELETE_EMP_INVOICE: [], GET_AUDIT_LOG: ["Coordinator"], POST_ANNOUNCEMENT: ["Coordinator"],
+  RECORD_SUPPLIER_PAYMENT: ["Finance"], RECORD_INITIATIVE_EXPENSE: ["Finance"], CLOSE_CASH_DAY: ["Finance"], SUBMIT_OR_UPDATE_RESERVATION: ["Coordinator"], ARCHIVE_PHASE: [], EXPORT_FULL_BACKUP: [], CREATE_SUPPLIER_LINK: ["Coordinator"]
 };
 // الصلاحيات الفعلية تأتي من الخادم (بعد تخصيص المدير)، والجدول أعلاه احتياطي
 const can = action => !!APP.user && (APP.user.role === "Admin" || (((APP.adm && APP.adm.acl) || ACL)[action] || []).indexOf(APP.user.role) !== -1);
@@ -398,3 +398,58 @@ const Notif = {
   }
 };
 on("notifs", () => Notif.open());
+
+// ============================================================ بوابة المكتبة / المورّد المصغّرة (#sup=<token>)
+let _supTok = "";
+async function renderSupplierPortal(tok) {
+  _supTok = tok;
+  const root = document.getElementById("app"); if (!root) return;
+  const sp = document.getElementById("splash"); if (sp) sp.remove();
+  root.innerHTML = `<div class="min-h-screen bg-slate-50 p-4 sm:p-6 max-w-4xl mx-auto"><div class="card p-6 text-center">${UI.skeleton(3)}</div></div>`;
+  const r = await call("GET_SUPPLIER_PORTAL", { supplierToken: tok });
+  if (!r.success) {
+    root.innerHTML = `<div class="min-h-screen bg-slate-50 p-6 flex items-center justify-center"><div class="card p-6 max-w-md w-full text-center"><div class="text-3xl mb-2">🔒</div><h1 class="font-bold text-lg text-slate-900">رابط المكتبة غير صالح</h1><p class="text-sm text-slate-500 mt-1">${esc(r.message || "تحقق من الرابط مع منسق المبادرة")}</p></div></div>`;
+    return;
+  }
+  const items = r.items || [], totQty = items.reduce((s, x) => s + n(x.orderedQty), 0), doneCnt = items.filter(x => x.status && x.status !== "Pending").length;
+  const stBadge = s => s === "Available" ? pill("", "متوفر بالكامل", "green") : s === "Partial" ? pill("", "متوفر جزئياً", "amber") : s === "Out_Of_Stock" ? pill("", "غير متوفر", "red") : pill("", "بانتظار الرد", "gray");
+  root.innerHTML = `<div class="min-h-screen bg-slate-50 p-4 sm:p-6 max-w-4xl mx-auto space-y-4">
+    <header class="hero rounded-3xl text-white p-5 shadow-sm">
+      <div class="text-xs text-brand-200">بوابة المكتبة — تحديث أمر التوريد</div>
+      <h1 class="font-display font-bold text-xl sm:text-2xl mt-1">${esc(r.supplierName || "المكتبة")}</h1>
+      <div class="text-xs text-brand-100 mt-1">${esc(r.phaseName || "")} · <span class="num">${fmt(items.length)}</span> صنف · <span class="num">${fmt(totQty)}</span> نسخة · تم الرد على <span class="num">${fmt(doneCnt)}</span></div>
+    </header>
+    <div class="card overflow-hidden"><div class="divide-y divide-slate-100">${items.length ? items.map(it => `<div class="p-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex-1 min-w-[200px]">
+        <div class="flex flex-wrap items-center gap-1.5"><b class="text-[14px] text-slate-900">${esc(it.name)}</b>${stBadge(it.status)}</div>
+        <div class="text-xs text-slate-500 mt-0.5 num">${esc(it.bookId)} · ${esc(it.publisher)} · ${esc(it.grade)} · المطلوب: <b>${fmt(it.orderedQty)}</b> نسخة${it.availQty !== it.orderedQty ? ` · المتاح: <b class="text-brand-700">${fmt(it.availQty)}</b>` : ""}${it.shipDate ? ` · الشحن: ${esc(it.shipDate)}` : ""}</div>
+        ${it.note ? `<div class="text-[11.5px] text-slate-600 mt-1">ملاحظة: ${esc(it.note)}</div>` : ""}
+      </div>
+      <button type="button" class="btn btn-primary btn-xs shrink-0" data-act="supEditItem" data-id="${esc(it.bookId)}|${it.orderedQty}|${esc(it.status)}|${it.availQty}|${esc(it.shipDate)}|${esc(it.note)}">${ic("pencil")} تحديث التوفر</button>
+    </div>`).join("") : `<div class="p-8 text-center text-slate-500">لا توجد أصناف في أمر التوريد لهذه المرحلة حالياً.</div>`}</div></div>
+  </div>`;
+}
+on("supEditItem", async arg => {
+  const [bookId, ord, st, av, sd, nt] = String(arg || "").split("|");
+  const v = await UI.form({
+    title: "تحديث توفر الكتاب", sub: bookId + " · المطلوب " + ord + " نسخة", ok: "حفظ التحديث", icon: "package-check",
+    fields: [
+      { name: "status", label: "حالة التوفر", type: "select", value: st === "Pending" ? "Available" : st, options: [["Available", "متوفر بالكامل"], ["Partial", "متوفر جزئياً"], ["Out_Of_Stock", "غير متوفر حالياً"]] },
+      { name: "availQty", label: "الكمية المتوفرة للشحن", type: "number", value: av || ord, min: 0 },
+      { name: "shipDate", label: "تاريخ الشحن المتوقع", type: "date", value: sd || "" },
+      { name: "note", label: "ملاحظة للإدارة (اختياري)", value: nt || "", placeholder: "مثال: الطبعة الجديدة تصل الثلاثاء" }
+    ]
+  });
+  if (!v) return;
+  const r = await call("SUPPLIER_UPDATE_PO_ITEM", { supplierToken: _supTok, bookId, status: v.status, availQty: v.availQty, shipDate: v.shipDate, note: v.note }, { block: true });
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) renderSupplierPortal(_supTok);
+});
+function checkSupplierHash() {
+  const m = String(location.hash || "").match(/^#sup=(.+)$/);
+  if (m && m[1]) { renderSupplierPortal(decodeURIComponent(m[1])); return true; }
+  return false;
+}
+window.addEventListener("hashchange", checkSupplierHash);
+setTimeout(checkSupplierHash, 0);
+

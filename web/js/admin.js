@@ -4539,3 +4539,105 @@ on("waEmp", key => {
   const first = String(e.Full_Name || "").split(" ")[0];
   window.open(Brand.waLink(e.Mobile, WA_TPL[t](first, { inst: planIsInst(inv), downNum: netDown, down: fmt(netDown), amountNum: netInst, amount: fmt(netInst), due: inst.Due_Date })), "_blank");
 });
+
+// ============================================================ v3.46.0: طابور اعتماد التحويلات + أرشفة المراحل + النسخ الاحتياطي + بوابة المكتبة
+function _wrapA(path, fn) { const base = Router.routes[path]; if (!base) return; Router.add(path, view => { base(view); fn(view); }); }
+
+// 1) طابور اعتماد تحويلات إنستاباي والمحفظة داخل شاشة «التحصيل والفواتير» (/a/collect)
+_wrapA("/a/collect", view => {
+  const claims = (A().paymentClaims || []).filter(c => c.status === "Pending").slice().reverse();
+  if (!claims.length) return;
+  const rows = claims.map(c => `<li class="flex flex-wrap items-center gap-3 py-3">
+    ${c.imgData ? `<button type="button" class="w-12 h-12 rounded-xl overflow-hidden ring-1 ring-slate-200 shrink-0" data-act="zoomClaimImg" data-id="${esc(c.id)}" title="تكبير صورة الإيصال"><img src="${c.imgData}" alt="" class="w-full h-full object-cover"></button>` : `<span class="w-12 h-12 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center shrink-0">${ic("smartphone")}</span>`}
+    <div class="flex-1 min-w-[180px]">
+      <div class="flex flex-wrap items-center gap-1.5"><b>${empLink(c.empId, c.empName)}</b><span class="pill pill-brand num">${fmt(c.amount)} ج.م</span><span class="pill pill-gray">${esc(ar(c.method))}</span></div>
+      <div class="text-[11.5px] text-slate-500 num mt-0.5">مرجع: <b>${esc(c.ref)}</b> · ${esc(c.invId)} · ${esc(dt(c.createdAt))}${c.note ? " · " + esc(c.note) : ""}</div>
+    </div>
+    ${can("REVIEW_PAYMENT_CLAIM") ? `<div class="flex items-center gap-1.5 shrink-0">
+      <button type="button" class="btn btn-success btn-xs" data-act="reviewClaim" data-id="${esc(c.id)}|Approved">${ic("check")} اعتماد وإصدار الإيصال</button>
+      <button type="button" class="btn btn-outline btn-xs text-rose-600" data-act="reviewClaim" data-id="${esc(c.id)}|Rejected">${ic("x")} رفض</button>
+    </div>` : ""}
+  </li>`).join("");
+  const head = view.firstElementChild;
+  const box = `<section class="card card-pad mb-4 ring-2 ring-amber-300 bg-amber-50/40">
+    <div class="flex items-center justify-between gap-2 mb-2"><h3 class="card-title text-amber-950">${ic("upload", "text-amber-600")} تحويلات بانتظار الاعتماد (${fmt(claims.length)})</h3><span class="text-xs text-amber-800">اعتمادها يُصدر الإيصال تلقائياً ويُسوّي أي رصيد سابق</span></div>
+    <ul class="divide-y divide-amber-200/70">${rows}</ul>
+  </section>`;
+  if (head) head.insertAdjacentHTML("afterend", box); else view.insertAdjacentHTML("afterbegin", box);
+});
+on("zoomClaimImg", id => {
+  const c = (A().paymentClaims || []).find(x => x.id === id); if (!c || !c.imgData) return;
+  UI.open(`<div class="text-center"><img src="${c.imgData}" alt="صورة التحويل" class="max-h-[70vh] mx-auto rounded-2xl ring-1 ring-slate-200"><div class="text-xs text-slate-500 mt-2 num">${esc(c.empName)} · ${fmt(c.amount)} ج.م · مرجع ${esc(c.ref)}</div></div>`, { title: "صورة إشعار التحويل" });
+});
+on("reviewClaim", async arg => {
+  const [claimId, decision] = String(arg || "").split("|");
+  let reviewNote = "";
+  if (decision === "Rejected") {
+    const v = await UI.form({ title: "رفض طلب التحويل", fields: [{ name: "note", label: "سبب الرفض (يظهر للموظف)", required: true, placeholder: "مثال: المبلغ لم يصل بعد / رقم المرجع غير مطابق" }], ok: "تأكيد الرفض", danger: true });
+    if (!v) return;
+    reviewNote = v.note;
+  } else {
+    if (!await UI.confirm({ title: "اعتماد التحويل وإصدار الإيصال", message: "سيتم اعتماد التحويل، تسوية أي رصيد سابق للموظف تلقائياً، وإصدار إيصال السداد الرسمي فوراً.", ok: "اعتماد الآن" })) return;
+  }
+  const r = await call("REVIEW_PAYMENT_CLAIM", { claimId, decision, reviewNote }, { block: true });
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) { await Admin.load(); if (r.receiptNo) printReceipt(r.receiptNo); }
+});
+
+// 2) أرشفة المراحل المنتهية (/a/phases)
+_wrapA("/a/phases", view => {
+  if (!can("ARCHIVE_PHASE")) return;
+  const donePh = (A().phases || []).filter(p => p.Phase_Status === "Completed" || p.Phase_Status === "Archived");
+  if (!donePh.length) return;
+  view.insertAdjacentHTML("beforeend", `<section class="card card-pad mt-4"><h3 class="card-title mb-2">${ic("archive", "text-brand-600")} أرشفة المراحل المنتهية</h3>
+    <p class="text-xs text-slate-500 mb-3">انقل المراحل المنتهية للأرشيف للحفاظ على سرعة وتنظيم لوحة العمل، مع إمكانية استعادتها في أي وقت.</p>
+    <div class="flex flex-wrap gap-2">${donePh.map(p => `<button type="button" class="btn btn-outline btn-xs" data-act="archivePhase" data-id="${esc(p.Phase_ID)}">${ic("archive")} ${esc(p.Phase_Name)} (${p.Phase_Status === "Archived" ? "استعادة من الأرشيف" : "نقل للأرشيف"})</button>`).join("")}</div>
+  </section>`);
+});
+on("archivePhase", async phaseId => {
+  const r = await act("ARCHIVE_PHASE", { phaseId }, { title: "أرشفة / استعادة المرحلة", message: "تغيير حالة الأرشفة لهذه المرحلة؟", ok: "تأكيد" });
+  if (r && r.success) Shell.rerender();
+});
+
+// 3) النسخ الاحتياطي الشامل بضغطة واحدة (/a/settings)
+_wrapA("/a/settings", view => {
+  if (!can("EXPORT_FULL_BACKUP")) return;
+  view.insertAdjacentHTML("beforeend", `<section class="card card-pad mt-4 flex flex-wrap items-center justify-between gap-3">
+    <div><h3 class="card-title">${ic("database", "text-brand-600")} النسخ الاحتياطي الشامل</h3><p class="text-xs text-slate-500 mt-0.5">تحميل نسخة كاملة (JSON) من كافة بيانات المنظومة (الموظفون، الكتب، الحجوزات، الفواتير، الإيصالات، الإعدادات).</p></div>
+    <button type="button" class="btn btn-primary btn-sm" data-act="fullBackup">${ic("download")} تحميل نسخة احتياطية كاملة</button>
+  </section>`);
+});
+on("fullBackup", async () => {
+  const r = await call("EXPORT_FULL_BACKUP", {}, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  const blob = new Blob([JSON.stringify(r.backup, null, 2)], { type: "application/json;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "we-books-backup-" + new Date().toISOString().slice(0, 10) + ".json";
+  document.body.appendChild(a); a.click(); setTimeout(() => a.remove(), 500);
+  toast("تم تحميل النسخة الاحتياطية الكاملة بنجاح ✅", "success");
+});
+
+// 4) بوابة المكتبة المصغّرة (/a/suppliers)
+_wrapA("/a/suppliers", view => {
+  if (!can("CREATE_SUPPLIER_LINK") || !APP.phaseId) return;
+  const sups = A().suppliers || [];
+  if (!sups.length) return;
+  view.insertAdjacentHTML("beforeend", `<section class="card card-pad mt-4"><h3 class="card-title mb-1">${ic("link", "text-brand-600")} بوابة المكتبة — تحديث التوريد المباشر</h3>
+    <p class="text-xs text-slate-500 mb-3">أنشئ رابطاً مؤمّناً للمكتبة لتحديث توفر كتب أمر التوريد وتواريخ الشحن للمرحلة الحالية بدون الحاجة لحساب إداري.</p>
+    <div class="flex flex-wrap gap-2">${sups.map(s => `<button type="button" class="btn btn-outline btn-sm" data-act="supPortalLink" data-id="${esc(s.Supplier_ID)}">${ic("link")} رابط بوابة «${esc(s.Supplier_Name)}»</button>`).join("")}</div>
+  </section>`);
+});
+on("supPortalLink", async supplierId => {
+  const r = await call("CREATE_SUPPLIER_LINK", { supplierId, phaseId: APP.phaseId }, { block: true });
+  if (!r.success) return toast(r.message, "danger");
+  const url = location.href.replace(/#.*$/, "") + "#sup=" + encodeURIComponent(r.token);
+  const waMsg = `السلام عليكم — رابط بوابة المكتبة لتحديث توفر أمر التوريد للمرحلة الحالية:\n${url}`;
+  UI.open(`<div class="space-y-3">
+    <p class="text-xs text-slate-600">شارك هذا الرابط المباشر مع مسؤول <b>${esc(r.supplierName)}</b> لتحديث حالات توفر الكتب وتواريخ الشحن فوراً (لا يعرض أي بيانات شخصية للموظفين).</p>
+    <input class="input text-xs font-mono" dir="ltr" readonly value="${esc(url)}" onclick="this.select()">
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" class="btn btn-primary btn-sm" data-act="copyTxt" data-id="${esc(url)}">${ic("copy")} نسخ الرابط</button>
+      <a class="btn btn-success btn-sm" target="_blank" rel="noopener" href="${esc(Brand.waLink("", waMsg))}">${ic("message-circle")} إرسال على واتساب</a>
+    </div>
+  </div>`, { title: "🔗 رابط بوابة المكتبة", sub: r.supplierName });
+});
+

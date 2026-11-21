@@ -637,6 +637,11 @@ const ACTION_ACL = {
   SAVE_WISHLIST: ["EMPLOYEE"],
   BOOK_PICKUP_SLOT: ["EMPLOYEE"],
   TOGGLE_PARCEL_PACKED: ["Coordinator", "Warehouse", "Store"],
+  SUBMIT_PAYMENT_CLAIM: ["EMPLOYEE"],
+  REVIEW_PAYMENT_CLAIM: ["Finance"],
+  ARCHIVE_PHASE: [],
+  EXPORT_FULL_BACKUP: [],
+  CREATE_SUPPLIER_LINK: ["Coordinator"],
   RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
@@ -727,6 +732,8 @@ function callServerApi(action, payload, sessionToken) {
     if (action === "LOGOUT") { AuthEngine.destroySession(sessionToken); return { success: true }; }
     if (action === "GET_PUBLIC_INIT_DATA") return OperationsEngine.getPublicInitData();
     if (action === "REGISTER_MEMBER") return OperationsEngine.registerMember(payload);
+    if (action === "GET_SUPPLIER_PORTAL") return OperationsEngine.getSupplierPortal(payload);
+    if (action === "SUPPLIER_UPDATE_PO_ITEM") return OperationsEngine.supplierUpdatePoItem(payload);
 
     const acl = ACTION_ACL[action] && effectiveAcl_()[action];
     if (!acl) throw new Error("العملية المطلوبة غير معروفة: " + action);
@@ -750,6 +757,11 @@ function callServerApi(action, payload, sessionToken) {
       case "SAVE_WISHLIST": return E.saveWishlist(session, payload);
       case "BOOK_PICKUP_SLOT": return E.bookPickupSlot(session, payload);
       case "TOGGLE_PARCEL_PACKED": return E.toggleParcelPacked(session, payload);
+      case "SUBMIT_PAYMENT_CLAIM": return E.submitPaymentClaim(session, payload);
+      case "REVIEW_PAYMENT_CLAIM": return E.reviewPaymentClaim(session, payload);
+      case "ARCHIVE_PHASE": return E.archivePhase(session, payload);
+      case "EXPORT_FULL_BACKUP": return E.exportFullBackup(session);
+      case "CREATE_SUPPLIER_LINK": return E.createSupplierLink(session, payload);
       case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
@@ -1255,6 +1267,7 @@ const OperationsEngine = {
         wishlist: (() => { try { const o = JSON.parse(emp.Cart_Draft || "null"); return (o && o.wishlist && typeof o.wishlist === "object") ? o.wishlist : {}; } catch (e) { return {}; } })()
       },
       myChangeRequests: DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS).filter(mine),
+      myPaymentClaims: this.paymentClaimsRead_().filter(c => Util.str(c.empId) === Util.str(empId)),
       books: this.sortBooks_(books),
       myReservations: DB_Engine.getAllRecords(S.RES_HEADER).filter(mine),
       myReservationItems: resItems.filter(mine),
@@ -1277,6 +1290,7 @@ const OperationsEngine = {
       settingsMap: getSettings_(), pubLogos: this.publisherLogos_(),
       employees: DB_Engine.getAllRecords(S.EMPLOYEES),
       empChangeRequests: DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS),
+      paymentClaims: this.paymentClaimsRead_(),
       users: DB_Engine.getAllRecords(S.USERS).map(u => ({ User_ID: u.User_ID, Username: u.Username, Role: u.Role, Is_Active: u.Is_Active, Must_Change_Password: u.Must_Change_Password, Last_Login: u.Last_Login })),
       suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
       books: (() => {
@@ -3542,6 +3556,160 @@ const OperationsEngine = {
       if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PICKUP_SCHEDULE", { Setting_Value: val, Last_Updated: Util.now() });
       else DB_Engine.insertRecordsBatch(S.SETTINGS, [{ Setting_Key: "PICKUP_SCHEDULE", Setting_Value: val, Data_Type: "JSON", Description: "مواعيد الاستلام", Last_Updated: Util.now() }]);
       return { success: true, empId: empId, packed: next, message: next ? "تم تسجيل تجهيز الطرد ✓" : "تم إلغاء علامة تجهيز الطرد" };
+    });
+  },
+
+  // --------------------------------------------------------------------------
+  // طابور اعتماد تحويلات إنستاباي والمحفظة + أرشفة المراحل + النسخ الاحتياطي + بوابة المكتبة
+  // --------------------------------------------------------------------------
+  paymentClaimsRead_: function() {
+    const S = this.S();
+    const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PAYMENT_CLAIMS_QUEUE");
+    try { const a = JSON.parse((row && row.Setting_Value) || "[]"); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+  },
+  paymentClaimsWrite_: function(list) {
+    const S = this.S(), val = JSON.stringify((list || []).slice(-300));
+    const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "PAYMENT_CLAIMS_QUEUE");
+    if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "PAYMENT_CLAIMS_QUEUE", { Setting_Value: val, Last_Updated: Util.now() });
+    else DB_Engine.insertRecordsBatch(S.SETTINGS, [{ Setting_Key: "PAYMENT_CLAIMS_QUEUE", Setting_Value: val, Data_Type: "JSON", Description: "طابور اعتماد تحويلات الموظفين", Last_Updated: Util.now() }]);
+  },
+  submitPaymentClaim: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId);
+      const amount = FinancialEngine.roundCurrency(payload && payload.amount);
+      const method = Util.str(payload && payload.paymentMethod) || "INSTAPAY";
+      const ref = Util.str(payload && payload.transactionRef).slice(0, 80);
+      const note = Util.str(payload && payload.note).slice(0, 200);
+      const imgData = Util.str(payload && payload.imgData);
+      Util.require(amount > 0, "قيمة التحويل يجب أن تكون أكبر من صفر.");
+      Util.require(["INSTAPAY", "WALLET"].indexOf(method) !== -1, "وسيلة التحويل يجب أن تكون إنستاباي أو محفظة إلكترونية.");
+      Util.require(ref.length >= 4, "أدخل رقم مرجع التحويل (4 أحرف على الأقل).");
+      Util.require(imgData.length <= 90000, "حجم صورة الإيصال كبير جداً — أعد المحاولة.");
+      const dupPay = DB_Engine.getAllRecords(S.EMP_PAYMENTS).find(p => !Util.bool(p.Is_Voided) && p.Payment_Method === method && Util.str(p.Transaction_Ref) === ref);
+      Util.require(!dupPay, "رقم المرجع مسجَّل بالفعل في الإيصال " + (dupPay ? dupPay.Receipt_No : "") + ".");
+      const list = this.paymentClaimsRead_();
+      const dupClaim = list.find(c => c.status === "Pending" && c.method === method && Util.str(c.ref) === ref);
+      Util.require(!dupClaim, "تم إرسال هذا المرجع من قبل وهو قيد المراجعة بالخزينة.");
+      const invs = DB_Engine.getAllRecords(S.EMP_INVOICES).filter(i => Util.str(i.Emp_ID) === empId && Util.num(i.Remaining_Balance) > 0.004);
+      const targetInv = (payload.empInvId && invs.find(i => i.Emp_Inv_ID === Util.str(payload.empInvId))) || invs[invs.length - 1];
+      Util.require(targetInv, "لا توجد فاتورة عليها متبقي حالياً لتسجيل التحويل عليها.");
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === empId) || {};
+      const claim = {
+        id: "CLM-" + new Date().getTime(), empId: empId, empName: emp.Full_Name || empId, invId: targetInv.Emp_Inv_ID,
+        amount: amount, method: method, ref: ref, note: note, imgData: imgData,
+        status: "Pending", createdAt: Util.now(), reviewedAt: "", reviewedBy: "", reviewNote: "", receiptNo: ""
+      };
+      list.push(claim);
+      this.paymentClaimsWrite_(list);
+      DB_Engine.logAudit(empId, "EMPLOYEE", "Payments", "SUBMIT_PAYMENT_CLAIM", claim.id, null, { invId: claim.invId, amount: amount, method: method, ref: ref });
+      return { success: true, claim: claim, message: "تم إرسال بيانات التحويل للخزينة — سيصدر إيصالك تلقائياً فور الاعتماد ✅" };
+    });
+  },
+  reviewPaymentClaim: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const id = Util.str(payload && payload.claimId), decision = Util.str(payload && payload.decision), note = Util.str(payload && payload.reviewNote).slice(0, 200);
+      Util.require(decision === "Approved" || decision === "Rejected", "قرار غير صالح.");
+      const list = this.paymentClaimsRead_();
+      const claim = list.find(c => c.id === id);
+      Util.require(claim, "طلب التحويل غير موجود.");
+      Util.require(claim.status === "Pending", "تمت مراجعة هذا الطلب بالفعل.");
+      let receiptNo = "";
+      if (decision === "Approved") {
+        const payRes = this.recordEmployeePayment(session, { empInvId: claim.invId, amount: claim.amount, paymentMethod: claim.method, transactionRef: claim.ref, autoSettleCredit: true });
+        receiptNo = payRes.receiptNo || "";
+      }
+      claim.status = decision;
+      claim.reviewedAt = Util.now();
+      claim.reviewedBy = Util.actor(session);
+      claim.reviewNote = note;
+      claim.receiptNo = receiptNo;
+      this.paymentClaimsWrite_(list);
+      DB_Engine.logAudit(session.userId, session.role, "Payments", decision === "Approved" ? "APPROVE_PAYMENT_CLAIM" : "REJECT_PAYMENT_CLAIM", id, null, { decision: decision, receiptNo: receiptNo, note: note });
+      return { success: true, receiptNo: receiptNo, claim: claim, message: decision === "Approved" ? "تم اعتماد التحويل وإصدار الإيصال " + receiptNo + " بنجاح ✅" : "تم رفض طلب التحويل." };
+    });
+  },
+  archivePhase: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), pid = Util.str(payload && payload.phaseId);
+      const ph = DB_Engine.getAllRecords(S.PHASES).find(p => Util.str(p.Phase_ID) === pid);
+      Util.require(ph, "المرحلة غير موجودة.");
+      Util.require(ph.Phase_Status === "Completed" || ph.Phase_Status === "Archived", "يمكن أرشفة المراحل المنتهية (Completed) فقط.");
+      const next = ph.Phase_Status === "Archived" ? "Completed" : "Archived";
+      DB_Engine.updateRecordByPK(S.PHASES, "Phase_ID", pid, { Phase_Status: next });
+      DB_Engine.logAudit(session.userId, session.role, "Phases", "ARCHIVE_PHASE", pid, { Phase_Status: ph.Phase_Status }, { Phase_Status: next });
+      return { success: true, status: next, message: next === "Archived" ? "تم نقل المرحلة للأرشيف بنجاح 📦" : "تم استعادة المرحلة من الأرشيف." };
+    });
+  },
+  exportFullBackup: function(session) {
+    const S = this.S();
+    const dump = {
+      exportedAt: Util.now(), exportedBy: Util.actor(session),
+      settings: DB_Engine.getAllRecords(S.SETTINGS),
+      phases: DB_Engine.getAllRecords(S.PHASES),
+      suppliers: DB_Engine.getAllRecords(S.SUPPLIERS),
+      books: DB_Engine.getAllRecords(S.BOOKS),
+      employees: DB_Engine.getAllRecords(S.EMPLOYEES),
+      resHeaders: DB_Engine.getAllRecords(S.RES_HEADER),
+      resItems: DB_Engine.getAllRecords(S.RES_ITEMS),
+      empInvoices: DB_Engine.getAllRecords(S.EMP_INVOICES),
+      empPayments: DB_Engine.getAllRecords(S.EMP_PAYMENTS),
+      installments: DB_Engine.getAllRecords(S.INSTALLMENTS),
+      expenses: DB_Engine.getAllRecords(S.EXPENSES)
+    };
+    DB_Engine.logAudit(session.userId, session.role, "Settings", "EXPORT_FULL_BACKUP", "FULL", null, { employees: dump.employees.length, phases: dump.phases.length });
+    return { success: true, backup: dump };
+  },
+  createSupplierLink: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), supId = Util.str(payload && payload.supplierId), phaseId = Util.str(payload && payload.phaseId);
+      const sup = DB_Engine.getAllRecords(S.SUPPLIERS).find(s => Util.str(s.Supplier_ID) === supId);
+      Util.require(sup, "المكتبة غير موجودة.");
+      Util.require(phaseId, "اختر المرحلة أولاً.");
+      const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "SUPPLIER_PORTAL_TOKENS");
+      let map = {}; try { map = JSON.parse((row && row.Setting_Value) || "{}"); } catch (e) { map = {}; }
+      const token = "SUP-" + supId + "-" + phaseId + "-" + Math.random().toString(36).slice(2, 10).toUpperCase();
+      map[token] = { supplierId: supId, supplierName: sup.Supplier_Name, phaseId: phaseId, createdAt: Util.now(), by: Util.actor(session), updates: {} };
+      const val = JSON.stringify(map);
+      if (row) DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "SUPPLIER_PORTAL_TOKENS", { Setting_Value: val, Last_Updated: Util.now() });
+      else DB_Engine.insertRecordsBatch(S.SETTINGS, [{ Setting_Key: "SUPPLIER_PORTAL_TOKENS", Setting_Value: val, Data_Type: "JSON", Description: "رموز بوابة المكتبات", Last_Updated: Util.now() }]);
+      DB_Engine.logAudit(session.userId, session.role, "Suppliers", "CREATE_SUPPLIER_LINK", supId, null, { phaseId: phaseId });
+      return { success: true, token: token, supplierName: sup.Supplier_Name, message: "تم إنشاء رابط بوابة المكتبة بنجاح 🔗" };
+    });
+  },
+  getSupplierPortal: function(payload) {
+    const S = this.S(), token = Util.str(payload && payload.supplierToken);
+    Util.require(token, "رابط المكتبة غير صالح.");
+    const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "SUPPLIER_PORTAL_TOKENS");
+    let map = {}; try { map = JSON.parse((row && row.Setting_Value) || "{}"); } catch (e) { map = {}; }
+    const meta = map[token];
+    Util.require(meta, "انتهت صلاحية رابط المكتبة أو أنه غير صحيح.");
+    const ph = DB_Engine.getAllRecords(S.PHASES).find(p => Util.str(p.Phase_ID) === meta.phaseId) || {};
+    const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[b.Book_ID] = b; });
+    const snaps = DB_Engine.getAllRecords(S.PO_SNAPSHOT).filter(x => Util.str(x.Phase_ID) === meta.phaseId && Util.str(x.Supplier_ID) === meta.supplierId && Util.num(x.Net_Order_To_Supplier_Qty) > 0);
+    const items = snaps.map(x => {
+      const b = books[x.Book_ID] || {}, u = (meta.updates && meta.updates[x.Book_ID]) || {};
+      return { bookId: x.Book_ID, name: b.Book_Name || x.Book_ID, publisher: b.Publisher || "", grade: b.Grade || "", subject: b.Subject || "", orderedQty: Util.num(x.Net_Order_To_Supplier_Qty), coverPrice: Util.num(b.Cover_Price), status: u.status || "Pending", availQty: u.availQty !== undefined ? u.availQty : Util.num(x.Net_Order_To_Supplier_Qty), shipDate: u.shipDate || "", note: u.note || "", updatedAt: u.updatedAt || "" };
+    });
+    return { success: true, supplierName: meta.supplierName, phaseName: ph.Phase_Name || meta.phaseId, items: items };
+  },
+  supplierUpdatePoItem: function(payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), token = Util.str(payload && payload.supplierToken), bookId = Util.str(payload && payload.bookId);
+      const row = DB_Engine.getAllRecords(S.SETTINGS).find(r => r.Setting_Key === "SUPPLIER_PORTAL_TOKENS");
+      let map = {}; try { map = JSON.parse((row && row.Setting_Value) || "{}"); } catch (e) { map = {}; }
+      const meta = map[token];
+      Util.require(meta, "رابط المكتبة غير صالح.");
+      Util.require(bookId, "حدد الكتاب.");
+      meta.updates = meta.updates || {};
+      meta.updates[bookId] = {
+        status: Util.str(payload.status) || "Available",
+        availQty: Math.max(0, parseInt(payload.availQty, 10) || 0),
+        shipDate: Util.str(payload.shipDate).slice(0, 20),
+        note: Util.str(payload.note).slice(0, 150),
+        updatedAt: Util.now()
+      };
+      DB_Engine.updateRecordByPK(S.SETTINGS, "Setting_Key", "SUPPLIER_PORTAL_TOKENS", { Setting_Value: JSON.stringify(map), Last_Updated: Util.now() });
+      return { success: true, message: "تم تحديث حالة التوفر للكتاب " + bookId + " بنجاح ✓" };
     });
   },
   empFeedback: function(session, payload) {
