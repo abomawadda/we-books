@@ -2520,7 +2520,7 @@ Router.add("/a/phases", view => {
       const st = p.Effective_Status || p.Phase_Status, cur = p.Phase_ID === APP.phaseId;
       const its = d.resItems.filter(i => i.Phase_ID === p.Phase_ID && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward");
       return `<article class="card card-pad ${cur ? "ring-2 ring-brand-400" : ""}">
-        <div class="flex items-start justify-between gap-2"><div><div class="text-[11.5px] text-slate-400 num">${esc(p.Phase_ID)}</div><h3 class="font-bold text-slate-900 text-[16px]">${esc(p.Phase_Name)}</h3></div>${pill(st)}</div>
+        <div class="flex items-start justify-between gap-2"><div><div class="text-[11.5px] text-slate-400 num">${esc(p.Phase_ID)}${p.Academic_Year || p.Term ? ` · <span class="text-brand-700 font-semibold">${esc([p.Academic_Year, p.Term].filter(Boolean).join(" — "))}</span>` : ""}</div><h3 class="font-bold text-slate-900 text-[16px]">${esc(p.Phase_Name)}</h3></div>${pill(st)}</div>
         <dl class="grid grid-cols-2 gap-2 mt-4">${UI.stat("الحجز من", esc(day(p.Start_DateTime)))}${UI.stat("الحجز إلى", esc(day(p.End_DateTime)))}${UI.stat("بداية التسليم", esc(day(p.Delivery_Start_Date)) || "—")}${UI.stat("الصفوف", esc(p.Allowed_Grades === "ALL" || !p.Allowed_Grades ? "الكل" : p.Allowed_Grades))}</dl>
         <div class="flex items-center justify-between mt-4 text-[13px] text-slate-500"><span>${fmt(new Set(its.map(i => i.Emp_ID)).size)} موظف · ${fmt(sum(its, "Requested_Qty"))} نسخة</span>
           <div class="flex items-center gap-1.5">${cur ? "" : `<button class="btn btn-ghost btn-xs" data-act="setPhase" data-id="${esc(p.Phase_ID)}">عرض</button>`}${lockedBtn("SAVE_PHASE", `<button class="act-ic act-ic-edit" data-act="phaseForm" data-id="${esc(p.Phase_ID)}" title="تعديل المرحلة" aria-label="تعديل المرحلة">${ic("pencil")}</button>`)}${its.length ? "" : lockedBtn("DELETE_PHASE", `<button class="act-ic act-ic-del" data-act="phaseDel" data-id="${esc(p.Phase_ID)}" title="حذف المرحلة" aria-label="حذف المرحلة">${ic("trash-2")}</button>`)}</div></div></article>`;
@@ -2537,6 +2537,8 @@ on("phaseForm", async id => {
     title: id ? "تعديل مرحلة" : "مرحلة جديدة", sub: id || "", wide: true,
     fields: [
       { name: "phaseName", label: "اسم المرحلة", value: p.Phase_Name || "", required: true, placeholder: "مثال: الترم الأول 2026/2027" },
+      { name: "academicYear", label: "العام الدراسي (لربط قائمة الأسعار)", value: p.Academic_Year || "", cols: 1, placeholder: "مثال: 2026/2027" },
+      { name: "term", label: "الترم الدراسي", type: "select", value: p.Term || "", cols: 1, options: [["", "غير محدد (أسعار الكتالوج)"], ["الترم الأول", "الترم الأول"], ["الترم الثاني", "الترم الثاني"]] },
       { name: "startDate", label: "بداية الحجز", type: "date", value: day(p.Start_DateTime), cols: 1, required: true },
       { name: "endDate", label: "نهاية الحجز", type: "date", value: day(p.End_DateTime), cols: 1, required: true },
       { name: "deliveryStartDate", label: "بداية التسليم", type: "date", value: day(p.Delivery_Start_Date), cols: 1, hint: "بعد قفل الحجز — أساس جدول الأقساط" },
