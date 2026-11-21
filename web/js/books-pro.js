@@ -9,6 +9,7 @@
     fStage: "",
     fGrade: "",
     fTrack: "",
+    fPriced: "",        // "" | "priced" | "unpriced"
     q: "",
     dirty: {},          // { "bookId|track": { bookId, track, coverPrice, supplierDiscountPct, empDiscountPct } }
     // مقارنة فترتين
@@ -95,16 +96,26 @@
     const supersededCnt = (A().priceItems || []).filter(i => i.Price_List_ID === cur.Price_List_ID && i.Status === "Superseded").length;
     const booksMap = {}; (d.books || []).forEach(b => { booksMap[b.Book_ID] = b; });
 
+    // خريطة السعر المرجعي السابق (من القائمة المرجعية Copied_From_ID أو الكتالوج الحالي) للعرض واكتشاف الانحرافات
+    const refPrices = {};
+    const refListId = cur.Copied_From_ID || (lists.find(l => l.Price_List_ID !== cur.Price_List_ID && l.Status === "Approved") || {}).Price_List_ID || "";
+    if (refListId) {
+      priceItemsOf(refListId, false).forEach(p => { refPrices[p.Book_ID + "|" + (p.Track || "")] = n(p.Cover_Price); });
+    }
+
     // دمج كتب الكتالوج مع أسعار القائمة المختارة في وضع المسودة لإتاحة تسعير أي كتاب بسهولة
     let rows = items.map(it => ({ it, bk: booksMap[it.Book_ID] || { Book_ID: it.Book_ID, Book_Name: it.Book_ID, Stage: it.Stage, Grade: it.Grade } }));
     const existingGeneral = new Set(items.filter(i => !i.Track).map(i => i.Book_ID));
-    if (isDraft) {
-      (d.books || []).forEach(bk => {
-        if (bk.Book_Status !== "Discontinued" && !existingGeneral.has(bk.Book_ID)) {
-          rows.push({ it: null, bk });
-        }
-      });
-    }
+    let activeCatalogTotal = 0, pricedCatalogCount = 0;
+    (d.books || []).forEach(bk => {
+      if (bk.Book_Status !== "Discontinued") {
+        activeCatalogTotal++;
+        if (existingGeneral.has(bk.Book_ID)) pricedCatalogCount++;
+        else if (isDraft) rows.push({ it: null, bk });
+      }
+    });
+    const unpricedCount = Math.max(0, activeCatalogTotal - pricedCatalogCount);
+    const progressPct = activeCatalogTotal ? Math.round((pricedCatalogCount / activeCatalogTotal) * 100) : 0;
 
     // فلترة ذكية
     const qNorm = typeof normArSearch === "function" ? normArSearch(BP.q) : String(BP.q || "").toLowerCase();
@@ -115,6 +126,8 @@
       const trk = it ? (it.Track || "") : "";
       if (BP.fTrack === "__general" && trk) return false;
       if (BP.fTrack && BP.fTrack !== "__general" && trk !== BP.fTrack) return false;
+      if (isDraft && BP.fPriced === "priced" && !it) return false;
+      if (isDraft && BP.fPriced === "unpriced" && it) return false;
       if (tokens.length) {
         const hay = (typeof normArSearch === "function" ? normArSearch : s => String(s || "").toLowerCase())(
           [bk.Book_ID, bk.Book_Name, bk.Publisher, bk.Subject, bk.Grade, bk.Stage, trk, cur.Academic_Year, cur.Term].join(" ")
@@ -128,6 +141,15 @@
     const tracksInList = [...new Set(items.map(i => i.Track).filter(Boolean).concat(tracksReg().map(t => t.name)))].sort((a, b) => a.localeCompare(b, "ar"));
     const dirtyKeys = Object.keys(BP.dirty);
 
+    const progressBar = isDraft && activeCatalogTotal ? `
+      <div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200/80 px-3.5 py-2.5 mb-3">
+        <div class="flex flex-wrap items-center justify-between gap-2 text-xs mb-1.5">
+          <span class="font-bold text-slate-800">تقدّم تسعير الكتالوج الثابت: <span class="num text-brand-700">${fmt(pricedCatalogCount)}</span> من <span class="num">${fmt(activeCatalogTotal)}</span> كتاب (<span class="num">${progressPct}%</span>)</span>
+          <span class="text-[11px] ${unpricedCount ? "text-amber-700 font-semibold" : "text-emerald-700 font-bold"}">${unpricedCount ? `متبقي ${fmt(unpricedCount)} كتاب بانتظار السعر` : "تم تسعير كل الكتب النشطة ✓"}</span>
+        </div>
+        <div class="h-2 rounded-full bg-slate-200 overflow-hidden"><div class="h-full bg-brand-600 transition-all" style="width:${progressPct}%"></div></div>
+      </div>` : "";
+
     const statusBanner = isApproved
       ? `<div class="rounded-2xl bg-emerald-50/80 ring-1 ring-emerald-200 px-3.5 py-2.5 mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-emerald-900">
           <span>${ic("shield-check", "inline -mt-0.5 text-emerald-700")} <b>قائمة معتمدة ومحمية</b> — اعتمدها ${esc(cur.Approved_By || "—")} بتاريخ ${esc(String(cur.Approved_At || "").slice(0, 16))}. ممنوع التعديل العشوائي؛ أي تغيير يتم عبر «تعديل موثّق» يحفظ النسخة السابقة.</span>
@@ -136,7 +158,7 @@
       : cur.Status === "Archived"
         ? `<div class="rounded-2xl bg-slate-100 ring-1 ring-slate-200 px-3.5 py-2.5 mb-3 text-xs text-slate-700">${ic("archive", "inline -mt-0.5")} <b>قائمة مؤرشفة (للقراءة فقط)</b> — أُرشفت بتاريخ ${esc(String(cur.Archived_At || "").slice(0, 16))} وتظل متاحة دائماً للمراجعة والمقارنة.</div>`
         : `<div class="rounded-2xl bg-amber-50/80 ring-1 ring-amber-200 px-3.5 py-2.5 mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-amber-900">
-            <span>${ic("pencil", "inline -mt-0.5 text-amber-700")} <b>مسودة قيد الإعداد</b> — عدّل الأسعار أدناه ثم اضغط «حفظ التعديلات» وراجعها قبل الاعتماد النهائي.</span>
+            <span>${ic("pencil", "inline -mt-0.5 text-amber-700")} <b>مسودة قيد الإعداد</b> — أدخل الأسعار الجديدة أمام الكتب الثابتة ثم اضغط «حفظ الأسعار» وراجعها قبل الاعتماد النهائي.</span>
             ${canEdit ? `<button type="button" class="btn btn-outline btn-xs" data-act="bpAddTrackPrice" data-id="${esc(cur.Price_List_ID)}">${ic("plus")} إضافة سعر خاص بشعبة</button>` : ""}
           </div>`;
 
@@ -158,6 +180,9 @@
       const disc = dr ? dr.supplierDiscountPct : (it ? it.Supplier_Discount_Pct : bk.Supplier_Discount_Pct);
       const empDisc = dr ? dr.empDiscountPct : (it ? it.Emp_Discount_Pct : (bk.Emp_Discount_Pct !== "" && bk.Emp_Discount_Pct !== undefined ? bk.Emp_Discount_Pct : d.settingsMap.UNIFIED_EMP_DISCOUNT_PCT));
       const p = cover ? bookPrice({ coverPrice: cover, supplierDiscountPct: disc, empDiscountPct: empDisc }) : { cost: 0, emp: 0, margin: 0 };
+      const refCover = refPrices[scopeKey] || refPrices[bk.Book_ID + "|"] || n(bk.Cover_Price) || 0;
+      const pctDiff = (isDraft && cover && refCover > 0) ? Math.round(((n(cover) - refCover) / refCover) * 100) : 0;
+      const hasWarn = isDraft && cover && refCover > 0 && (pctDiff > 40 || pctDiff < -20);
       return `<tr class="${dr ? "bg-amber-50/50" : ""}">
         <td class="num font-bold text-xs text-slate-700 whitespace-nowrap">${esc(bk.Book_ID)}</td>
         <td>
@@ -166,7 +191,10 @@
         </td>
         <td class="whitespace-nowrap">${trk ? `<span class="rounded-md bg-sky-50 text-sky-800 ring-1 ring-sky-200 px-1.5 py-0.5 text-[11px] font-bold">${esc(trk)}</span>` : `<span class="text-[11px] text-slate-400">سعر عام</span>`}</td>
         <td class="num text-center">${isDraft && canEdit
-          ? `<input type="number" step="any" inputmode="decimal" class="tbl-inp !w-24" data-bp-in="${esc(scopeKey)}" data-f="coverPrice" value="${esc(cover)}" placeholder="أدخل السعر">`
+          ? `<div class="inline-flex flex-col items-center gap-0.5">
+              <input type="number" step="any" inputmode="decimal" class="tbl-inp !w-24 ${hasWarn ? "!border-rose-400 !bg-rose-50/40" : ""}" data-bp-in="${esc(scopeKey)}" data-f="coverPrice" value="${esc(cover)}" placeholder="أدخل السعر">
+              ${refCover > 0 ? `<span class="text-[10px] ${hasWarn ? "text-rose-600 font-bold" : "text-slate-400"}">السابق: ${fmt(refCover)}${hasWarn ? ` (${pctDiff > 0 ? "+" : ""}${pctDiff}%)` : ""}</span>` : ""}
+            </div>`
           : `<b class="text-slate-800">${cover ? fmt(cover) : "—"}</b>`}</td>
         <td class="num text-center">${isDraft && canEdit
           ? `<input type="number" step="any" inputmode="decimal" class="tbl-inp !w-16" data-bp-in="${esc(scopeKey)}" data-f="supplierDiscountPct" value="${esc(disc)}" placeholder="%">`
@@ -175,7 +203,7 @@
         <td class="num text-center"><b class="text-brand-800">${cover ? fmt(p.emp) : "—"}</b></td>
         <td class="num text-center"><span class="${p.margin < 0 ? "text-rose-600 font-bold" : "text-emerald-700 font-semibold"}">${cover ? fmt(p.margin) : "—"}</span></td>
         <td class="text-center whitespace-nowrap">
-          ${it ? `<span class="text-[10.5px] text-slate-400 num">v${fmt(it.Version || 1)}</span>` : `<span class="text-[10.5px] text-amber-600">غير مسعّر</span>`}
+          ${it ? `<span class="text-[10.5px] text-slate-400 num">v${fmt(it.Version || 1)}</span>` : `<span class="text-[10.5px] text-amber-600 font-semibold">بانتظار السعر</span>`}
           ${isApproved && canEdit && it ? `<button type="button" class="btn btn-outline btn-xs mr-1" data-act="bpRevise" data-id="${esc(scopeKey)}" title="تعديل موثّق مع حفظ النسخة السابقة">${ic("pencil", "!w-3 !h-3")} تعديل موثّق</button>` : ""}
         </td>
       </tr>`;
@@ -197,6 +225,7 @@
           </div>
         </div>
         ${statusBanner}
+        ${progressBar}
         ${dirtyBar}
         <div class="flex flex-wrap items-center gap-2 mb-3">
           ${searchBox("bpQ", BP.q, "بحث في القائمة بالاسم أو الكود أو المادة…")}
@@ -213,6 +242,11 @@
             <option value="__general" ${BP.fTrack === "__general" ? "selected" : ""}>سعر عام فقط</option>
             ${tracksInList.map(t => `<option value="${esc(t)}" ${BP.fTrack === t ? "selected" : ""}>${esc(t)}</option>`).join("")}
           </select>
+          ${isDraft ? `<select class="input !h-9 !w-auto !text-xs" data-change="bpFilter" data-k="fPriced">
+            <option value="">كل الكتب (${fmt(rows.length)})</option>
+            <option value="unpriced" ${BP.fPriced === "unpriced" ? "selected" : ""}>بانتظار السعر فقط (${fmt(unpricedCount)})</option>
+            <option value="priced" ${BP.fPriced === "priced" ? "selected" : ""}>المسعّرة فقط (${fmt(items.length)})</option>
+          </select>` : ""}
           <span class="text-xs text-slate-400 num mr-auto">النتائج: <b>${fmt(filtered.length)}</b>${filtered.length > 100 ? " (أول 100)" : ""}</span>
         </div>
         ${shown.length ? `
@@ -464,31 +498,39 @@
 
   on("bpNewList", async () => {
     const lists = priceLists();
+    const latestRef = (lists.find(l => l.Status === "Approved") || lists[0] || {}).Price_List_ID || "";
     const v = await UI.form({
-      title: "إنشاء قائمة أسعار جديدة",
-      intro: "تُنشأ كمسودة مستقلة للفترة المختارة، ويمكنك نسخ أسعار فترة سابقة أو الكتالوج الحالي مع نسبة تعديل اختيارية.",
+      title: "إنشاء قائمة أسعار لتيرم جديد",
+      intro: "تُنشأ كمسودة مستقلة للفترة المختارة مع الاحتفاظ بالكتالوج الثابت للكتب دون تكرار، ودون المساس بأسعار أو فواتير أي تيرم سابق.",
       fields: [
         { name: "academicYear", label: "العام الدراسي", value: "2026/2027", placeholder: "مثلاً: 2026/2027", required: true },
         { name: "term", label: "الترم الدراسي", type: "select", value: "الترم الأول", options: [["الترم الأول", "الترم الأول"], ["الترم الثاني", "الترم الثاني"]] },
-        { name: "title", label: "عنوان القائمة (اختياري)", placeholder: "مثال: قائمة أسعار الترم الأول 2026/2027" },
-        { name: "source", label: "مصدر النسخ", type: "select", value: lists.length ? lists[0].Price_List_ID : "__catalog",
-          options: [["__catalog", "نسخ من الكتالوج الحالي"], ["__empty", "قائمة فارغة (تسعير يدوي)"]].concat(lists.map(l => [l.Price_List_ID, `نسخ من: ${l.Academic_Year} — ${l.Term} (${statusMeta(l.Status).lbl})`])) },
-        { name: "pctAdjust", label: "نسبة تعديل تلقائية % (اختياري، مثل 10 لزيادة 10%)", type: "number", value: "0" },
+        { name: "title", label: "عنوان القائمة (اختياري)", placeholder: "مثال: قائمة أسعار الترم الثاني 2026/2027" },
+        { name: "source", label: "طريقة بدء التسعير", type: "select", value: "__blank",
+          options: [
+            ["__blank", "بدء تيرم جديد بالكتالوج الثابت بلا أسعار (موصى به — تسعير جديد مع عرض السعر السابق كمرجع)"],
+            ["__catalog", "نسخ الأسعار من الكتالوج الحالي"],
+            ["__empty", "قائمة فارغة بلا مرجع"]
+          ].concat(lists.map(l => [l.Price_List_ID, `نسخ الأسعار من: ${l.Academic_Year} — ${l.Term} (${statusMeta(l.Status).lbl})`])) },
+        { name: "pctAdjust", label: "نسبة تعديل تلقائية % (للنسخ فقط — تجاهلها في وضع البدء بلا أسعار)", type: "number", value: "0" },
         { name: "notes", label: "ملاحظات", placeholder: "اختياري" }
       ],
       ok: "إنشاء المسودة"
     });
     if (!v) return;
+    const isBlank = v.source === "__blank";
     const payload = {
       academicYear: v.academicYear, term: v.term, title: v.title, notes: v.notes,
-      pctAdjust: n(v.pctAdjust) || 0,
-      copyFromListId: v.source && !v.source.startsWith("__") ? v.source : "",
+      pctAdjust: isBlank ? 0 : (n(v.pctAdjust) || 0),
+      blankPrices: isBlank,
+      copyFromListId: isBlank ? latestRef : (v.source && !v.source.startsWith("__") ? v.source : ""),
       copyFromCatalog: v.source === "__catalog"
     };
     const r = await call("SAVE_PRICE_LIST", payload, { block: true });
     toast(r.message, r.success ? "success" : "danger");
     if (r.success) {
       BP.selListId = r.priceList ? r.priceList.Price_List_ID : "";
+      BP.fPriced = isBlank ? "unpriced" : "";
       BP.dirty = {};
       await Admin.load();
       Router.render();
@@ -523,12 +565,17 @@
       title: "اعتماد قائمة الأسعار",
       intro: `اعتماد «${pl.Title}» سيثبّت الأسعار كقائمة معتمدة ومحمية من التعديل العشوائي، ولن يمس أي فاتورة أو حجز سابق نهائياً.`,
       fields: [
-        { name: "syncToCatalog", label: "تحديث أسعار العرض بالكتالوج للفترة الحالية (لا يؤثر على الفواتير السابقة)", type: "select", value: "yes", options: [["yes", "نعم — اجعلها أسعار الفترة الحالية"], ["no", "لا — اعتمدها كقائمة تاريخية فقط"]] }
+        { name: "syncToCatalog", label: "تحديث أسعار العرض بالكتالوج للفترة الحالية (لا يؤثر على الفواتير السابقة)", type: "select", value: "yes", options: [["yes", "نعم — اجعلها أسعار الفترة الحالية"], ["no", "لا — اعتمدها كقائمة تاريخية فقط"]] },
+        { name: "resetUnpricedToPricing", label: "الكتب غير المسعّرة في هذه القائمة (عند التحديث للكتالوج)", type: "select", value: "yes", options: [["yes", "تعليقها بحالة «جاري التسعير» لمنع حجزها بسعر التيرم السابق (موصى به)"], ["no", "تركها بحالتها الحالية في الكتالوج"]] }
       ],
       ok: "اعتماد القائمة"
     });
     if (!v) return;
-    const r = await call("TRANSITION_PRICE_LIST", { priceListId: plId, toStatus: "Approved", syncToCatalog: v.syncToCatalog === "yes" }, { block: true });
+    const r = await call("TRANSITION_PRICE_LIST", {
+      priceListId: plId, toStatus: "Approved",
+      syncToCatalog: v.syncToCatalog === "yes",
+      resetUnpricedToPricing: v.syncToCatalog === "yes" && v.resetUnpricedToPricing === "yes"
+    }, { block: true });
     toast(r.message, r.success ? "success" : "danger");
     if (r.success) { await Admin.load(); Router.render(); }
   });

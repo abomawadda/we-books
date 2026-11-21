@@ -1940,6 +1940,7 @@ const OperationsEngine = {
       const newId = "PL-" + year.replace(/[^0-9]/g, "").slice(0, 8) + "-" + (lists.length + 1) + "-" + String(Date.now()).slice(-4);
       const now = Util.now(), actor = Util.actor(session);
       const copyFromId = Util.str(payload.copyFromListId);
+      const blankPrices = !!payload.blankPrices;
       const pl = {
         Price_List_ID: newId, Academic_Year: year, Term: term,
         Title: Util.str(payload.title) || ("قائمة أسعار " + year + " — " + term),
@@ -1949,12 +1950,12 @@ const OperationsEngine = {
       };
       DB_Engine.insertRecordsBatch(S.PRICE_LISTS, [pl]);
 
-      // نسخ الأسعار من قائمة سابقة أو من الكتالوج الحالي (بلا أي تأثير على القائمة السابقة أو الفواتير)
+      // نسخ الأسعار من قائمة سابقة أو من الكتالوج الحالي (أو بدء تيرم جديد بالكتالوج الثابت بلا أسعار عند blankPrices)
       const pctAdj = Util.num(payload.pctAdjust);
       const mult = pctAdj ? (1 + pctAdj / 100) : 1;
       const st = getSettings_(), copied = [];
       const booksMap = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { booksMap[Util.str(b.Book_ID)] = b; });
-      if (copyFromId) {
+      if (!blankPrices && copyFromId) {
         const srcItems = DB_Engine.getAllRecords(S.PRICE_ITEMS).filter(i => Util.str(i.Price_List_ID) === copyFromId && Util.str(i.Status) !== "Superseded");
         srcItems.forEach((si, idx) => {
           const bk = booksMap[Util.str(si.Book_ID)] || {};
@@ -1969,7 +1970,7 @@ const OperationsEngine = {
             Created_At: now, Created_By: actor, Approved_At: "", Approved_By: ""
           });
         });
-      } else if (payload.copyFromCatalog) {
+      } else if (!blankPrices && payload.copyFromCatalog) {
         Object.keys(booksMap).forEach((bid, idx) => {
           const bk = booksMap[bid];
           if (Util.str(bk.Book_Status) === "Discontinued" || !(Util.num(bk.Cover_Price) > 0)) return;
@@ -1986,8 +1987,11 @@ const OperationsEngine = {
         });
       }
       if (copied.length) DB_Engine.insertRecordsBatch(S.PRICE_ITEMS, copied);
-      DB_Engine.logAudit(session.userId, session.role, "Pricing", "CREATE_PRICE_LIST", newId, null, { year: year, term: term, copiedCount: copied.length, copyFromId: copyFromId });
-      return { success: true, message: "تم إنشاء مسودة قائمة الأسعار (" + pl.Title + ")" + (copied.length ? " مع نسخ " + copied.length + " سعر." : "."), priceList: pl, copiedCount: copied.length };
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "CREATE_PRICE_LIST", newId, null, { year: year, term: term, copiedCount: copied.length, copyFromId: copyFromId, blankPrices: blankPrices });
+      const msg = blankPrices
+        ? "تم إنشاء مسودة التيرم الجديد (" + pl.Title + ") بقائمة الكتب الثابتة بانتظار إدخال الأسعار الجديدة."
+        : "تم إنشاء مسودة قائمة الأسعار (" + pl.Title + ")" + (copied.length ? " مع نسخ " + copied.length + " سعر." : ".");
+      return { success: true, message: msg, priceList: pl, copiedCount: copied.length, blankPrices: blankPrices };
     });
   },
 
@@ -2004,10 +2008,16 @@ const OperationsEngine = {
       const st = getSettings_();
       const books = {}; DB_Engine.getAllRecords(S.BOOKS).forEach(b => { books[Util.str(b.Book_ID)] = b; });
       const allPrices = DB_Engine.getAllRecords(S.PRICE_ITEMS);
-      const byScope = {};
-      allPrices.forEach(p => { if (Util.str(p.Price_List_ID) === plId && Util.str(p.Status) !== "Superseded") byScope[Util.str(p.Book_ID) + "|" + Util.str(p.Track)] = p; });
+      const byScope = {}, refPrices = {};
+      const refListId = Util.str(pl.Copied_From_ID);
+      allPrices.forEach(p => {
+        if (Util.str(p.Status) === "Superseded") return;
+        const sk = Util.str(p.Book_ID) + "|" + Util.str(p.Track);
+        if (Util.str(p.Price_List_ID) === plId) byScope[sk] = p;
+        else if (refListId && Util.str(p.Price_List_ID) === refListId) refPrices[sk] = Util.num(p.Cover_Price);
+      });
       const now = Util.now(), actor = Util.actor(session);
-      const toInsert = [];
+      const toInsert = [], warnings = [];
       let updated = 0, added = 0;
       const seenBatch = {};
       rows.forEach((r, idx) => {
@@ -2023,6 +2033,14 @@ const OperationsEngine = {
         Util.require(disc >= 0 && disc < 100, "نسبة خصم المكتبة غير صحيحة للكتاب " + bid);
         const empDisc = r.empDiscountPct !== undefined && r.empDiscountPct !== "" ? Util.num(r.empDiscountPct) : (bk.Emp_Discount_Pct !== "" && bk.Emp_Discount_Pct !== undefined ? Util.num(bk.Emp_Discount_Pct) : Util.num(st.UNIFIED_EMP_DISCOUNT_PCT));
         const pr = FinancialEngine.calculateBookPricing(cover, disc, 0, empDisc);
+        // تنبيه وقائي عند انحراف السعر الجديد عن السعر المرجعي السابق بأكثر من +40% أو أقل من -20%
+        const refCover = refPrices[scopeKey] || refPrices[bid + "|"] || Util.num(bk.Cover_Price);
+        if (refCover > 0) {
+          const pctDiff = Math.round(((cover - refCover) / refCover) * 100);
+          if (pctDiff > 40 || pctDiff < -20) {
+            warnings.push({ bookId: bid, bookName: Util.str(bk.Book_Name), refCover: refCover, newCover: cover, pctDiff: pctDiff });
+          }
+        }
         const ex = byScope[scopeKey];
         if (ex) {
           DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", ex.Price_ID, {
@@ -2046,8 +2064,9 @@ const OperationsEngine = {
         }
       });
       if (toInsert.length) DB_Engine.insertRecordsBatch(S.PRICE_ITEMS, toInsert);
-      DB_Engine.logAudit(session.userId, session.role, "Pricing", "SAVE_PRICE_ITEMS", plId, null, { added: added, updated: updated });
-      return { success: true, message: "تم حفظ " + (added + updated) + " سعر في المسودة (جديد: " + added + "، محدّث: " + updated + ").", added: added, updated: updated };
+      DB_Engine.logAudit(session.userId, session.role, "Pricing", "SAVE_PRICE_ITEMS", plId, null, { added: added, updated: updated, warnings: warnings.length });
+      const warnTxt = warnings.length ? " — تنبيه: " + warnings.length + " كتاب بانحراف سعر كبير عن السابق (راجعها قبل الاعتماد)." : "";
+      return { success: true, message: "تم حفظ " + (added + updated) + " سعر في المسودة (جديد: " + added + "، محدّث: " + updated + ")." + warnTxt, added: added, updated: updated, warnings: warnings };
     });
   },
 
@@ -2072,10 +2091,12 @@ const OperationsEngine = {
         });
         DB_Engine.updateRecordByPK(S.PRICE_LISTS, "Price_List_ID", plId, { Status: "Approved", Approved_At: now, Approved_By: actor });
         // مزامنة اختيارية لأسعار العرض بالكتالوج للفترة النشطة — بدون لمس أي حجز أو فاتورة سابقة!
-        let synced = 0;
+        let synced = 0, resetCount = 0;
         if (payload.syncToCatalog) {
           this.upsertSettingRow_(session, "ACTIVE_PERIOD", JSON.stringify({ academicYear: pl.Academic_Year, term: pl.Term, priceListId: plId }), "JSON", "الفترة الدراسية النشطة للأسعار");
+          const pricedIds = {};
           myItems.filter(i => !Util.str(i.Track)).forEach(i => {
+            pricedIds[Util.str(i.Book_ID)] = 1;
             DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", i.Book_ID, {
               Cover_Price: i.Cover_Price, Supplier_Discount_Pct: i.Supplier_Discount_Pct,
               Standard_Net_Cost: i.Standard_Net_Cost, Emp_Discount_Pct: i.Emp_Discount_Pct,
@@ -2083,9 +2104,25 @@ const OperationsEngine = {
             });
             synced++;
           });
+          // تحويل الكتب غير المسعّرة في قائمة التيرم الجديد إلى «جاري التسعير» لمنع حجزها بأسعار التيرم السابق
+          if (payload.resetUnpricedToPricing) {
+            DB_Engine.getAllRecords(S.BOOKS).forEach(bk => {
+              const bid = Util.str(bk.Book_ID);
+              if (!bid || Util.str(bk.Book_Status) === "Discontinued" || pricedIds[bid]) return;
+              if (Util.str(bk.Book_Status) !== "Pricing" || Util.num(bk.Cover_Price) > 0) {
+                DB_Engine.updateRecordByPK(S.BOOKS, "Book_ID", bid, {
+                  Cover_Price: "", Supplier_Discount_Pct: "", Initial_Purchase_Price: "",
+                  Volume_Discount_Share_Pct: "", Standard_Net_Cost: "", Emp_Discount_Pct: "",
+                  Emp_Selling_Price: "", Book_Status: "Pricing"
+                });
+                resetCount++;
+              }
+            });
+          }
         }
-        DB_Engine.logAudit(session.userId, session.role, "Pricing", "APPROVE_PRICE_LIST", plId, { Status: cur }, { Status: "Approved", items: myItems.length, syncedToCatalog: synced });
-        return { success: true, message: "تم اعتماد قائمة الأسعار (" + pl.Title + ") لعدد " + myItems.length + " سعر" + (synced ? " وتحديث أسعار العرض لـ " + synced + " كتاب دون المساس بأي فاتورة سابقة." : " دون المساس بأي فاتورة سابقة."), approvedCount: myItems.length, synced: synced };
+        DB_Engine.logAudit(session.userId, session.role, "Pricing", "APPROVE_PRICE_LIST", plId, { Status: cur }, { Status: "Approved", items: myItems.length, syncedToCatalog: synced, resetUnpriced: resetCount });
+        const resetTxt = resetCount ? " وتعليق " + resetCount + " كتاب غير مسعّر بحالة «جاري التسعير» لمنع حجزه بسعر قديم" : "";
+        return { success: true, message: "تم اعتماد قائمة الأسعار (" + pl.Title + ") لعدد " + myItems.length + " سعر" + (synced ? " وتحديث أسعار العرض لـ " + synced + " كتاب" + resetTxt + " دون المساس بأي فاتورة سابقة." : " دون المساس بأي فاتورة سابقة."), approvedCount: myItems.length, synced: synced, resetCount: resetCount };
       }
       Util.require(cur !== "Archived", "القائمة مؤرشفة بالفعل.");
       myItems.forEach(i => DB_Engine.updateRecordByPK(S.PRICE_ITEMS, "Price_ID", i.Price_ID, { Status: "Archived" }));
@@ -2197,19 +2234,19 @@ const OperationsEngine = {
     return code;
   },
 
-  /** فحص تكرار الكتاب داخل نفس الصف (بنفس الاسم المعروض، أو نفس الناشر + المادة + الجزء مع تقاطع نوع المدرسة) */
+  /** فحص تكرار الكتاب داخل نفس الصف بتطبيع عربي موحّد (الهمزات، التاء المربوطة، التشكيل، المسافات) */
   findDuplicateBook_: function(books, cand, ignoreId) {
     const ig = Util.str(ignoreId).toUpperCase();
-    const g = Util.str(cand.Grade), nm = Util.str(cand.Book_Name);
-    const pub = Util.str(cand.Publisher), sub = Util.str(cand.Subject), part = Util.str(cand.Book_Part);
-    const cTypes = String(cand.School_Types || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
+    const g = normArText(cand.Grade), nm = normArText(cand.Book_Name);
+    const pub = normArText(cand.Publisher), sub = normArText(cand.Subject), part = normArText(cand.Book_Part);
+    const cTypes = String(cand.School_Types || "").split(/[,،+]/).map(x => normArText(x)).filter(Boolean);
     return books.find(b => {
       const bid = Util.str(b.Book_ID).toUpperCase();
       if (!bid || bid === ig || Util.str(b.Book_Status) === "Discontinued") return false;
-      if (Util.str(b.Grade) !== g) return false;
-      if (nm && Util.str(b.Book_Name) === nm) return true;
-      if (pub && sub && Util.str(b.Publisher) === pub && Util.str(b.Subject) === sub && Util.str(b.Book_Part) === part) {
-        const bTypes = String(b.School_Types || "").split(/[,،+]/).map(x => x.trim()).filter(Boolean);
+      if (normArText(b.Grade) !== g) return false;
+      if (nm && normArText(b.Book_Name) === nm) return true;
+      if (pub && sub && normArText(b.Publisher) === pub && normArText(b.Subject) === sub && normArText(b.Book_Part) === part) {
+        const bTypes = String(b.School_Types || "").split(/[,،+]/).map(x => normArText(x)).filter(Boolean);
         if (!cTypes.length || !bTypes.length || cTypes.some(t => bTypes.indexOf(t) !== -1)) return true;
       }
       return false;
