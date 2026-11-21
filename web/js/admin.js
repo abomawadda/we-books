@@ -2648,26 +2648,218 @@ function supDue(v, big) {
 }
 
 // ============================================================ الموظفون
+const EMP_UI = { tab: "basic", sort: "code_name", cat: "", dept: "", status: "" };
+const EMP_CAT_META = {
+  emp: { lbl: "المصرية للاتصالات", portal: "بوابة الشركة", tone: "blue" },
+  retiree: { lbl: "معاش / استقالة", portal: "بوابة المعاشات", tone: "amber" },
+  outsource: { lbl: "تعهيد", portal: "بوابة التعهيد", tone: "gray" },
+  guest: { lbl: "زائر", portal: "بوابة الزوار", tone: "gray" },
+  deceased: { lbl: "وفاة", portal: "مغلق", tone: "red" }
+};
+function empNormAr(s) {
+  return String(s || "").trim()
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, "")
+    .replace(/[أإآٱ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/\s+/g, " ").toLowerCase();
+}
+function empCatOf(e) {
+  const id = String((e && e.Emp_ID) || "").trim();
+  const jt = empNormAr(e && e.Job_Title);
+  const ms = empNormAr(e && e.Member_State);
+  if (/^6\d{6}$/.test(id) || jt === empNormAr("شركات التعهيد")) return "outsource";
+  if (/^7\d{6}$/.test(id) || jt === empNormAr("زائر")) return "guest";
+  if (/^8\d{6}$/.test(id) || jt.includes("معاش") || ms.includes("معاش") || ms.includes("استقال") || ms.includes("مستقيل")) return "retiree";
+  if (ms === "وفاه" || ms.includes("وفا")) return "deceased";
+  return "emp";
+}
+function empCodeNum(id) {
+  const d = String(id || "").replace(/\D/g, "");
+  return d ? Number(d) : Number.MAX_SAFE_INTEGER;
+}
+function empIsActive(e) {
+  const st = String((e && e.Employment_Status) || "ساري").trim();
+  return !/موقوف|suspended|inactive/i.test(st);
+}
+function empFilteredSorted() {
+  const d = A(), q = empNormAr(Q.emp || "");
+  const fin = {};
+  d.empInvoices.forEach(i => {
+    const x = fin[i.Emp_ID] = fin[i.Emp_ID] || { billed: 0, paid: 0, rem: 0 };
+    x.billed += n(i.Net_Final_Invoice_Amount);
+    x.paid += n(i.Total_Paid_Amount);
+    x.rem += n(i.Remaining_Balance);
+  });
+  let list = d.employees.filter(e => {
+    const cat = empCatOf(e);
+    if (EMP_UI.tab === "retiree" && cat !== "retiree") return false;
+    if (EMP_UI.cat && cat !== EMP_UI.cat) return false;
+    if (EMP_UI.dept && (e.Department || "غير محدد") !== EMP_UI.dept) return false;
+    if (EMP_UI.status === "active" && !empIsActive(e)) return false;
+    if (EMP_UI.status === "suspended" && empIsActive(e)) return false;
+    if (q) {
+      const hay = empNormAr([e.Emp_ID, e.Full_Name, e.Mobile, e.Department, e.Job_Title, e.Member_State, (EMP_CAT_META[cat] || {}).lbl].join(" "));
+      if (!q.split(" ").filter(Boolean).every(t => hay.includes(t))) return false;
+    }
+    return true;
+  });
+  list = list.slice().sort((a, b) => {
+    if (EMP_UI.sort === "balance") {
+      const db = ((fin[b.Emp_ID] || {}).rem || 0) - ((fin[a.Emp_ID] || {}).rem || 0);
+      if (Math.abs(db) > 0.005) return db;
+    }
+    if (EMP_UI.sort === "name_code") {
+      const dn = String(a.Full_Name || "").localeCompare(String(b.Full_Name || ""), "ar");
+      if (dn !== 0) return dn;
+    }
+    const na = empCodeNum(a.Emp_ID), nb = empCodeNum(b.Emp_ID);
+    if (na !== nb) return na - nb;
+    const sid = String(a.Emp_ID || "").localeCompare(String(b.Emp_ID || ""), "en");
+    if (sid !== 0) return sid;
+    return String(a.Full_Name || "").localeCompare(String(b.Full_Name || ""), "ar");
+  });
+  return { list, fin };
+}
 function empTable() {
-  const d = A(), q = (Q.emp || "").toLowerCase(), bal = {};
-  d.empInvoices.forEach(i => bal[i.Emp_ID] = (bal[i.Emp_ID] || 0) + n(i.Remaining_Balance));
-  const list = d.employees.filter(e => !q || (e.Emp_ID + e.Full_Name + e.Mobile + e.Department).toLowerCase().includes(q));
-  return UI.table([
-    { t: "الموظف", v: e => `<div class="flex items-center gap-2.5">${UI.avatar(e.Full_Name, "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${empLink(e.Emp_ID, e.Full_Name)}</div><div class="text-[11.5px] text-slate-400 num">${esc(e.Emp_ID)}</div></div></div>` },
-    { t: "الموبايل", cls: "num", v: e => `<span dir="ltr">${esc(e.Mobile)}</span>` },
-    { t: "الإدارة", v: "Department" },
-    { t: "الحالة", v: e => pill("", e.Employment_Status || "نشط", /نشط|active/i.test(e.Employment_Status || "نشط") ? "green" : "gray") },
-    { t: "التقسيط", v: e => String(e.Installment_Allowed) === "false" ? pill("", "غير مسموح", "red") : pill("", "مسموح", "green") },
-    { t: "الحد الائتماني", cls: "num", v: e => e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي" },
-    { t: "المتبقي عليه", cls: "num", v: e => `<b class="${bal[e.Emp_ID] ? "text-rose-600" : "text-slate-400"}">${fmt(bal[e.Emp_ID] || 0)}</b>` }
-  ], list.slice(0, 400), { maxH: 640, emptyIcon: "users", empty: q ? "لا نتائج" : "لا يوجد موظفون", emptySub: q ? "" : "استورد بيانات الموظفين من Excel." });
+  const { list, fin } = empFilteredSorted();
+  const q = (Q.emp || "").trim();
+  const empCell = e => `<div class="flex items-center gap-2.5">${UI.avatar(e.Full_Name, "w-9 h-9 text-xs")}<div class="min-w-0"><div class="font-semibold text-slate-900 truncate">${empLink(e.Emp_ID, e.Full_Name)}</div><div class="text-[11px] text-slate-400 truncate">${esc(e.Department || "—")}${e.Job_Title ? " · " + esc(e.Job_Title) : ""}</div></div></div>`;
+  const codeCell = e => `<span class="num font-bold text-slate-700">${esc(e.Emp_ID)}</span>`;
+  const catCell = e => { const m = EMP_CAT_META[empCatOf(e)] || EMP_CAT_META.emp; return pill("", m.lbl, m.tone); };
+  const accCell = e => empIsActive(e) ? pill("", e.Employment_Status || "ساري", "green") : pill("", e.Employment_Status || "موقوف", "red");
+  const stateCell = e => {
+    const ms = String(e.Member_State || "").trim();
+    if (!ms) return `<span class="text-slate-400 text-xs">—</span>`;
+    const tone = /معاش|استقال/i.test(ms) ? "amber" : /وفا|موقوف/i.test(ms) ? "red" : "green";
+    return pill("", ms, tone);
+  };
+  let cols;
+  if (EMP_UI.tab === "work") {
+    cols = [
+      { t: "الكود", cls: "num whitespace-nowrap", v: codeCell },
+      { t: "الموظف", v: empCell },
+      { t: "جهة العمل / الإدارة", v: e => esc(e.Department || "—") },
+      { t: "الوظيفة", v: e => esc(e.Job_Title || "—") },
+      { t: "الفئة", v: catCell },
+      { t: "آخر تحديث", cls: "num text-[11.5px] text-slate-500", v: e => esc(dt(e.Updated_At) || "—") }
+    ];
+  } else if (EMP_UI.tab === "contact") {
+    cols = [
+      { t: "الكود", cls: "num whitespace-nowrap", v: codeCell },
+      { t: "الموظف", v: empCell },
+      { t: "الموبايل", cls: "num", v: e => e.Mobile ? `<a class="text-brand-700 hover:underline" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : `<span class="text-rose-500 text-xs">ناقص</span>` },
+      { t: "آخر 4 قومي", cls: "num text-center", v: e => e.National_ID_Last4 ? `<span class="font-mono text-xs text-slate-700">••••${esc(String(e.National_ID_Last4).padStart(4, "0"))}</span>` : `<span class="text-rose-500 text-xs">ناقص</span>` },
+      { t: "بوابة الدخول", v: e => { const m = EMP_CAT_META[empCatOf(e)] || EMP_CAT_META.emp; return pill("", m.portal, m.tone); } },
+      { t: "جاهزية الدخول", v: e => {
+        if (!empIsActive(e)) return pill("", "موقوف", "red");
+        if (empCatOf(e) === "deceased") return pill("", "مغلق (وفاة)", "red");
+        return (e.Mobile && e.National_ID_Last4) ? pill("", "جاهز", "green") : pill("", "بيانات ناقصة", "amber");
+      } },
+      { t: "", actions: true, v: e => e.Mobile ? `<a class="btn btn-outline btn-xs !text-emerald-700" target="_blank" rel="noopener" href="${esc(Brand.waLink(e.Mobile, ""))}">${ic("message-circle")}</a>` : "" }
+    ];
+  } else if (EMP_UI.tab === "finance") {
+    cols = [
+      { t: "الكود", cls: "num whitespace-nowrap", v: codeCell },
+      { t: "الموظف", v: empCell },
+      { t: "التقسيط", v: e => String(e.Installment_Allowed) === "false" ? pill("", "غير مسموح", "red") : pill("", "مسموح", "green") },
+      { t: "الحد الائتماني", cls: "num", v: e => e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي" },
+      { t: "الفواتير", cls: "num", v: e => fmt((fin[e.Emp_ID] || {}).billed || 0) },
+      { t: "المسدد", cls: "num text-emerald-700", v: e => fmt((fin[e.Emp_ID] || {}).paid || 0) },
+      { t: "المتبقي", cls: "num", v: e => { const r = (fin[e.Emp_ID] || {}).rem || 0; return `<b class="${r > 0 ? "text-rose-600" : "text-slate-400"}">${fmt(r)}</b>`; } }
+    ];
+  } else if (EMP_UI.tab === "retiree") {
+    cols = [
+      { t: "الكود", cls: "num whitespace-nowrap", v: codeCell },
+      { t: "العضو", v: empCell },
+      { t: "الحالة النقابية", v: stateCell },
+      { t: "بوابة الدخول", v: () => pill("", "بوابة المعاشات", "amber") },
+      { t: "الموبايل", cls: "num", v: e => e.Mobile ? `<span dir="ltr">${esc(e.Mobile)}</span>` : "—" },
+      { t: "الحساب", v: accCell },
+      { t: "المتبقي", cls: "num", v: e => { const r = (fin[e.Emp_ID] || {}).rem || 0; return `<b class="${r > 0 ? "text-rose-600" : "text-slate-400"}">${fmt(r)}</b>`; } }
+    ];
+  } else {
+    cols = [
+      { t: "الكود", cls: "num whitespace-nowrap", v: codeCell },
+      { t: "الموظف", v: empCell },
+      { t: "الفئة", v: catCell },
+      { t: "الحالة النقابية", v: stateCell },
+      { t: "حالة الحساب", v: accCell },
+      { t: "التقسيط", v: e => String(e.Installment_Allowed) === "false" ? pill("", "غير مسموح", "red") : pill("", "مسموح", "green") },
+      { t: "المتبقي", cls: "num", v: e => { const r = (fin[e.Emp_ID] || {}).rem || 0; return `<b class="${r > 0 ? "text-rose-600" : "text-slate-400"}">${fmt(r)}</b>`; } }
+    ];
+  }
+  const countNote = `<div class="text-[11.5px] text-slate-500 mb-2 flex items-center justify-between"><span>المعروض: <b class="num text-slate-800">${fmt(Math.min(list.length, 400))}</b> من <b class="num text-slate-800">${fmt(list.length)}</b></span><span class="text-[11px] text-slate-400">اضغط على اسم أي موظف لفتح ملفه الكامل</span></div>`;
+  return countNote + UI.table(cols, list.slice(0, 400), { maxH: 640, emptyIcon: "users", empty: q ? "لا نتائج مطابقة" : "لا يوجد موظفون في هذا التبويب", emptySub: q ? "جرّب تعديل كلمات البحث أو الفلاتر." : "" });
 }
 Router.add("/a/employees", view => {
-  view.innerHTML = UI.pageHead("الموظفون", `${fmt(A().employees.length)} موظف مسجل`,
-    syncBtn("btn-sm") + lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-outline btn-sm" data-act="reserveFor">${ic("notebook-pen")} حجز نيابة عن موظف</button>`) + lockedBtn("BULK_IMPORT_EMPLOYEES", `<button class="btn btn-primary btn-sm" data-act="importEmps">${ic("file-spreadsheet")} استيراد / تحديث</button>`))
-    + `<section class="card card-pad"><div class="mb-4">${searchBox("qEmp", Q.emp, "بحث بالاسم أو الرقم أو الموبايل")}</div><div id="empList">${empTable()}</div></section>`;
+  const emps = A().employees || [];
+  let cEmp = 0, cRet = 0, cOther = 0, cSusp = 0;
+  const depts = new Set();
+  emps.forEach(e => {
+    const c = empCatOf(e);
+    if (c === "emp") cEmp++;
+    else if (c === "retiree") cRet++;
+    else cOther++;
+    if (!empIsActive(e)) cSusp++;
+    if (e.Department) depts.add(e.Department);
+  });
+  const deptOpts = [...depts].sort((a, b) => a.localeCompare(b, "ar"));
+  const tabs = [
+    ["basic", "users", "الدليل الأساسي", emps.length],
+    ["work", "building-2", "العمل والوظيفة"],
+    ["contact", "phone", "التواصل والدخول"],
+    ["finance", "wallet", "الائتمان والمالية"],
+    ["retiree", "user-check", "المعاش والاستقالة", cRet]
+  ];
+  view.innerHTML = UI.pageHead("الموظفون والأعضاء", `${fmt(emps.length)} مسجل · مرتّب حسب الكود الوظيفي ثم الأبجدي`,
+    syncBtn("btn-sm")
+    + `<button class="btn btn-outline btn-sm" data-act="empCsv">${ic("file-spreadsheet")} Excel</button>`
+    + lockedBtn("SUBMIT_OR_UPDATE_RESERVATION", `<button class="btn btn-outline btn-sm" data-act="reserveFor">${ic("notebook-pen")} حجز نيابة عن موظف</button>`)
+    + lockedBtn("BULK_IMPORT_EMPLOYEES", `<button class="btn btn-primary btn-sm" data-act="importEmps">${ic("upload")} استيراد / تحديث</button>`))
+    + `<div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        ${UI.kpi("إجمالي المسجلين", fmt(emps.length), { icon: "users", tone: "brand", foot: cSusp ? `${fmt(cSusp)} موقوف` : "الكل ساري" })}
+        ${UI.kpi("المصرية للاتصالات", fmt(cEmp), { icon: "briefcase", tone: "blue", foot: "بوابة الشركة" })}
+        ${UI.kpi("المعاش والاستقالة", fmt(cRet), { icon: "user-check", tone: "amber", foot: "بوابة المعاشات" })}
+        ${UI.kpi("التعهيد والزوار", fmt(cOther), { icon: "id-card", tone: "gray", foot: "بوابات مستقلة" })}
+      </div>`
+    + `<section class="card card-pad">
+        <div class="flex gap-1.5 overflow-x-auto pb-3 mb-3 border-b border-slate-100">
+          ${tabs.map(([k, icn, lbl, cnt]) => `<button type="button" class="btn btn-sm shrink-0 ${EMP_UI.tab === k ? "btn-primary" : "btn-outline"}" data-act="empTab" data-id="${k}">${ic(icn)} ${lbl}${cnt !== undefined ? ` <span class="num opacity-80">(${fmt(cnt)})</span>` : ""}</button>`).join("")}
+        </div>
+        <div class="flex flex-wrap items-center gap-2 mb-3.5">
+          ${searchBox("qEmp", Q.emp, "بحث بالكود أو الاسم أو الموبايل أو الإدارة…")}
+          <select class="input !h-10 !w-auto !text-xs font-semibold" data-change="empF" data-k="sort" title="طريقة الترتيب">
+            <option value="code_name" ${EMP_UI.sort === "code_name" ? "selected" : ""}>ترتيب: الكود الوظيفي ← أبجدي</option>
+            <option value="name_code" ${EMP_UI.sort === "name_code" ? "selected" : ""}>ترتيب: أبجدي ← الكود الوظيفي</option>
+            <option value="balance" ${EMP_UI.sort === "balance" ? "selected" : ""}>ترتيب: الأعلى رصيداً متبقياً</option>
+          </select>
+          ${EMP_UI.tab !== "retiree" ? `<select class="input !h-10 !w-auto !text-xs" data-change="empF" data-k="cat">
+            <option value="">كل الفئات</option>
+            <option value="emp" ${EMP_UI.cat === "emp" ? "selected" : ""}>المصرية للاتصالات (${fmt(cEmp)})</option>
+            <option value="retiree" ${EMP_UI.cat === "retiree" ? "selected" : ""}>معاش / استقالة (${fmt(cRet)})</option>
+            <option value="outsource" ${EMP_UI.cat === "outsource" ? "selected" : ""}>شركات التعهيد</option>
+            <option value="guest" ${EMP_UI.cat === "guest" ? "selected" : ""}>زائر</option>
+          </select>` : ""}
+          <select class="input !h-10 !w-auto !text-xs" data-change="empF" data-k="dept">
+            <option value="">كل جهات العمل (${fmt(deptOpts.length)})</option>
+            ${deptOpts.map(dp => `<option value="${esc(dp)}" ${EMP_UI.dept === dp ? "selected" : ""}>${esc(dp)}</option>`).join("")}
+          </select>
+          <select class="input !h-10 !w-auto !text-xs" data-change="empF" data-k="status">
+            <option value="">كل الحالات</option>
+            <option value="active" ${EMP_UI.status === "active" ? "selected" : ""}>ساري فقط</option>
+            <option value="suspended" ${EMP_UI.status === "suspended" ? "selected" : ""}>موقوف فقط</option>
+          </select>
+        </div>
+        <div id="empList">${empTable()}</div>
+      </section>`;
 });
 on("qEmp", v => { Q.emp = v.trim(); rerenderList("empList", empTable); });
+on("empTab", v => { EMP_UI.tab = v; if (v === "retiree") EMP_UI.cat = ""; Shell.rerender(); });
+on("empF", (v, el) => { EMP_UI[el.dataset.k] = v; rerenderList("empList", empTable); });
+on("empCsv", () => {
+  const { list, fin } = empFilteredSorted();
+  exportCSV("الموظفون", ["الكود الوظيفي", "الاسم", "الفئة", "بوابة الدخول", "الحالة النقابية", "حالة الحساب", "جهة العمل", "الوظيفة", "الموبايل", "التقسيط", "المتبقي"],
+    list.map(e => { const m = EMP_CAT_META[empCatOf(e)] || EMP_CAT_META.emp; return [e.Emp_ID, e.Full_Name, m.lbl, m.portal, e.Member_State || "", e.Employment_Status || "ساري", e.Department || "", e.Job_Title || "", e.Mobile || "", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح", (fin[e.Emp_ID] || {}).rem || 0]; }));
+});
 on("importEmps", async () => {
   const v = await UI.form({ title: "استيراد الموظفين", wide: true, intro: "الصق من Excel بالأعمدة: <b>الرقم الوظيفي، الاسم، آخر 4 قومي، الموبايل، الإدارة، الوظيفة، الحد الائتماني (اختياري)</b>. الموظف الموجود تُحدَّث بياناته.",
     fields: [{ name: "txt", label: "البيانات", type: "textarea", rows: 8, required: true }], ok: "استيراد", icon: "upload" });
@@ -3863,11 +4055,42 @@ function epBody(id) {
   if (t === "pay") body = pays.length ? `<ul class="divide-y divide-slate-100">${pays.slice().reverse().map(p => `<li class="flex items-center gap-3 py-2.5"><div class="flex-1"><div class="font-semibold text-[13px] num">${esc(p.Receipt_No)} <span class="text-slate-400 font-normal">· ${esc(ar(p.Payment_Method))}${p.Transaction_Ref ? " · " + esc(p.Transaction_Ref) : ""}</span></div><div class="text-[11.5px] text-slate-400 num">${esc(dt(p.Payment_Date))} · ${esc(p.Collected_By || "")}</div></div>
       ${isTrue(p.Is_Voided) ? pill("", "ملغى", "red") : `<b class="num ${n(p.Amount) < 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(p.Amount)}</b><button class="icon-btn w-8 h-8" data-act="printRcpt" data-id="${esc(p.Receipt_No)}" title="طباعة">${ic("printer")}</button>`}</li>`).join("")}</ul>` : UI.empty("wallet", "لا إيصالات");
   if (t === "log") { body = `<div id="epLog">${UI.skeleton(3)}</div>`; setTimeout(async () => { const r = await call("GET_AUDIT_LOG", { empId: id, limit: 200 }); const el = $("#epLog"); if (!el) return; Q.audRows = r.entries || []; el.innerHTML = r.success ? audList(Q.audRows) : esc(r.message); }, 0); }
-  if (t === "info") body = `<div class="grid grid-cols-2 gap-2">${UI.stat("الرقم الوظيفي", esc(e.Emp_ID))}${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}${UI.stat("جهة العمل", esc(e.Department || "—"))}${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}${UI.stat("حالة العضوية", esc(e.Employment_Status || "—"))}${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? "غير مسموح" : "مسموح")}${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}</div>
+  if (t === "info") {
+    const catMeta = EMP_CAT_META[empCatOf(e)] || EMP_CAT_META.emp;
+    body = `<div class="space-y-3">
+      <div class="rounded-2xl bg-slate-50/70 ring-1 ring-slate-200/70 p-3">
+        <div class="text-xs font-bold text-slate-700 mb-2">${ic("briefcase", "inline -mt-0.5 text-brand-600")} البيانات الوظيفية والنقابية</div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          ${UI.stat("الكود الوظيفي", esc(e.Emp_ID))}
+          ${UI.stat("جهة العمل", esc(e.Department || "—"))}
+          ${UI.stat("الوظيفة", esc(e.Job_Title || "—"))}
+          ${UI.stat("الفئة", pill("", catMeta.lbl, catMeta.tone))}
+          ${UI.stat("الحالة النقابية", esc(e.Member_State || "—"))}
+          ${UI.stat("حالة الحساب", empIsActive(e) ? pill("", e.Employment_Status || "ساري", "green") : pill("", e.Employment_Status || "موقوف", "red"))}
+        </div>
+      </div>
+      <div class="rounded-2xl bg-slate-50/70 ring-1 ring-slate-200/70 p-3">
+        <div class="text-xs font-bold text-slate-700 mb-2">${ic("log-in", "inline -mt-0.5 text-brand-600")} بوابة الدخول والتواصل</div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          ${UI.stat("بوابة الدخول", pill("", catMeta.portal, catMeta.tone))}
+          ${UI.stat("الموبايل", e.Mobile ? `<a class="text-brand-700" href="tel:${esc(e.Mobile)}" dir="ltr">${esc(e.Mobile)}</a>` : "—")}
+          ${UI.stat("آخر 4 قومي", e.National_ID_Last4 ? `<span class="font-mono">••••${esc(String(e.National_ID_Last4).padStart(4, "0"))}</span>` : "—")}
+        </div>
+      </div>
+      <div class="rounded-2xl bg-slate-50/70 ring-1 ring-slate-200/70 p-3">
+        <div class="text-xs font-bold text-slate-700 mb-2">${ic("wallet", "inline -mt-0.5 text-brand-600")} الإعدادات المالية والائتمانية</div>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          ${UI.stat("التقسيط", String(e.Installment_Allowed) === "false" ? pill("", "غير مسموح", "red") : pill("", "مسموح", "green"))}
+          ${UI.stat("الحد الائتماني", e.Max_Credit_Limit ? fmt(e.Max_Credit_Limit) : "الافتراضي")}
+          ${UI.stat("آخر تحديث", esc(dt(e.Updated_At) || "—"))}
+        </div>
+      </div>
+    </div>
     ${ownKids.length ? `<div class="mt-3"><div class="label">الأبناء المسجلون</div><div class="flex flex-wrap gap-1.5">${ownKids.map(k => `<span class="pill pill-brand">${esc(k.label)} (${esc(k.grade)})</span>`).join("")}</div></div>` : ""}
     ${rels.length ? `<div class="mt-3"><div class="label">الأقارب الذين حجز لهم</div><div class="flex flex-wrap gap-1.5">${rels.map(r => `<span class="pill pill-blue">${esc(r)}</span>`).join("")}</div></div>` : ""}
     ${e.Mobile ? `<div class="mt-3"><div class="label">رسالة واتساب جاهزة</div><div class="flex flex-wrap gap-1.5">${[["ready", "كتبك جاهزة"], ["inst", "تذكير بالقسط"], ["open", "الحجز مفتوح"], ["free", "رسالة حرة"]].map(x => `<button class="btn btn-soft btn-xs" data-act="waEmp" data-id="${esc(e.Emp_ID)}|${x[0]}">${ic("message-circle")} ${x[1]}</button>`).join("")}<a class="btn btn-ghost btn-xs" href="tel:${esc(e.Mobile)}">${ic("phone")} اتصال</a></div></div>` : ""}
     <p class="text-[11.5px] text-slate-400 mt-3">${ic("info", "inline -mt-0.5")} البيانات الأساسية تُحدَّث تلقائياً كل ليلة من MyNekaba.</p>`;
+  }
   return `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-4">${UI.stat("النسخ المحجوزة", `<span class="text-brand-700">${fmt(sum(items, "Requested_Qty"))}</span>`, "!bg-brand-50/50 ring-1 ring-brand-100")}${UI.stat("إجمالي الفواتير", fmt(billed), "ring-1 ring-slate-100")}${UI.stat("المسدد", `<span class="text-emerald-600">${fmt(paid)}</span>`, "ring-1 ring-slate-100")}${UI.stat(overdue ? "المتبقي (متأخر " + fmt(overdue) + ")" : "المتبقي", `<span class="${rem ? "text-rose-600" : ""}">${fmt(rem)}</span>`, overdue ? "!bg-rose-50 ring-1 ring-rose-200" : "ring-1 ring-slate-100")}</div>
     <div class="scroll-x !mx-0 !px-0 pb-2 mb-3 border-b border-slate-100">${tab("res", "الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${tab("info", "البيانات")}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
 }

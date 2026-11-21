@@ -8,7 +8,7 @@ const OUTSOURCE_COMPANIES = ["Tedata", "IBS", "Proserve", "عقود يومية"]
 
 const ENTRY = {
   emp:       { emoji: "👔", title: "المصرية للاتصالات", sub: "نقابة عامة - نقابة مستقلة", id: "الرقم الوظيفي" },
-  retiree:   { emoji: "🧓", title: "معاش",              sub: "عضو سابق",                 id: "رقم العضوية أو الوظيفي", reg: true, org: "آخر جهة عمل / سنترال", orgReq: true, orgPh: "مثال: سنترال المنصورة" },
+  retiree:   { emoji: "🧓", title: "معاش / استقالة",     sub: "المحالون للمعاش والاستقالة", id: "رقم العضوية أو الوظيفي", reg: true, org: "آخر جهة عمل / سنترال", orgReq: true, orgPh: "مثال: سنترال المنصورة" },
   outsource: { emoji: "🏢", title: "شركات التعهيد",     sub: "العاملون بالتعهيد",         id: "رقم العضوية",            reg: true, org: "الشركة",               orgReq: true },
   guest:     { emoji: "🤝", title: "زائر",              sub: "غير الأعضاء",              id: "رقم العضوية",            reg: true, org: "جهة العمل (اختياري)",  orgReq: false, orgPh: "اختياري" }
 };
