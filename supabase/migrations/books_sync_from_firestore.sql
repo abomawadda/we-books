@@ -23,6 +23,7 @@ begin
     d := jsonb_build_object(
       'Emp_ID', jid, 'Full_Name', coalesce(m->>'name', ''), 'National_ID_Last4', right(nid, 4),
       'Mobile', mob, 'Department', coalesce(m->>'workplace', ''), 'Job_Title', coalesce(m->>'jobTitle', ''),
+      'Member_State', coalesce(nullif(trim(m->>'memberState'), ''), 'نشط'),
       'Employment_Status', st, 'Updated_At', now_txt);
     select id, data into cur from books.records where tbl = '03_Employees' and emp_id = jid limit 1;
     if found then

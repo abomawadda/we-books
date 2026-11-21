@@ -385,12 +385,15 @@ const AuthEngine = {
   /** تصنيف العضو تلقائياً حسب بيانات MyNekaba أو رقم العضوية: emp | retiree | outsource | guest | deceased */
   employeeCategory_: function(emp) {
     const id = Util.str(emp && emp.Emp_ID);
-    const jt = Util.str(emp && emp.Job_Title);
-    const ms = Util.str(emp && emp.Member_State);
-    if (/^6\d{6}$/.test(id) || jt === "شركات التعهيد") return "outsource";
-    if (/^7\d{6}$/.test(id) || jt === "زائر") return "guest";
-    if (/^8\d{6}$/.test(id) || jt === "معاش" || ms === "معاش" || ms === "استقالة") return "retiree";
-    if (ms === "وفاة") return "deceased";
+    const jt = normArText(emp && emp.Job_Title);
+    const ms = normArText(emp && emp.Member_State);
+    if (/^6\d{6}$/.test(id) || jt === normArText("شركات التعهيد")) return "outsource";
+    if (/^7\d{6}$/.test(id) || jt === normArText("زائر")) return "guest";
+    if (/^8\d{6}$/.test(id)
+      || jt === "معاش" || jt.indexOf("معاش") !== -1
+      || ms === "معاش" || ms.indexOf("معاش") !== -1
+      || ms === "استقاله" || ms.indexOf("استقال") !== -1 || ms.indexOf("مستقيل") !== -1) return "retiree";
+    if (ms === "وفاه" || ms.indexOf("وفا") !== -1) return "deceased";
     return "emp";
   },
 
@@ -417,7 +420,7 @@ const AuthEngine = {
     }
     const reqCat = Util.str(categoryInput);
     if (reqCat && reqCat !== actualCat) {
-      const CAT_LABEL = { emp: "المصرية للاتصالات", retiree: "معاش", outsource: "شركات التعهيد", guest: "زائر" };
+      const CAT_LABEL = { emp: "المصرية للاتصالات", retiree: "معاش / استقالة", outsource: "شركات التعهيد", guest: "زائر" };
       return {
         success: false,
         wrongCategory: actualCat,
