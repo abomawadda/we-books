@@ -748,7 +748,7 @@ function kidsHomeCard() {
           <li class="flex gap-1.5">${ic("check", "text-emerald-600 mt-0.5")} المواد الأساسية والأشهر أولاً لصفه ونوع مدرسته</li>
           <li class="flex gap-1.5">${ic("check", "text-emerald-600 mt-0.5")} ننقلهم للصف الجديد تلقائياً كل سنة</li></ul>
         <div class="flex flex-wrap items-center gap-x-4 gap-y-2 mt-4"><button class="btn btn-primary" data-act="kidsEdit">${ic("plus")} أضف أبنائي — أقل من دقيقة</button>
-          <a href="#/e/books" class="text-[13px] font-semibold text-brand-800 underline underline-offset-4">أو احجز مباشرة بدون تسجيل ←</a></div></div></section>`;
+          <a href="#/e/books" class="text-[13px] font-semibold text-brand-800 underline underline-offset-4">${Emp.open() ? "أو احجز مباشرة بدون تسجيل ←" : "أو تصفّح الكتالوج والأسعار ←"}</a></div></div></section>`;
   return `${promoted.length ? `<section class="mt-4 lg:mt-6 rounded-3xl bg-emerald-50 ring-1 ring-emerald-200 p-4 flex items-center gap-3">
       <span class="text-[30px]">🎓</span><div class="flex-1 min-w-0"><b class="block text-emerald-900 text-[14.5px]">سنة دراسية جديدة! نقلنا أبناءك للصف التالي</b>
       <span class="block text-[12.5px] text-emerald-800/80 mt-0.5">${all.map((k, i) => esc(kidName(k, i)) + " ← " + esc(k.graduated ? "تخرّج 🎉" : gradeShort(k.grade))).join(" · ")}</span></div>
@@ -795,21 +795,51 @@ function gradePicker() {
   const go = gradeOrder(), grades = Object.keys(cnt).sort((a, b) => (go[a] ?? 99) - (go[b] ?? 99) || a.localeCompare(b, "ar"));
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
-  const body = `${true ? "" : ks.length ? `<section class="mb-5"><h2 class="font-display font-bold text-slate-800 mb-2 flex items-center gap-2">${ic("users", "text-brand-600")} أبنائي${ks.some(k => k.rel) ? " وأقاربي" : ""}</h2>
-      <div class="grid grid-cols-2 gap-2">${ks.map((k, i) => { const c = kidCartCount(k); return `<button class="card p-2.5 min-w-0 text-right flex items-center gap-2 active:scale-[.98] transition" data-act="pickKid" data-id="${i}"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-[22px] shrink-0">${kidEmoji(k)}</span><span class="flex-1 min-w-0"><span class="block font-bold text-[15px] text-slate-900 truncate">${esc(kidName(k, i))}</span><span class="block text-[11.5px] text-slate-500 leading-snug">${k.rel ? `<b class="text-sky-700">${esc(k.rel)}</b> · ` : ""}${esc(gradeShort(k.grade))}${k.type ? " · " + esc(k.type) : ""}${k.track ? " · " + esc(k.track) : ""}</span><span class="block text-[11px] font-bold mt-0.5 ${c ? "text-emerald-600" : "text-brand-600"}">${c ? c + " في السلة" : kidAvail(k) + " كتاب"}</span></span></button>`; }).join("")}</div>
-      <div class="flex gap-2 mt-2"><button class="btn btn-ghost btn-sm" data-act="kidsEdit">${ic("pencil")} تعديل</button>${relOn() ? `<button class="btn btn-ghost btn-sm text-sky-700" data-act="addRel">${ic("users")} إضافة قريب</button>` : ""}</div></section>`
-    : `<button class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 ring-1 ring-gold-200 active:scale-[.99] transition" style="background:linear-gradient(135deg,#fff8e6,#fde9b0)" data-act="kidsEdit"><span class="text-[30px]">👦👧</span><span class="flex-1"><b class="block text-brand-950">احفظ أبناءك وأقاربك مرة واحدة <span class="text-[11px] font-semibold text-brand-700">(اختياري)</span></b><span class="block text-[12.5px] text-brand-900/70">ونجهّز لكل واحد كتبه بضغطة — أو اختر الصف مباشرة تحت 👇</span></span><span class="btn btn-primary btn-sm">${ic("plus")} أضف</span></button>`}
-    ${Emp.open() ? (ks.length ? `<div class="flex items-center gap-2 my-3"><span class="h-px flex-1 bg-slate-200"></span><span class="text-[12px] font-bold text-slate-500">أو احجز لصف تاني</span><span class="h-px flex-1 bg-slate-200"></span></div>` : "") : `<h2 class="font-display font-bold text-slate-800 mb-1 flex items-center gap-2">${ic("graduation-cap", "text-brand-600")} ${Emp.open() ? (ks.length ? "أو اختر صفاً آخر" : "اختر صف ابنك") : "اختار الصف"}</h2>
-    <p class="text-[13px] text-slate-500 mb-4">نعرض لك كتب الصف مرتبة: المواد الأساسية أولاً ثم الأشهر.</p>`}
-    ${Emp.open() ? `<button type="button" class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 text-white shadow-soft active:scale-[.99] transition" style="background:linear-gradient(135deg,#552c83,#2e1650)" data-act="gbOpen"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[24px] shrink-0">📚</span><span class="flex-1"><b class="block text-[15px]">احجز بالصف الدراسي خطوة بخطوة</b><span class="block text-[12px] text-brand-200">المرحلة ← الصف ← نوع المدرسة — ${gTxt("وتقدر تضيف", "وتقدري تضيفي")} أكتر من صف</span></span>${ic("chevron-left")}</button>` : ""}
-    ${Emp.open() ? "" : stages.map(s => `<section class="mb-5"><div class="text-[13px] font-bold text-brand-700 mb-2">${esc(s)}</div>
-      <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${grades.filter(g => guess(g) === s).map(g => { return `<div class="relative"><button class="w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 bg-white ring-slate-200 hover:ring-brand-300" data-act="fGrade" data-id="${esc(g)}">
-        <span class="block font-display font-bold text-[16px] text-slate-900 leading-tight">${esc(gradeShort(g))}</span><span class="block text-[11px] text-slate-500 mt-1 num">${cnt[g]} كتاب</span></button>
-</div>`; }).join("")}</div></section>`).join("")}
-`;
-  // الحجز مقفول: الصفوف للتصفح والأسعار فقط — مطوية عشان ما تبانش كأن الحجز شغال
-  return Emp.open() ? body : `<details class="card mb-4 overflow-hidden"><summary class="list-none cursor-pointer p-4 flex items-center gap-3"><span class="w-10 h-10 rounded-xl bg-slate-100 text-slate-500 flex items-center justify-center">${ic("library")}</span>
-    <span class="flex-1"><b class="block text-[14px] text-slate-800">تصفّح الكتب والأسعار</b><span class="block text-[12px] text-slate-500">للعلم بس — الحجز هيتفتح مع المرحلة الجديدة</span></span>${ic("chevron-down", "text-slate-400")}</summary><div class="px-4 pb-4">${body}</div></details>`;
+  const selGrades = Array.isArray(Emp.browseGrades) ? Emp.browseGrades : [];
+  const bMode = Emp.browseMode || "manual";
+  const modeCard = (id, emoji, ttl, sub) => `<button type="button" class="w-full text-right rounded-2xl px-3.5 py-2.5 ring-1 transition active:scale-[.99] flex items-center gap-3 ${bMode === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200 hover:ring-brand-300"}" data-act="browseMode" data-id="${id}" aria-pressed="${bMode === id}">
+    <span class="w-10 h-10 rounded-xl flex items-center justify-center text-[22px] shrink-0 ${bMode === id ? "bg-white/15" : "bg-slate-50"}">${emoji}</span>
+    <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14px]">${ttl}</b><span class="block text-[11.5px] mt-0.5 ${bMode === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></span>
+    <span class="shrink-0 ${bMode === id ? "text-gold-300" : "text-slate-300"}">${ic(bMode === id ? "circle-check" : "chevron-left")}</span></button>`;
+  const totalSelBooks = selGrades.reduce((s, g) => s + (cnt[g] || 0), 0);
+  const closedBrowseBody = `<div class="space-y-4 pt-1">
+    <div>
+      <div class="text-[12.5px] font-bold text-slate-700 mb-2">١. اختر طريقة التصفّح والمعاينة</div>
+      <div class="grid gap-2">${modeCard("manual", "🔍", "أختار بنفسي", "تصفّح كل الكتب مادة مادة — كتاب بكتاب")}${modeCard("bag", "🎒", "تجهيز الشنطة", "معاينة كتاب لكل مادة وحساب إجمالي الشنطة والتوفير")}${modeCard("series", "📚", "تصفّح بالسلسلة", "كتب كل ناشر مجمّعة (الأضواء، سلاح التلميذ، المعاصر...)")}</div>
+    </div>
+    <div>
+      <div class="flex items-center justify-between gap-2 mb-2">
+        <div class="text-[12.5px] font-bold text-slate-700">٢. اختر صفاً أو أكثر من مرحلة أو عدة مراحل</div>
+        ${selGrades.length ? `<button type="button" class="text-[11.5px] font-bold text-rose-600 hover:underline" data-act="clearBrowseGrades">مسح التحديد (${selGrades.length})</button>` : ""}
+      </div>
+      ${stages.map(s => {
+        const sGrades = grades.filter(g => guess(g) === s);
+        const allPicked = sGrades.length && sGrades.every(g => selGrades.includes(g));
+        return `<section class="mb-4 last:mb-0">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <span class="text-[13px] font-bold text-brand-700">${esc(s)}</span>
+            <button type="button" class="text-[11px] font-semibold px-2 py-0.5 rounded-full ${allPicked ? "bg-brand-100 text-brand-800" : "bg-slate-100 text-slate-600 hover:bg-brand-50"}" data-act="toggleBrowseStage" data-id="${esc(s)}">${allPicked ? "إلغاء المرحلة ✓" : "تحديد كل المرحلة"}</button>
+          </div>
+          <div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2">${sGrades.map(g => {
+            const on = selGrades.includes(g);
+            return `<button type="button" class="relative w-full rounded-2xl p-3 text-center active:scale-95 transition shadow-soft ring-1 ${on ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-900 ring-slate-200 hover:ring-brand-300"}" data-act="toggleBrowseGrade" data-id="${esc(g)}" aria-pressed="${on}">
+              ${on ? `<span class="absolute top-1.5 left-1.5 w-4 h-4 rounded-full bg-gold-400 text-brand-950 flex items-center justify-center text-[10px]">✓</span>` : ""}
+              <span class="block font-display font-bold text-[15px] leading-tight">${esc(gradeShort(g))}</span>
+              <span class="block text-[11px] mt-1 num ${on ? "text-brand-100" : "text-slate-500"}">${cnt[g]} كتاب</span>
+            </button>`;
+          }).join("")}</div>
+        </section>`;
+      }).join("")}
+    </div>
+    <div class="pt-1">
+      <button type="button" class="btn btn-primary w-full !h-12" data-act="openBrowseGrades" ${selGrades.length ? "" : "disabled"}>${ic("library")} ${selGrades.length ? `عرض ${bMode === "bag" ? "الشنطة" : bMode === "series" ? "السلاسل" : "الكتب"} (${selGrades.length} ${selGrades.length === 1 ? "صف" : "صفوف"} · ${fmt(totalSelBooks)} كتاب)` : "اختر صفاً واحداً على الأقل للعرض"}</button>
+    </div>
+  </div>`;
+  const body = `${Emp.open() ? (ks.length ? `<div class="flex items-center gap-2 my-3"><span class="h-px flex-1 bg-slate-200"></span><span class="text-[12px] font-bold text-slate-500">أو احجز لصف تاني</span><span class="h-px flex-1 bg-slate-200"></span></div>` : "") : ""}
+    ${Emp.open() ? `<button type="button" class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 text-white shadow-soft active:scale-[.99] transition" style="background:linear-gradient(135deg,#552c83,#2e1650)" data-act="gbOpen"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[24px] shrink-0">📚</span><span class="flex-1"><b class="block text-[15px]">احجز بالصف الدراسي خطوة بخطوة</b><span class="block text-[12px] text-brand-200">المرحلة ← الصف ← نوع المدرسة — ${gTxt("وتقدر تضيف", "وتقدري تضيفي")} أكتر من صف</span></span>${ic("chevron-left")}</button>` : closedBrowseBody}`;
+  // الحجز مقفول: الصفوف للتصفح والأسعار فقط — مطوية (وتُفتح تلقائياً إذا اختار المستخدم طريقة أو صفاً)
+  return Emp.open() ? body : `<details class="card mb-4 overflow-hidden" ${Emp._browseOpen ? "open" : ""}><summary class="list-none cursor-pointer p-4 flex items-center gap-3" onclick="Emp._browseOpen=!Emp._browseOpen"><span class="w-10 h-10 rounded-xl bg-brand-50 text-brand-700 flex items-center justify-center">${ic("library")}</span>
+    <span class="flex-1"><b class="block text-[14px] text-slate-800">تصفّح الكتالوج والأسعار</b><span class="block text-[12px] text-slate-500">بنفس طرق الحجز (بنفسي · الشنطة · السلسلة) ولأكثر من مرحلة</span></span>${ic("chevron-down", "text-slate-400")}</summary><div class="px-4 pb-4">${body}</div></details>`;
 }
 // ============================================================ صفحة «احجز» بين المرحلتين (الحجز مقفول)
 function betweenView() {
@@ -898,18 +928,21 @@ function bagHTML() {
 }
 const bagRender = () => { if (BAG.inline && $("#wzBag")) return bagRenderInline(); if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.filter(r => r.on).length, b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
 on("bagOpen", () => { BAG.inline = false; BAG._for = "";
-  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
-  if (!Emp.filter.grade) return toast("اختر الصف أولاً", "info");
+  if (!Emp.filter.grade && !(Emp.browseGrades && Emp.browseGrades.length)) return toast("اختر الصف أولاً", "info");
   BAG.rows = bagBuild();
-  if (!BAG.rows.length) return toast("لا توجد كتب مسعّرة لهذا الصف بعد", "info");
+  if (!BAG.rows.length) return toast("لا توجد كتب مسعّرة لهذا الاختيار بعد", "info");
+  const open = Emp.open();
   const ki = myKids().findIndex(k => k.grade === Emp.filter.grade && (k.type || "") === (Emp.filter.type || ""));
-  BAG.m = UI.open(bagHTML(), { title: "🎒 شنطة " + (ki >= 0 ? kidName(myKids()[ki], ki) : gradeShort(Emp.filter.grade)), sub: gradeTitle(Emp.filter.grade) + " · " + kidTypeTxt(Emp.filter.type),
-    footer: `<button class="btn btn-primary btn-lg w-full" data-act="bagAdd">${ic("shopping-cart")} أضف للسلة</button>` });
+  const lbl = Emp.browseGrades && Emp.browseGrades.length > 1 ? Emp.browseGrades.map(gradeShort).join(" + ") : (ki >= 0 ? kidName(myKids()[ki], ki) : gradeShort(Emp.filter.grade));
+  BAG.m = UI.open(bagHTML(), { title: "🎒 شنطة " + lbl, sub: (Emp.browseGrades && Emp.browseGrades.length > 1 ? `${Emp.browseGrades.length} صفوف مختارة` : gradeTitle(Emp.filter.grade)) + " · " + kidTypeTxt(Emp.filter.type),
+    footer: open ? `<button class="btn btn-primary btn-lg w-full" data-act="bagAdd">${ic("shopping-cart")} أضف للسلة</button>`
+      : `<div class="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs text-amber-900 text-center font-semibold">${ic("info", "inline -mt-0.5 text-amber-600")} معاينة وتجهيز فقط — الحجز مغلق حالياً وسيتاح الإضافة للسلة فور فتح المرحلة</div>` });
   bagRender();
 });
 on("bagQty", v => { const [i, d] = String(v).split("|"), r = BAG.rows[+i]; r.qty = Math.min(10, Math.max(1, (r.qty || 1) + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
 on("bagPick", v => { const [i, id] = String(v).split("|"), r = BAG.rows[+i]; if (r.on && r.pick === id) r.on = false; else { r.pick = id; r.on = true; } bagRender(); });
 on("bagAdd", () => {
+  if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
   const sel = BAG.rows.filter(r => r.on); let added = 0;
   sel.forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k] && r.had) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (APP.cart[k] !== (r.qty || 1)) { added += (r.qty || 1) - (APP.cart[k] || 0) > 0 ? (r.qty || 1) - (APP.cart[k] || 0) : 0; APP.cart[k] = r.qty || 1; } });
   Emp.dirty = true; if (BAG.m) BAG.m.close(); BAG.m = null;
@@ -917,16 +950,17 @@ on("bagAdd", () => {
   toast(added ? `🎒 الشنطة جاهزة! اتضاف ${booksWord(added)} للسلة` : "الشنطة في السلة بالفعل ✅", "success");
 });
 
-/** باقات سريعة: كل كتب ناشر واحد للصف بضغطة */
+/** باقات سريعة: كل كتب ناشر واحد للصف بضغطة (تدعم المعاينة عند إغلاق الحجز) */
 function bundles(list) {
   const by = {}; list.forEach(b => (by[b.Publisher] = by[b.Publisher] || []).push(b));
-  const pr = pubRank(), pubs = Object.keys(by).filter(p => by[p].length >= 2 && p !== "-").sort((a, b) => by[b].length - by[a].length || (pr[b] || 0) - (pr[a] || 0)).slice(0, 8);
-  if (!pubs.length || !Emp.open()) return "";
-  return `<section class="mb-4"><div class="flex items-center justify-between mb-2"><h3 class="font-bold text-slate-800 text-[14px] flex items-center gap-1.5">${ic("sparkles", "text-gold-500")} حجز سريع بالسلسلة</h3><span class="text-[11.5px] text-slate-400">نسخة من كل كتاب</span></div>
-    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">${pubs.map(p => { const sum = by[p].reduce((s, b) => s + n(b.Emp_Selling_Price), 0), subs = uniq(by[p].map(b => b.Subject)).slice(0, 4);
-      return `<button class="min-w-0 w-full text-right rounded-2xl p-3 bg-gradient-to-bl from-brand-700 to-brand-900 text-white active:scale-[.98] transition" data-act="addBundle" data-id="${esc(p)}">
+  const pr = pubRank(), pubs = Object.keys(by).filter(p => by[p].length >= 2 && p !== "-").sort((a, b) => by[b].length - by[a].length || (pr[b] || 0) - (pr[a] || 0)).slice(0, 12);
+  if (!pubs.length) return "";
+  const open = Emp.open();
+  return `<section class="mb-4"><div class="flex items-center justify-between mb-2"><h3 class="font-bold text-slate-800 text-[14px] flex items-center gap-1.5">${ic("sparkles", "text-gold-500")} ${open ? "حجز سريع بالسلسلة" : "تصفّح بالسلسلة والناشر"}</h3><span class="text-[11.5px] text-slate-400">${open ? "نسخة من كل كتاب" : "اضغط لمعاينة كتب السلسلة"}</span></div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">${pubs.map(p => { const sum = by[p].reduce((s, b) => s + n(b.Emp_Selling_Price), 0), cov = by[p].reduce((s, b) => s + n(b.Cover_Price), 0), subs = uniq(by[p].map(b => b.Subject)).slice(0, 4);
+      return `<button class="min-w-0 w-full text-right rounded-2xl p-3 hero text-white active:scale-[.98] transition" data-act="${open ? "addBundle" : "previewBundle"}" data-id="${esc(p)}">
         <span class="flex items-center gap-2">${pubLogo(p) ? `<span class="w-8 h-8 rounded-lg bg-white p-0.5 shrink-0 flex items-center justify-center"><img src="${esc(pubLogo(p))}" alt="" class="max-w-full max-h-full object-contain"></span>` : ""}<span class="block font-bold text-[15px]">${esc(p)}</span></span><span class="block text-[11.5px] text-brand-200 truncate mt-0.5">${esc(subs.join(" · "))}</span>
-        <span class="flex items-center justify-between mt-2"><span class="text-[12px] text-brand-100 num">${by[p].length} كتب · ${fmt(sum)} ج.م</span><span class="w-7 h-7 rounded-lg bg-gold-400 text-brand-950 flex items-center justify-center">${ic("plus")}</span></span></button>`; }).join("")}</div></section>`;
+        <span class="flex items-center justify-between mt-2"><span class="text-[12px] text-brand-100 num">${by[p].length} كتب · ${fmt(sum)} ج.م${cov > sum ? ` (وفّر ${fmt(cov - sum)})` : ""}</span><span class="w-7 h-7 rounded-lg bg-gold-400 text-brand-950 flex items-center justify-center">${ic(open ? "plus" : "eye")}</span></span></button>`; }).join("")}</div></section>`;
 }
 /** شريط سياق الحجز (لاصق أعلى الصفحة): يوضح للموظف دائمًا لمن يحجز الآن (الاسم + المرحلة/الصف) ويتيح التبديل بين الأبناء */
 /** شارة نوع المدرسة بلون مميز (أعلى الصف) حتى يعرف ولي الأمر بالضبط لمين وإيه بيحجز */
@@ -984,21 +1018,62 @@ function ctxBar() {
   return `<div id="ctxStick" class="hero text-white rounded-2xl px-3 py-2.5 mb-2 shadow-soft"><div class="flex items-center gap-2.5">${cur ? who : whoG}${Emp.wzManual ? `<button type="button" class="text-[12px] font-bold px-3 py-1.5 rounded-xl bg-gold-400 text-brand-950 shrink-0" data-act="${Emp.wzManual === "review" ? "wzBackReview" : "wzBack"}">${ic("check", "inline !w-3.5 !h-3.5")} ${Emp.wzManual === "review" ? "المراجعة" : "التالي"}</button>` : ""}<button type="button" class="${Emp.wzManual ? "hidden " : ""}text-[11.5px] font-semibold px-2.5 py-1.5 rounded-xl bg-white/15 shrink-0" data-act="famTop">${myKids().length > 1 ? "👨‍👩‍👧 ابن تاني" : "تغيير"}</button></div></div>`;
 }
 function gradeList() {
-  const f = Emp.filter, list = APP.emp.books.filter(b => b.Grade === f.grade && typeOk(b, f.type));
+  const f = Emp.filter;
+  const multi = !Emp.open() && Array.isArray(Emp.browseGrades) && Emp.browseGrades.length > 0;
+  const list = APP.emp.books.filter(b => (multi ? Emp.browseGrades.includes(b.Grade) : b.Grade === f.grade) && typeOk(b, f.type));
   return { list, sorted: sortBooks(list) };
 }
-/** طرق الحجز: الشنطة · السلسلة · بنفسي — ثم قائمة الكتب بالمادة */
+/** طرق الحجز/التصفّح: الشنطة · السلسلة · بنفسي — تعمل في وضع الحجز وفي وضع تصفّح الكتالوج */
 function bookModeTabs() {
-  if (!Emp.open()) return "";
-  const m = Emp.bookMode || "";
+  const open = Emp.open();
+  const m = Emp.bookMode || (open ? "" : "manual");
   const t = (id, e, ttl, sub, act) => `<button type="button" class="w-full text-right rounded-2xl px-3.5 py-3 ring-1 transition active:scale-[.99] flex items-center gap-3 ${m === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200"}" data-act="${act}" data-id="${id}" aria-pressed="${m === id}">
     <span class="w-11 h-11 rounded-xl flex items-center justify-center text-[24px] shrink-0 ${m === id ? "bg-white/15" : "bg-slate-50"}">${e}</span>
     <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14.5px]">${ttl}</b><span class="block text-[12px] mt-0.5 ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></span>
     <span class="shrink-0 ${m === id ? "text-gold-300" : "text-slate-300"}">${ic(m === id ? "circle-check" : "chevron-left")}</span></button>`;
-  return `<section class="mb-4"><div class="text-[13px] font-bold text-slate-700 mb-2">${gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟")}</div>
-    <div class="grid gap-2">${t("manual", "🔍", "أختار بنفسي", "كل الكتب مادة مادة — كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", "كل مادة وكتبها — اختار لكل مادة بسرعة", "bagOpen")}${t("series", "📚", "حجز بالسلسلة", "كتب ناشر واحد بضغطة", "bookMode")}</div></section>`;
+  return `<section class="mb-4"><div class="text-[13px] font-bold text-slate-700 mb-2">${open ? gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟") : "طريقة التصفّح والمعاينة"}</div>
+    <div class="grid gap-2">${t("manual", "🔍", "أختار بنفسي", "كل الكتب مادة مادة — كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", open ? "كل مادة وكتبها — اختار لكل مادة بسرعة" : "معاينة كتاب لكل مادة وحساب إجمالي الشنطة", "bagOpen")}${t("series", "📚", open ? "حجز بالسلسلة" : "تصفّح بالسلسلة", open ? "كتب ناشر واحد بضغطة" : "كتب كل ناشر مجمّعة مع السعر والتوفير", "bookMode")}</div></section>`;
 }
-on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? "" : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
+on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? (Emp.open() ? "" : "manual") : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
+on("browseMode", v => { Emp.browseMode = v || "manual"; Emp._browseOpen = true; Router.render(); });
+on("toggleBrowseGrade", g => {
+  Emp.browseGrades = Array.isArray(Emp.browseGrades) ? Emp.browseGrades.slice() : [];
+  const i = Emp.browseGrades.indexOf(g);
+  if (i >= 0) Emp.browseGrades.splice(i, 1); else Emp.browseGrades.push(g);
+  Emp._browseOpen = true; Router.render();
+});
+on("toggleBrowseStage", stage => {
+  const r = APP.emp, cat = r.catalog || {}, stOf = {}; (cat.grades || []).forEach(g => stOf[g.label] = g.stage);
+  const guess = g => stOf[g] || (/ابتدائي/.test(g) ? "المرحلة الابتدائية" : /إعدادي/.test(g) ? "المرحلة الإعدادية" : /ثانوي/.test(g) ? "المرحلة الثانوية" : /كي جي|روضة|تأسيس|KG/i.test(g) ? "رياض الأطفال" : "أخرى");
+  const sGrades = uniq(r.books.filter(b => b.Grade && typeOk(b, Emp.filter.type) && guess(b.Grade) === stage).map(b => b.Grade));
+  Emp.browseGrades = Array.isArray(Emp.browseGrades) ? Emp.browseGrades.slice() : [];
+  const allOn = sGrades.length && sGrades.every(g => Emp.browseGrades.includes(g));
+  if (allOn) Emp.browseGrades = Emp.browseGrades.filter(g => !sGrades.includes(g));
+  else sGrades.forEach(g => { if (!Emp.browseGrades.includes(g)) Emp.browseGrades.push(g); });
+  Emp._browseOpen = true; Router.render();
+});
+on("clearBrowseGrades", () => { Emp.browseGrades = []; Emp._browseOpen = true; Router.render(); });
+on("openBrowseGrades", () => {
+  const gs = Array.isArray(Emp.browseGrades) ? Emp.browseGrades : [];
+  if (!gs.length) return toast("اختر صفاً واحداً على الأقل", "info");
+  Emp.filter.grade = gs[0];
+  Emp.bookMode = Emp.browseMode === "series" ? "series" : "manual";
+  Router.render();
+  if (Emp.browseMode === "bag") setTimeout(() => ACTIONS.bagOpen(), 40);
+});
+on("backBrowsePicker", () => { Emp.filter.grade = ""; Emp._browseOpen = true; Router.render(); });
+on("previewBundle", pub => {
+  const { list } = gradeList(), bs = list.filter(b => b.Publisher === pub);
+  if (!bs.length) return;
+  const sumP = bs.reduce((s, b) => s + n(b.Emp_Selling_Price), 0), covP = bs.reduce((s, b) => s + n(b.Cover_Price), 0);
+  UI.open(`<div class="space-y-2.5">
+    <div class="rounded-2xl bg-brand-50 ring-1 ring-brand-200 p-3 flex items-center justify-between text-xs">
+      <span class="font-bold text-brand-900">${booksWord(bs.length)} · إجمالي <span class="num">${fmt(sumP)}</span> ج.م</span>
+      ${covP > sumP ? `<span class="font-bold text-emerald-700 num">توفير ${fmt(covP - sumP)} ج.م</span>` : ""}
+    </div>
+    <ul class="divide-y divide-slate-100 rounded-2xl ring-1 ring-slate-200 px-3">${bs.map(b => `<li class="py-2.5 flex items-center gap-2 text-[13px]"><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(b.Book_Name)}</b><span class="text-[11.5px] text-slate-500">${esc(b.Subject || "")} · ${esc(gradeShort(b.Grade || ""))}</span></div><span class="num font-bold text-brand-800 whitespace-nowrap">${fmt(b.Emp_Selling_Price)} ج.م</span></li>`).join("")}</ul>
+  </div>`, { title: `📚 سلسلة ${pub}`, sub: "معاينة الكتب والأسعار (الحجز مغلق حالياً)" });
+});
 /** فاصل السلة بعد قائمة الكتب */
 function cartDivider() {
   const t = Emp.totals(); if (!t.count || !Emp.open()) return "";
@@ -1021,11 +1096,16 @@ function renderBookGrid() {
     el.innerHTML = gradePicker();
   } else {
     const { list, sorted } = gradeList(); count = list.length;
-    const groups = []; sorted.forEach(b => { const key = b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, items: [] }); g.items.push(b); });
-    el.innerHTML = !list.length ? Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? (curKid() ? "مفيش كتب مسجّلة لمدارس " + f.type + " في الصف ده لسه." : "جرّب «كل المدارس».") : "", f.type ? `<button class="btn btn-outline mt-4" data-act="fTypeAll">${ic("layout-grid")} اعرض كتب كل المدارس</button>` : "")
-      : bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? `<div id="cartDiv">${cartDivider()}</div>` : Emp.open() && Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.k === "__p" ? "#f59e0b" : toneOf(g.k)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
-          <span class="w-7 h-7 rounded-full flex items-center justify-center text-white shrink-0 shadow-soft" style="background:var(--tc)">${ic("book-open", "!w-3.5 !h-3.5")}</span><h3 class="font-display font-bold text-slate-900 text-[14.5px] flex-1 min-w-0 truncate">${g.k === "__p" ? "قريباً (جاري التسعير)" : esc(g.k)}<span class="font-sans font-semibold text-[12px] text-slate-500"> — ${esc(gradeShort(Emp.filter.grade || ""))}</span></h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
-          ${g.k !== "__p" && subjRank(g.k) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
+    const multi = !Emp.open() && Array.isArray(Emp.browseGrades) && Emp.browseGrades.length > 1;
+    const multiBar = !Emp.open() ? `<div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200 px-3 py-2 mb-3 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex flex-wrap items-center gap-1.5">${(multi ? Emp.browseGrades : [f.grade]).map(g => `<span class="pill pill-brand !text-[11px]">${esc(gradeShort(g))}</span>`).join("")}</div>
+      <button type="button" class="text-[12px] font-bold text-brand-700 hover:underline" data-act="backBrowsePicker">${ic("sliders-horizontal", "inline !w-3.5 !h-3.5")} تغيير المراحل / الصفوف</button>
+    </div>` : "";
+    const groups = []; sorted.forEach(b => { const key = multi ? `${b.Grade} · ${b.Subject}` : b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, sub: b.Subject, grade: b.Grade, items: [] }); g.items.push(b); });
+    el.innerHTML = !list.length ? multiBar + Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? (curKid() ? "مفيش كتب مسجّلة لمدارس " + f.type + " في الصف ده لسه." : "جرّب «كل المدارس».") : "", f.type ? `<button class="btn btn-outline mt-4" data-act="fTypeAll">${ic("layout-grid")} اعرض كتب كل المدارس</button>` : "")
+      : multiBar + bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? `<div id="cartDiv">${cartDivider()}</div>` : Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.sub === "__p" ? "#f59e0b" : toneOf(g.sub)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
+          <span class="w-7 h-7 rounded-full flex items-center justify-center text-white shrink-0 shadow-soft" style="background:var(--tc)">${ic("book-open", "!w-3.5 !h-3.5")}</span><h3 class="font-display font-bold text-slate-900 text-[14.5px] flex-1 min-w-0 truncate">${g.sub === "__p" ? "قريباً (جاري التسعير)" : esc(g.sub)}<span class="font-sans font-semibold text-[12px] text-slate-500"> — ${esc(gradeShort(g.grade || Emp.filter.grade || ""))}</span></h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
+          ${g.sub !== "__p" && subjRank(g.sub) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
         <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="nextKid">${nextKidCard()}</div><div id="cartDiv">${cartDivider()}</div>`);
   }
   const bc = $("#bookCount"); if (bc) bc.textContent = count ? count + " كتاب" : "";
