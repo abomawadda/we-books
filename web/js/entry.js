@@ -145,11 +145,11 @@ Shell.renderLogin = function () {
 
   f.insertAdjacentHTML("beforebegin", headerHtml);
   { const e1 = $("#lgEmp"), e2 = $("#lgNat"), e3 = $("#lgMob");
-    if (e1) { e1.placeholder = t === "emp" ? "مثال: 512345" : "رقم العضوية (7 أرقام)"; e1.setAttribute("inputmode", "numeric"); }
+    if (e1) { e1.placeholder = t === "emp" ? "مثال: 512345" : t === "retiree" ? "الرقم الوظيفي أو رقم العضوية" : "رقم العضوية (7 أرقام)"; e1.setAttribute("inputmode", "numeric"); }
     if (e2) e2.placeholder = "••••";
     const hint = (el, txt) => { const box = el && el.closest("div.input-icon"); if (box && !box.nextElementSibling?.classList?.contains("lg-hint")) box.insertAdjacentHTML("afterend", `<p class="lg-hint text-[11px] text-brand-200/80 mt-1">${txt}</p>`); };
     hint(e2, "آخر 4 أرقام من يمين الرقم القومي");
-    hint(e3, t === "emp" ? "الموبايل المسجّل في بيانات النقابة" : "الموبايل اللي سجّلت بيه"); }
+    hint(e3, t === "emp" ? "الموبايل المسجّل في بيانات النقابة" : t === "retiree" ? "الموبايل المسجّل في النقابة أو عند التسجيل" : "الموبايل اللي سجّلت بيه"); }
   setTimeout(() => {
     try {
       const rem = JSON.parse(localStorage.getItem("wb_remember") || "null");
@@ -186,7 +186,19 @@ async function submitInlineRegister(k) {
   if (c.orgReq && !org) return toast(k === "outsource" ? "اختر الشركة من القائمة" : "اكتب " + (c.org || "جهة العمل"), "warning");
 
   const r = await call("REGISTER_MEMBER", { category: k, name, nationalId, mobile, org }, { block: true });
-  if (!r.success) return toast(r.message, r.exists ? "warning" : "danger");
+  if (!r.success) {
+    if (r.exists && r.portalCategory) {
+      Shell.loginTab = r.portalCategory; Shell.regMode = "login"; Shell.renderLogin();
+      setTimeout(() => {
+        const e1 = $("#lgEmp"), e2 = $("#lgNat"), e3 = $("#lgMob");
+        if (e1 && r.empId) e1.value = r.empId;
+        if (e2) e2.value = nationalId.slice(-4);
+        if (e3) e3.value = mobile;
+      }, 30);
+      return toast(r.message + " (تم تحويلك تلقائياً للدخول — اضغط دخول الآن)", "warning", 7000);
+    }
+    return toast(r.message, r.exists ? "warning" : "danger");
+  }
 
   Shell.regMode = "login";
   await Shell.enter(r);
