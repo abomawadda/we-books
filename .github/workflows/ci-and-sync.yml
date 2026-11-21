@@ -44,22 +44,17 @@ jobs:
           fi
           URL="${SUPABASE_URL%/}"
           if [[ "$SUPABASE_SERVICE_ROLE_KEY" == sb_secret_* ]]; then
-            curl -fsS -X PATCH "${URL}/rest/v1/config?key=eq.logic_commit" \
+            curl -fsS -X POST "${URL}/rest/v1/rpc/sync_books_logic_commit" \
               -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Content-Type: application/json" \
-              -H "Accept-Profile: books" \
-              -H "Content-Profile: books" \
-              -H "Prefer: return=minimal" \
-              -d "{\"value\":\"${COMMIT_SHA}\"}"
+              -d "{\"new_commit\":\"${COMMIT_SHA}\"}"
           else
-            curl -fsS -X PATCH "${URL}/rest/v1/config?key=eq.logic_commit" \
+            curl -fsS -X POST "${URL}/rest/v1/rpc/sync_books_logic_commit" \
               -H "apikey: ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Authorization: Bearer ${SUPABASE_SERVICE_ROLE_KEY}" \
               -H "Content-Type: application/json" \
-              -H "Accept-Profile: books" \
-              -H "Content-Profile: books" \
-              -H "Prefer: return=minimal" \
-              -d "{\"value\":\"${COMMIT_SHA}\"}"
+              -d "{\"new_commit\":\"${COMMIT_SHA}\"}"
           fi
           echo "Successfully synced logic_commit to ${COMMIT_SHA}"
+
 
