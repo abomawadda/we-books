@@ -1547,12 +1547,18 @@ Router.add("/e/orders", view => {
       }).join("")}`).join("") + cancelledBox(cancelled, bm) : cancelled.length ? cancelledBox(cancelled, bm, true) : `<div class="card">${Art.empty("cart", "لسه ما حجزتش كتب", Emp.open() ? "الحجز مفتوح — اختار كتب أولادك في دقيقة 😊" : "", Emp.open() ? `<a href="#/e/books" class="btn btn-primary mt-5">${ic("library")} ابدأ الحجز</a>` : "")}</div>`}
     </div>
     <aside class="space-y-4 lg:sticky lg:top-24">
-      ${inv ? `<section class="card overflow-hidden">
+      ${inv ? (() => {
+        const otherCr = Math.round((r.myInvoices || []).filter(x => x.Emp_Inv_ID !== inv.Emp_Inv_ID).reduce((s, x) => s + n(x.Credit_Balance), 0) * 100) / 100;
+        const invRem = n(inv.Remaining_Balance);
+        const netRem = Math.max(0, Math.round((invRem - otherCr) * 100) / 100);
+        return `<section class="card overflow-hidden">
         <div class="hero text-white p-5"><div class="text-brand-200 text-sm">صافي فاتورتك</div><div class="text-3xl font-bold num mt-1">${money(inv.Net_Final_Invoice_Amount)}</div>
           <div class="mt-3">${UI.progress(paidPct, "bg-gold-400")}</div><div class="flex justify-between text-[12px] text-brand-200 mt-1.5"><span>مسدد ${moneyTxt(inv.Total_Paid_Amount)}</span><span>${Math.round(paidPct)}%</span></div></div>
-        <div class="p-4 grid grid-cols-2 gap-2">${UI.stat("قبل الخصم", `<span class="line-through text-slate-400">${fmt(inv.Total_Cover_Amount)}</span>`)}${UI.stat("وفّرت", `<span class="text-emerald-600">${moneyTxt(inv.Total_Savings)}</span>`)}${UI.stat("المقدم المطلوب", moneyTxt(inv.Down_Payment_Required))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) ? "text-rose-600" : "text-emerald-600"}">${moneyTxt(inv.Remaining_Balance)}</span>`)}
+        <div class="p-4 grid grid-cols-2 gap-2">${UI.stat("قبل الخصم", `<span class="line-through text-slate-400">${fmt(inv.Total_Cover_Amount)}</span>`)}${UI.stat("وفّرت", `<span class="text-emerald-600">${moneyTxt(inv.Total_Savings)}</span>`)}${UI.stat("المقدم المطلوب", moneyTxt(inv.Down_Payment_Required))}${UI.stat(otherCr > 0 && invRem > 0 ? "صافي المطلوب" : "المتبقي", `<span class="${netRem ? "text-rose-600" : "text-emerald-600"}">${moneyTxt(netRem)}</span>`)}
+          ${otherCr > 0 && invRem > 0 ? `<div class="col-span-2 rounded-xl bg-emerald-50 text-emerald-700 text-xs p-2.5 font-semibold num">بعد خصم رصيدك السابق (${moneyTxt(otherCr)}) من متبقي الفاتورة (${moneyTxt(invRem)})</div>` : ""}
           ${n(inv.Credit_Balance) ? `<div class="col-span-2 rounded-xl bg-emerald-50 text-emerald-700 text-sm p-3 font-semibold">لك رصيد مستحق الرد ${moneyTxt(inv.Credit_Balance)}</div>` : ""}</div>
-        <div class="px-4 pb-4 flex items-center justify-between text-[12px] text-slate-500"><span>${esc(inv.Emp_Inv_ID)}</span>${pill(inv.Invoice_Status)}</div></section>`
+        <div class="px-4 pb-4 flex items-center justify-between text-[12px] text-slate-500"><span>${esc(inv.Emp_Inv_ID)}</span>${pill(inv.Invoice_Status)}</div></section>`;
+      })()
         : `<section class="card card-pad"><div class="flex gap-3"><span class="w-11 h-11 rounded-2xl bg-brand-50 text-brand-600 flex items-center justify-center text-xl shrink-0">${ic("receipt")}</span><div><div class="font-bold text-slate-900">الفاتورة لسه ما صدرتش</div><p class="text-[13px] text-slate-500 mt-1 leading-relaxed">بتصدر أول ما كتبك تبقى جاهزة للتسليم، والأقساط بتبدأ من يوم الاستلام.</p></div></div></section>`}
     </aside>
   </div>`;
@@ -1572,9 +1578,10 @@ const docEmp = () => { const u = APP.user; return { name: u.fullName, id: u.empI
 on("printInv", () => {
   const inv = Emp.invoice(), bm = Emp.bookMap(), r = APP.emp; if (!inv) return;
   const h = r.myReservations.find(x => x.Res_ID === inv.Res_ID) || {};
+  const priorCredit = Math.round((r.myInvoices || []).filter(x => x.Emp_Inv_ID !== inv.Emp_Inv_ID).reduce((s, x) => s + n(x.Credit_Balance), 0) * 100) / 100;
   Doc.show("فاتورة " + inv.Emp_Inv_ID, Doc.invoice({ no: inv.Emp_Inv_ID, date: inv.Issue_Date, phase: r.activePhase.Phase_Name, status: inv.Invoice_Status, method: inv.Payment_Plan_Type, count: n(inv.Installments_Count), emp: docEmp(),
     lines: Emp.phaseItems().map(i => ({ code: i.Book_ID, name: (bm[i.Book_ID] || {}).Book_Name || i.Book_ID, grade: (bm[i.Book_ID] || {}).Grade, ben: i.Beneficiary, req: n(i.Requested_Qty), choice: i.Waitlist_Choice, alloc: n(i.Allocated_Qty), deliv: n(i.Delivered_Qty), ret: n(i.Returned_Qty), price: i.Unit_Emp_Price, cover: i.Unit_Cover_Price })),
-    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, down: inv.Down_Payment_Required,
+    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: inv.Total_Paid_Amount, remaining: inv.Remaining_Balance, credit: inv.Credit_Balance, priorCredit, down: inv.Down_Payment_Required,
     schedule: Emp.installments().map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) }), { file: inv.Emp_Inv_ID, ref: inv.Emp_Inv_ID });
 });
 /** طلب الحجز كمستند (صورة أو PDF) — من السلة الحالية */

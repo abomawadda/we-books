@@ -3795,10 +3795,11 @@ function printReceipt(no) {
 function invoiceData(invId) {
   const d = A(), i = d.empInvoices.find(x => x.Emp_Inv_ID === invId); if (!i) return null;
   const { e, b } = maps(), emp = e[i.Emp_ID] || {}, h = resHeaderOf(i.Res_ID), ph = d.phases.find(x => x.Phase_ID === i.Phase_ID) || {};
+  const priorCredit = Math.round(d.empInvoices.filter(x => x.Emp_ID === i.Emp_ID && x.Emp_Inv_ID !== i.Emp_Inv_ID).reduce((s, x) => s + n(x.Credit_Balance), 0) * 100) / 100;
   return { no: i.Emp_Inv_ID, date: i.Issue_Date, phase: ph.Phase_Name || i.Phase_ID, status: i.Invoice_Status, method: i.Payment_Plan_Type, count: n(i.Installments_Count),
     emp: { name: emp.Full_Name || i.Emp_ID, id: i.Emp_ID, dept: emp.Department },
     lines: d.resItems.filter(x => x.Res_ID === i.Res_ID).map(x => ({ code: x.Book_ID, name: bookName(b, x.Book_ID), grade: (b[x.Book_ID] || {}).Grade, ben: x.Beneficiary, req: n(x.Requested_Qty), choice: x.Waitlist_Choice, alloc: n(x.Allocated_Qty), deliv: n(x.Delivered_Qty), ret: n(x.Returned_Qty), price: x.Unit_Emp_Price, cover: x.Unit_Cover_Price })),
-    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: i.Total_Paid_Amount, remaining: i.Remaining_Balance, credit: i.Credit_Balance, down: i.Down_Payment_Required,
+    adj: n(h.Invoice_Adjustment), adjReason: h.Adjustment_Reason, paid: i.Total_Paid_Amount, remaining: i.Remaining_Balance, credit: i.Credit_Balance, priorCredit, down: i.Down_Payment_Required,
     schedule: d.installments.filter(x => x.Emp_Inv_ID === i.Emp_Inv_ID).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date))).map(x => ({ label: x.Admin_Custom_Notes || "قسط " + x.Installment_No, due: x.Due_Date, amount: x.Scheduled_Amount, paid: x.Paid_Amount, status: x.Status })) };
 }
 on("printInvA", id => { const d = invoiceData(id); if (d) Doc.show("فاتورة " + id, Doc.invoice(d), { file: id, ref: id }); });
