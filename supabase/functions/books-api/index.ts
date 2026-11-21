@@ -8,7 +8,7 @@ import { createRuntime } from './engine.js';
 // الاتصال بقاعدة البيانات عبر مجمّع الاتصالات (Supavisor، وضع transaction، المنفذ 6543): يوم الحجز تعمل نسخ
 // كثيرة من الخادم معاً، والاتصال المباشر محدود بـ 60 فلا يُستخدم إلا إن تعذّر بناء عنوان المجمّع.
 const DIRECT = Deno.env.get('SUPABASE_DB_URL')!;
-const POOLER_HOST = 'aws-0-eu-central-1.pooler.supabase.com';
+const POOLER_HOST = Deno.env.get('SUPABASE_POOLER_HOST') || 'aws-0-eu-central-1.pooler.supabase.com';
 let sql: any, dbMode = 'direct';
 try {
   const u = new URL(DIRECT);
@@ -23,7 +23,7 @@ const sha256 = (s: string) => Array.from(createHash('sha256').update(s, 'utf8').
 // منطق العمل = supabase/functions/books-api/logic.js من GitHub مثبَّتاً على commit محدد (لا يتغير محتواه أبداً).
 // لتحديث المنطق بلا إعادة نشر: update books.config set value = '<commit>' where key = 'logic_commit';
 // (تلتقطه نسخ الخادم خلال 5 دقائق). CODE_COMMIT احتياطي إن لم يوجد الإعداد.
-const CODE_COMMIT = 'cf1b62684066e3d64ca080f5ff61a3160a42325e';
+const CODE_COMMIT = '5077008777cfbed498e4115cafe7621244d6e9a0';
 const codeUrl = (c: string) => `https://raw.githubusercontent.com/abomawadda/we-books/${c}/supabase/functions/books-api/logic.js`;
 let rtP: Promise<any> | null = null, rtCommit = '', rtChecked = 0;
 // يُقرأ أولاً من books.logic؛ وإن لم يوجد يُجلب من GitHub مرة واحدة ويُحفظ هناك (لا اعتماد على GitHub بعدها)
@@ -97,7 +97,7 @@ const store = {
 
 // ---------------- الجلسات: رمز موقّع HMAC (المفتاح في books.config) ----------------
 let secretP: Promise<string> | null = null;
-const secret = () => (secretP ||= sql`select value from books.config where key = 'session_secret'`.then((r: any) => r[0].value));
+const secret = () => (secretP ||= sql`select value from books.config where key = 'session_secret'`.then((r: any) => r[0].value).catch((e: any) => { secretP = null; throw e; }));
 const b64 = (s: string) => Buffer.from(s, 'utf8').toString('base64url');
 const unb64 = (s: string) => Buffer.from(s, 'base64url').toString('utf8');
 const sign = async (body: string) => createHmac('sha256', await secret()).update(body).digest('base64url');
