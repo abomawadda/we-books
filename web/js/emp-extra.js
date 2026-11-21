@@ -904,3 +904,202 @@ if (typeof cartHTML === "function") { const _cartHTML2 = cartHTML; cartHTML = fu
   const hasRel = Object.keys(APP.cart || {}).some(k => bn(k)), missing = !budgetGet("fam") && !budgetGet("rel"); // مفيش ميزانية خالص ← رابط صغير بس
   return (bars ? `<div class="mb-1">${bars}</div>` : "") + html + (missing ? `<button class="w-full text-center text-[12px] text-slate-500 hover:text-brand-700 font-semibold mt-3" data-act="setBudget">${ic("piggy-bank", "inline -mt-0.5")} ${hasRel ? "حط ميزانية لأولادك وللأقارب (اختياري)" : "حط ميزانية لأولادك (اختياري)"}</button>` : (bars ? `<button class="w-full text-center text-[11.5px] text-slate-400 hover:text-brand-700 mt-2" data-act="setBudget">${ic("pencil", "inline -mt-0.5 !w-3 !h-3")} تعديل الميزانية</button>` : ""));
 }; }
+
+// ================================================================ المرحلة الأولى: قائمة الرغبات المسبقة + محاكي الميزانية والأقساط + بطاقة التوفير التراكمي
+function wlMap() {
+  const emp = (APP.emp && APP.emp.employee) || {};
+  if (!emp.wishlist || typeof emp.wishlist !== "object") emp.wishlist = {};
+  return emp.wishlist;
+}
+function wlStats() {
+  const wl = wlMap(), bm = Emp.bookMap(), items = [];
+  let count = 0, cover = 0, net = 0;
+  Object.keys(wl).forEach(bid => {
+    const q = n(wl[bid]), b = bm[bid];
+    if (!q || !b) return;
+    count += q; cover += q * n(b.Cover_Price); net += q * n(b.Emp_Selling_Price);
+    items.push({ b, q });
+  });
+  return { items, count, cover, net, save: Math.max(0, cover - net) };
+}
+let _wlT = null;
+function wlPersist() {
+  clearTimeout(_wlT);
+  _wlT = setTimeout(() => { call("SAVE_WISHLIST", { wishlist: wlMap() }).catch(() => {}); }, 250);
+}
+on("wlToggle", bid => {
+  const wl = wlMap();
+  if (wl[bid]) { delete wl[bid]; toast("تمت الإزالة من قائمتك", "info"); }
+  else { wl[bid] = 1; toast("⭐ أُضيف الكتاب لقائمتك للمرحلة القادمة", "success"); }
+  wlPersist();
+  if (typeof renderBookGrid === "function" && $("#bookGrid")) renderBookGrid();
+  if ($("#wlCardSlot")) $("#wlCardSlot").outerHTML = wishlistCard() || `<div id="wlCardSlot"></div>`;
+});
+on("wlSaveBag", () => {
+  const sel = (typeof BAG !== "undefined" && BAG.rows ? BAG.rows : []).filter(r => r.on);
+  if (!sel.length) return toast("اختر كتاباً واحداً على الأقل", "info");
+  const wl = wlMap(); let added = 0;
+  sel.forEach(r => { if (r.pick) { wl[r.pick] = Math.max(wl[r.pick] || 0, r.qty || 1); added++; } });
+  wlPersist();
+  if (typeof BAG !== "undefined" && BAG.m) { BAG.m.close(); BAG.m = null; }
+  toast(`⭐ تم حفظ ${booksWord(added)} من الشنطة في قائمتك للمرحلة القادمة`, "success");
+  Router.render();
+});
+on("wlAddBundle", pub => {
+  const { list } = gradeList(), bs = list.filter(b => b.Publisher === pub);
+  if (!bs.length) return;
+  const wl = wlMap();
+  bs.forEach(b => { wl[b.Book_ID] = Math.max(wl[b.Book_ID] || 0, 1); });
+  wlPersist();
+  toast(`⭐ أُضيفت سلسلة ${pub} (${booksWord(bs.length)}) لقائمتك للمرحلة القادمة`, "success");
+  Router.render();
+});
+on("wlRemove", bid => {
+  const wl = wlMap(); delete wl[bid]; wlPersist();
+  if (Emp._wlM) { Emp._wlM.close(); Emp._wlM = null; }
+  if (wlStats().count) ACTIONS.wlOpen();
+  Router.render();
+});
+on("wlClear", async () => {
+  if (!await UI.confirm({ title: "مسح قائمة الرغبات", message: "هل تريد تفريغ قائمتك المجهّزة للمرحلة القادمة؟", ok: "مسح", tone: "danger" })) return;
+  if (APP.emp && APP.emp.employee) APP.emp.employee.wishlist = {};
+  await call("SAVE_WISHLIST", { wishlist: {} }).catch(() => {});
+  if (Emp._wlM) { Emp._wlM.close(); Emp._wlM = null; }
+  toast("تم مسح القائمة", "info"); Router.render();
+});
+on("wlToCart", async () => {
+  if (!Emp.open()) return toast("الحجز مغلق حالياً — ستتحول قائمتك تلقائياً فور فتح المرحلة", "info");
+  const st = wlStats(); if (!st.count) return toast("قائمتك فارغة", "info");
+  let added = 0;
+  st.items.forEach(({ b, q }) => { const k = ck(b.Book_ID, ""); APP.cart[k] = Math.max(APP.cart[k] || 0, q); added += q; });
+  Emp.dirty = true;
+  if (APP.emp && APP.emp.employee) APP.emp.employee.wishlist = {};
+  call("SAVE_WISHLIST", { wishlist: {} }).catch(() => {});
+  if (Emp._wlM) { Emp._wlM.close(); Emp._wlM = null; }
+  toast(`🎉 تم تحويل ${booksWord(added)} من قائمتك إلى سلة الحجز — راجع وأكّد الآن`, "success");
+  Router.go("/e/books");
+  setTimeout(() => { if (typeof openCart === "function") openCart(); }, 120);
+});
+on("wlOpen", () => {
+  const st = wlStats(), open = Emp.open();
+  const body = !st.count ? Art.empty("bookmark", "قائمتك فارغة حالياً", "تصفّح الكتالوج وأضف الكتب التي تريدها لتكون جاهزة بضغطة فور فتح المرحلة.")
+    : `<div class="space-y-3">
+      <div class="grid grid-cols-3 gap-2 text-center">
+        <div class="rounded-xl bg-brand-50 p-2.5"><div class="text-[11px] text-brand-700">الكتب</div><b class="num text-[16px] text-brand-900">${fmt(st.count)}</b></div>
+        <div class="rounded-xl bg-slate-50 p-2.5"><div class="text-[11px] text-slate-500">صافي السعر</div><b class="num text-[16px] text-slate-900">${fmt(st.net)}</b></div>
+        <div class="rounded-xl bg-emerald-50 p-2.5"><div class="text-[11px] text-emerald-700">توفيرك</div><b class="num text-[16px] text-emerald-700">${fmt(st.save)}</b></div>
+      </div>
+      <ul class="divide-y divide-slate-100 rounded-2xl ring-1 ring-slate-200 px-3 max-h-[45vh] overflow-y-auto">${st.items.map(({ b, q }) => `<li class="py-2.5 flex items-center gap-2 text-[13px]">
+        <div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(b.Book_Name)}</b><span class="text-[11.5px] text-slate-500">${esc(b.Subject || "")} · ${esc(gradeShort(b.Grade || ""))} · ×${q}</span></div>
+        <span class="num font-bold text-brand-800 whitespace-nowrap">${fmt(n(b.Emp_Selling_Price) * q)} ج.م</span>
+        <button type="button" class="icon-btn w-7 h-7 text-rose-500" data-act="wlRemove" data-id="${esc(b.Book_ID)}" aria-label="حذف">${ic("trash-2", "!w-3.5 !h-3.5")}</button>
+      </li>`).join("")}</ul>
+      <div class="grid grid-cols-2 gap-2">
+        <button type="button" class="btn btn-outline btn-sm" data-act="budgetSim">${ic("calculator")} محاكي الميزانية</button>
+        <button type="button" class="btn btn-ghost btn-sm text-rose-600" data-act="wlClear">${ic("trash-2")} مسح القائمة</button>
+      </div>
+    </div>`;
+  Emp._wlM = UI.open(body, {
+    title: "⭐ قائمتي للمرحلة القادمة",
+    sub: st.count ? `${booksWord(st.count)} محفوظة على حسابك` : "",
+    footer: st.count && open ? `<button type="button" class="btn btn-primary w-full" data-act="wlToCart">${ic("shopping-cart")} حوّل قائمتي لسلة الحجز الآن</button>` : ""
+  });
+});
+function wishlistCard() {
+  const st = wlStats(); if (!st.count) return "";
+  const open = Emp.open();
+  return `<section id="wlCardSlot" class="card p-4 mb-4 ring-2 ${open ? "ring-emerald-300 bg-emerald-50/40" : "ring-brand-200 bg-brand-50/30"}">
+    <div class="flex items-start gap-3">
+      <span class="w-11 h-11 rounded-2xl ${open ? "bg-emerald-100 text-emerald-700" : "bg-brand-100 text-brand-700"} flex items-center justify-center text-xl shrink-0">⭐</span>
+      <div class="flex-1 min-w-0">
+        <b class="block text-[14.5px] text-slate-900">${open ? "قائمتك المجهّزة جاهزة للتحويل فوراً!" : "قائمتك المجهّزة للمرحلة القادمة"}</b>
+        <div class="text-[12.5px] text-slate-600 mt-0.5 num">${booksWord(st.count)} · صافي <b>${fmt(st.net)}</b> ج.م${st.save > 0 ? ` · <span class="text-emerald-700 font-semibold">توفير ${fmt(st.save)} ج.م</span>` : ""}</div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 gap-2 mt-3">
+      ${open ? `<button type="button" class="btn btn-success btn-sm" data-act="wlToCart">${ic("shopping-cart")} حوّلها لحجز الآن</button><button type="button" class="btn btn-outline btn-sm !bg-white" data-act="wlOpen">${ic("eye")} مراجعة القائمة</button>`
+        : `<button type="button" class="btn btn-primary btn-sm" data-act="wlOpen">${ic("bookmark")} عرض وتعديل القائمة</button><button type="button" class="btn btn-outline btn-sm !bg-white" data-act="budgetSim">${ic("calculator")} محاكي الميزانية</button>`}
+    </div>
+  </section>`;
+}
+["/e/home", "/e/books"].forEach(p => _wrap(p, view => afterHead(view, wishlistCard())));
+
+// ================================================================ محاكي الميزانية والأقساط الذكي (مع خصم الرصيد الدائن تلقائياً)
+const SIM = { total: 0, method: "INSTALLMENT", downPct: 25, count: 3, m: null };
+function simHTML() {
+  const s = (APP.emp && APP.emp.settings) || {};
+  const minPct = Math.max(0, n(s.MIN_DOWN_PAYMENT_PCT) || 25);
+  const maxCnt = Math.max(1, n(s.MAX_INSTALLMENT_COUNT) || 4);
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { lah: 0 };
+  const tot = Math.max(0, n(SIM.total));
+  const inst = SIM.method === "INSTALLMENT";
+  const pct = Math.max(minPct, Math.min(90, n(SIM.downPct)));
+  const grossDown = inst ? Math.round(tot * pct / 100) : tot;
+  const creditUsed = Math.min(grossDown, acc.lah);
+  const netDown = Math.max(0, Math.round((grossDown - acc.lah) * 100) / 100);
+  const remAfterDown = inst ? Math.max(0, Math.round((tot - grossDown - Math.max(0, acc.lah - grossDown)) * 100) / 100) : 0;
+  const cnt = Math.max(1, Math.min(maxCnt, n(SIM.count) || 3));
+  const per = inst && cnt ? Math.ceil(remAfterDown / cnt) : 0;
+  const bud = budgetGet("fam");
+  const overBud = bud > 0 && tot > bud;
+  return `<div class="space-y-3.5">
+    <div class="rounded-2xl bg-slate-50 ring-1 ring-slate-200 p-3">
+      <label class="block text-xs font-bold text-slate-600 mb-1.5">إجمالي قيمة الكتب (ج.م)</label>
+      <input type="number" min="0" step="10" class="input !h-11 num font-bold text-lg" value="${tot}" oninput="SIM.total=Math.max(0,Number(this.value)||0);simRefresh()">
+      <div class="text-[11px] text-slate-500 mt-1">يمكنك تعديل المبلغ بحرية لتجربة أي ميزانية${bud ? ` · سقف ميزانيتك: <b class="num">${fmt(bud)}</b> ج.م` : ""}</div>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" class="rounded-2xl p-3 text-right ring-1 transition ${!inst ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-800 ring-slate-200"}" onclick="SIM.method='CASH';simRefresh()"><b class="block text-[13.5px]">كاش دفعة واحدة</b><span class="text-[11px] opacity-80">سداد كامل عند الاستلام</span></button>
+      <button type="button" class="rounded-2xl p-3 text-right ring-1 transition ${inst ? "bg-brand-700 text-white ring-brand-700" : "bg-white text-slate-800 ring-slate-200"}" onclick="SIM.method='INSTALLMENT';simRefresh()"><b class="block text-[13.5px]">تقسيط شهري</b><span class="text-[11px] opacity-80">مقدم + أقساط مريحة</span></button>
+    </div>
+    ${inst ? `<div class="rounded-2xl bg-brand-50/50 ring-1 ring-brand-100 p-3 space-y-3">
+      <div><div class="flex justify-between text-xs font-bold text-slate-700 mb-1"><span>نسبة المقدم</span><span class="num text-brand-700">${pct}% (${fmt(grossDown)} ج.م)</span></div>
+        <input type="range" min="${minPct}" max="80" step="5" value="${pct}" class="w-full accent-brand-700" oninput="SIM.downPct=Number(this.value);simRefresh()"></div>
+      <div><div class="text-xs font-bold text-slate-700 mb-1.5">عدد الأقساط الشهرية</div>
+        <div class="flex flex-wrap gap-1.5">${Array.from({ length: maxCnt }, (_, i) => i + 1).map(c => `<button type="button" class="chip !h-9 !w-11 justify-center" aria-pressed="${cnt === c}" onclick="SIM.count=${c};simRefresh()">${c}</button>`).join("")}</div></div>
+    </div>` : ""}
+    <div class="hero rounded-2xl text-white p-4 space-y-2">
+      <div class="flex items-center justify-between text-xs text-brand-100"><span>${inst ? "صافي المقدم عند الاستلام" : "صافي المطلوب عند الاستلام"}</span><b class="text-xl num text-white">${fmt(netDown)} ج.م</b></div>
+      ${creditUsed > 0 ? `<div class="rounded-xl px-2.5 py-1.5 text-[11.5px] text-emerald-100 num" style="background:rgba(16,185,129,.28)">✓ تم خصم رصيدك الدائن الحالي (${fmt(creditUsed)} ج.م) تلقائياً</div>` : ""}
+      ${inst ? `<div class="flex items-center justify-between text-xs pt-2 border-t border-white/15"><span>ثم ${cnt} ${cnt > 2 ? "أقساط" : cnt === 2 ? "قسطين" : "قسط"} شهرياً</span><b class="text-base num text-gold-300">${fmt(per)} ج.م / شهر</b></div>` : ""}
+    </div>
+    ${overBud ? `<div class="rounded-xl bg-rose-50 ring-1 ring-rose-200 px-3 py-2 text-xs text-rose-700 font-semibold num">⚠️ المبلغ يتجاوز سقف ميزانيتك المحدد بـ ${fmt(tot - bud)} ج.م</div>` : bud > 0 ? `<div class="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 px-3 py-2 text-xs text-emerald-700 font-semibold num">✅ ضمن ميزانيتك المحددة (متبقي ${fmt(bud - tot)} ج.م من السقف)</div>` : ""}
+  </div>`;
+}
+window.simRefresh = function () { if (SIM.m) SIM.m.body.innerHTML = simHTML(); };
+on("budgetSim", () => {
+  const wl = wlStats(), cartT = Emp.totals();
+  const s = (APP.emp && APP.emp.settings) || {};
+  SIM.total = (Emp.open() && cartT.net > 0) ? Math.round(cartT.net) : (wl.net > 0 ? Math.round(wl.net) : (myKids().length ? myKids().length * 500 : 1000));
+  SIM.downPct = Math.max(25, n(s.MIN_DOWN_PAYMENT_PCT) || 25);
+  SIM.count = Math.min(n(s.MAX_INSTALLMENT_COUNT) || 4, n(s.DEFAULT_INSTALLMENT_COUNT) || 3);
+  SIM.method = (APP.emp && APP.emp.employee && APP.emp.employee.installmentAllowed) ? "INSTALLMENT" : "CASH";
+  SIM.m = UI.open(simHTML(), { title: "🧮 محاكي الميزانية والأقساط", sub: "احسب صافي ما ستدفعه بدقة مع خصم أي رصيد دائن لك" });
+});
+
+// ================================================================ بطاقة التوفير التراكمي + مدخل محاكي الميزانية في «حسابي»
+_wrap("/e/me", view => {
+  const items = (APP.emp && APP.emp.myReservationItems) || [];
+  const all = saveCalc(items);
+  const totSave = Math.round(all.aSave + all.eSave), totBooks = all.aBooks + all.eBooks, totCov = all.aCover + all.eCover;
+  const pct = totCov > 0 ? Math.round(totSave / totCov * 100) : 0;
+  const wl = wlStats();
+  const btn = view.querySelector('[data-act="faq"]');
+  if (btn) {
+    btn.insertAdjacentHTML("beforebegin", `<button type="button" data-act="budgetSim" class="w-full flex items-center gap-3 px-4 py-3.5 text-right hover:bg-slate-50"><span class="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center">${ic("calculator")}</span><span class="flex-1"><b class="block text-[14.5px] text-slate-900">محاكي الميزانية والأقساط</b><span class="text-[12px] text-slate-500">احسب المقدم والقسط الشهري وصافي حسابك قبل الحجز</span></span>${ic("chevron-left", "text-slate-300")}</button>`
+      + (wl.count ? `<button type="button" data-act="wlOpen" class="w-full flex items-center gap-3 px-4 py-3.5 text-right hover:bg-slate-50"><span class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">⭐</span><span class="flex-1"><b class="block text-[14.5px] text-slate-900">قائمتي للمرحلة القادمة</b><span class="text-[12px] text-slate-500 num">${booksWord(wl.count)} · ${fmt(wl.net)} ج.م</span></span>${ic("chevron-left", "text-slate-300")}</button>` : ""));
+  }
+  if (totSave > 0) {
+    const firstCard = view.querySelector("section.card");
+    if (firstCard) firstCard.insertAdjacentHTML("afterend", `<section class="card p-4 mb-4 flex items-center gap-3 ring-1 ring-emerald-200 bg-emerald-50/40">
+      <span class="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl shrink-0">🏆</span>
+      <div class="flex-1 min-w-0">
+        <div class="text-[11.5px] font-bold text-emerald-700">إجمالي توفيرك عبر المبادرة</div>
+        <div class="font-display font-bold text-xl text-emerald-900 num">${fmt(totSave)} <span class="text-xs font-normal">ج.م</span></div>
+        <div class="text-[11.5px] text-slate-600 num">على ${booksWord(totBooks)}${pct ? ` · وفّرت ${pct}% من سعر السوق` : ""}</div>
+      </div>
+      <button type="button" class="btn btn-success btn-xs shrink-0" data-act="shareSave">${ic("send")} شارك</button>
+    </section>`);
+  }
+});
+

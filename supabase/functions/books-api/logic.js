@@ -634,6 +634,7 @@ const ACTION_ACL = {
   EMP_RETURN_REQUEST: ["EMPLOYEE"],
   EMP_FEEDBACK: ["EMPLOYEE"],
   SAVE_CART_DRAFT: ["EMPLOYEE"],
+  SAVE_WISHLIST: ["EMPLOYEE"],
   RESOLVE_RETURN_REQUEST: ["Coordinator", "Warehouse"],
   RESOLVE_CANCEL_REQUEST: ["Coordinator"],
   SUBMIT_OR_UPDATE_RESERVATION: ["EMPLOYEE", "Coordinator"],
@@ -744,6 +745,7 @@ function callServerApi(action, payload, sessionToken) {
       case "EMP_RETURN_REQUEST": return E.empReturnRequest(session, payload);
       case "EMP_FEEDBACK": return E.empFeedback(session, payload);
       case "SAVE_CART_DRAFT": return E.saveCartDraft(session, payload);
+      case "SAVE_WISHLIST": return E.saveWishlist(session, payload);
       case "RESOLVE_RETURN_REQUEST": return E.resolveReturnRequest(session, payload);
       case "RESOLVE_CANCEL_REQUEST": return E.resolveCancelRequest(session, payload);
       case "SUBMIT_OR_UPDATE_RESERVATION": return E.saveEmployeeReservation(session, payload);
@@ -1245,7 +1247,8 @@ const OperationsEngine = {
           updatedAt: Util.str(emp.Updated_At)
         },
         gender: (() => { const s = Util.str(emp.National_ID_Last4).replace(/[٠-٩]/g, d => String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).padStart(4, "0"); const d = /^\d{4}$/.test(s) ? parseInt(s.charAt(2), 10) : NaN; return isNaN(d) ? "" : (d % 2 === 0 ? "F" : "M"); })(),
-        cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })()
+        cartDraft: (() => { try { return JSON.parse(emp.Cart_Draft || "null"); } catch (e) { return null; } })(),
+        wishlist: (() => { try { const o = JSON.parse(emp.Cart_Draft || "null"); return (o && o.wishlist && typeof o.wishlist === "object") ? o.wishlist : {}; } catch (e) { return {}; } })()
       },
       myChangeRequests: DB_Engine.getAllRecords(S.EMP_CHANGE_REQUESTS).filter(mine),
       books: this.sortBooks_(books),
@@ -3453,17 +3456,45 @@ const OperationsEngine = {
    * ولا يمس المخزون أو الفاتورة إلا بعد اعتماد الإدارة (RESOLVE_RETURN_REQUEST ← نفس مسار المرتجع الرسمي).
    */
   /** تقييم الموظف بعد الاستلام: نجوم 1–5 + اقتراح (يُحفظ في رأس الحجز) */
-  /** مسودة السلة على الخادم (قبل التأكيد) — تُستعاد من أي جهاز؛ لا أثر مالي ولا على الحجز */
+  /** مسودة السلة على الخادم (قبل التأكيد) — تُستعاد من أي جهاز مع الحفاظ على قائمة الرغبات */
   saveCartDraft: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S(), empId = Util.str(session.empId);
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === empId);
+      let prev = null; try { prev = JSON.parse((emp && emp.Cart_Draft) || "null"); } catch (e) { prev = null; }
+      const wl = prev && prev.wishlist && typeof prev.wishlist === "object" && Object.keys(prev.wishlist).length ? prev.wishlist : null;
       const cart = payload.cart && typeof payload.cart === "object" ? payload.cart : null;
       const clean = {}; let n = 0;
       if (cart) Object.keys(cart).slice(0, 200).forEach(k => { const q = parseInt(cart[k], 10) || 0; if (q > 0 && q <= 20 && String(k).length <= 120) { clean[k] = q; n++; } });
-      const val = cart ? JSON.stringify({ phaseId: Util.str(payload.phaseId), cart: clean, at: Util.now() }) : "";
-      Util.require(val.length <= 20000, "السلة كبيرة جداً.");
+      const obj = {};
+      if (cart) { obj.phaseId = Util.str(payload.phaseId); obj.cart = clean; obj.at = Util.now(); }
+      if (wl) { obj.wishlist = wl; obj.wishlistAt = prev.wishlistAt || Util.now(); }
+      const val = Object.keys(obj).length ? JSON.stringify(obj) : "";
+      Util.require(val.length <= 25000, "السلة كبيرة جداً.");
       DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Cart_Draft: val });
       return { success: true, saved: n };
+    });
+  },
+  /** حفظ قائمة الرغبات المسبقة (Pre-Booking Wishlist) للمرحلة القادمة على الخادم */
+  saveWishlist: function(session, payload) {
+    return DB_Engine.executeWithLock(() => {
+      const S = this.S(), empId = Util.str(session.empId);
+      const emp = DB_Engine.getAllRecords(S.EMPLOYEES).find(e => Util.str(e.Emp_ID) === empId);
+      Util.require(emp, "الحساب غير موجود.");
+      let prev = null; try { prev = JSON.parse(emp.Cart_Draft || "null"); } catch (e) { prev = null; }
+      const raw = payload && payload.wishlist && typeof payload.wishlist === "object" ? payload.wishlist : {};
+      const clean = {}; let cnt = 0;
+      Object.keys(raw).slice(0, 150).forEach(k => {
+        const q = parseInt(raw[k], 10) || 0;
+        if (q > 0 && q <= 10 && String(k).length <= 120) { clean[k] = q; cnt += q; }
+      });
+      const obj = {};
+      if (prev && prev.cart && Object.keys(prev.cart).length) { obj.phaseId = prev.phaseId || ""; obj.cart = prev.cart; obj.at = prev.at || Util.now(); }
+      if (Object.keys(clean).length) { obj.wishlist = clean; obj.wishlistAt = Util.now(); }
+      const val = Object.keys(obj).length ? JSON.stringify(obj) : "";
+      Util.require(val.length <= 25000, "قائمة الرغبات كبيرة جداً.");
+      DB_Engine.updateRecordByPK(S.EMPLOYEES, "Emp_ID", empId, { Cart_Draft: val });
+      return { success: true, count: cnt, wishlist: clean };
     });
   },
   empFeedback: function(session, payload) {

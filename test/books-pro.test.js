@@ -324,4 +324,14 @@ assert.strictEqual(empPortalFam.employee.kids[0].name, 'يوسف');
 assert.strictEqual(empPortalFam.employee.kids[1].grade, '1 إعدادي');
 checks += 4;
 
+// ============================================================================
+// الاختبار الثالث عشر: قائمة الرغبات المسبقة (SAVE_WISHLIST) وتعايشها مع مسودة السلة
+// ============================================================================
+const wlSave = ok(api('SAVE_WISHLIST', { wishlist: { [bk1.Book_ID]: 2 } }, empTok), 'employee saves pre-booking wishlist');
+assert.strictEqual(wlSave.count, 2);
+ok(api('SAVE_CART_DRAFT', { phaseId: 'PH-TEST', cart: { [bk1.Book_ID]: 1 } }, empTok), 'save cart draft preserves wishlist');
+const empPortalWl = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, empTok), 'portal exposes saved wishlist');
+assert.strictEqual(empPortalWl.employee.wishlist[bk1.Book_ID], 2, 'wishlist preserved alongside cartDraft');
+checks += 3;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);

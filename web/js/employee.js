@@ -782,7 +782,7 @@ function bookCard(b) {
         ${pricing ? `<div class="leading-tight text-[12px] text-amber-700 font-semibold">🚚 السعر جاي مع الشحنة<div class="text-[11px] text-slate-500 font-normal">احجز دلوقتي وخلّيك مطمّن 😉 بخصم العاملين برضه</div></div>`
         : `<div class="leading-tight"><span class="text-[11px] text-slate-400 line-through num">${fmt(b.Cover_Price)}</span>${save > 0 ? ` <span class="text-[11px] font-bold text-emerald-600">وفّر ${save}%</span>` : ""}
           <div><span class="text-[19px] font-bold text-brand-800 num">${fmt(b.Emp_Selling_Price)}</span> <span class="text-[11px] text-slate-500">ج.م</span></div></div>`}
-        ${!open ? `<span class="text-[11px] text-slate-400 shrink-0">للعلم</span>` : q ? `<div class="stepper"><button data-act="cartInc" data-id="${esc(b.Book_ID)}" ${!open || q >= mx ? "disabled" : ""} aria-label="زيادة">${ic("plus")}</button><span>${q}</span><button data-act="cartDec" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"} aria-label="تقليل">${ic(q === 1 ? "trash-2" : "minus")}</button></div>`
+        ${!open ? (() => { const inWl = !!(typeof wlMap === "function" && wlMap()[b.Book_ID]); return `<button type="button" class="btn btn-sm !px-2.5 shrink-0 ${inWl ? "btn-success" : "btn-outline"}" data-act="wlToggle" data-id="${esc(b.Book_ID)}">${inWl ? "★ في قائمتي" : "☆ لقائمتي"}</button>`; })() : q ? `<div class="stepper"><button data-act="cartInc" data-id="${esc(b.Book_ID)}" ${!open || q >= mx ? "disabled" : ""} aria-label="زيادة">${ic("plus")}</button><span>${q}</span><button data-act="cartDec" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"} aria-label="تقليل">${ic(q === 1 ? "trash-2" : "minus")}</button></div>`
           : `<button class="btn btn-primary btn-sm !px-3 shrink-0" data-act="cartInc" data-id="${esc(b.Book_ID)}" ${open ? "" : "disabled"}>${ic("plus")} أضف</button>`}
       </div>
     </div></article>`;
@@ -936,7 +936,7 @@ on("bagOpen", () => { BAG.inline = false; BAG._for = "";
   const lbl = Emp.browseGrades && Emp.browseGrades.length > 1 ? Emp.browseGrades.map(gradeShort).join(" + ") : (ki >= 0 ? kidName(myKids()[ki], ki) : gradeShort(Emp.filter.grade));
   BAG.m = UI.open(bagHTML(), { title: "🎒 شنطة " + lbl, sub: (Emp.browseGrades && Emp.browseGrades.length > 1 ? `${Emp.browseGrades.length} صفوف مختارة` : gradeTitle(Emp.filter.grade)) + " · " + kidTypeTxt(Emp.filter.type),
     footer: open ? `<button class="btn btn-primary btn-lg w-full" data-act="bagAdd">${ic("shopping-cart")} أضف للسلة</button>`
-      : `<div class="rounded-xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-xs text-amber-900 text-center font-semibold">${ic("info", "inline -mt-0.5 text-amber-600")} معاينة وتجهيز فقط — الحجز مغلق حالياً وسيتاح الإضافة للسلة فور فتح المرحلة</div>` });
+      : `<div class="grid gap-2 w-full"><button type="button" class="btn btn-primary w-full" data-act="wlSaveBag">⭐ احفظ الشنطة لقائمتي القادمة</button><div class="text-[11.5px] text-slate-500 text-center">معاينة وتجهيز — تتحول لحجز بضغطة فور فتح المرحلة</div></div>` });
   bagRender();
 });
 on("bagQty", v => { const [i, d] = String(v).split("|"), r = BAG.rows[+i]; r.qty = Math.min(10, Math.max(1, (r.qty || 1) + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
@@ -1072,7 +1072,7 @@ on("previewBundle", pub => {
       ${covP > sumP ? `<span class="font-bold text-emerald-700 num">توفير ${fmt(covP - sumP)} ج.م</span>` : ""}
     </div>
     <ul class="divide-y divide-slate-100 rounded-2xl ring-1 ring-slate-200 px-3">${bs.map(b => `<li class="py-2.5 flex items-center gap-2 text-[13px]"><div class="flex-1 min-w-0"><b class="block text-slate-900 truncate">${esc(b.Book_Name)}</b><span class="text-[11.5px] text-slate-500">${esc(b.Subject || "")} · ${esc(gradeShort(b.Grade || ""))}</span></div><span class="num font-bold text-brand-800 whitespace-nowrap">${fmt(b.Emp_Selling_Price)} ج.م</span></li>`).join("")}</ul>
-  </div>`, { title: `📚 سلسلة ${pub}`, sub: "معاينة الكتب والأسعار (الحجز مغلق حالياً)" });
+  </div>`, { title: `📚 سلسلة ${pub}`, sub: "معاينة الكتب والأسعار (الحجز مغلق حالياً)", footer: `<button type="button" class="btn btn-primary w-full" data-act="wlAddBundle" data-id="${esc(pub)}">⭐ أضف السلسلة كلها لقائمتي القادمة</button>` });
 });
 /** فاصل السلة بعد قائمة الكتب */
 function cartDivider() {
