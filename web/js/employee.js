@@ -1636,7 +1636,7 @@ Router.add("/e/me", view => {
           <div class="text-brand-200 text-xs sm:text-sm mt-0.5">${esc([p.jobTitle || u.jobTitle, p.department || u.department].filter(Boolean).join(" · ") || "—")}</div>
           <div class="flex flex-wrap items-center gap-1.5 mt-2">
             <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-mono num">رقم وظيفي ${esc(u.empId)}</span>
-            ${p.memberState ? `<span class="rounded-full bg-amber-400/25 text-amber-100 px-2.5 py-0.5 text-[11px] font-semibold">${esc(p.memberState)}</span>` : ""}
+            ${p.memberState ? `<span class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white" style="background:rgba(245,158,11,.35)">${esc(p.memberState)}</span>` : ""}
             ${p.unionOrg ? `<span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">${esc(p.unionOrg)}</span>` : ""}
           </div>
         </div>

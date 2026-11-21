@@ -4312,28 +4312,28 @@ function epBody(id) {
     </div>`;
   }
 
-  return `<div class="rounded-2xl bg-gradient-to-l from-brand-900 via-brand-800 to-brand-700 text-white p-4 sm:p-5 mb-4 shadow-sm">
+  return `<div class="hero rounded-3xl text-white p-4 sm:p-5 mb-4 shadow-sm">
       <div class="flex flex-wrap items-center gap-3.5">
-        ${UI.avatar(e.Full_Name || id, "w-14 h-14 text-lg !bg-white/15 !text-white ring-2 ring-white/25")}
+        ${UI.avatar(e.Full_Name || id, "w-14 h-14 text-lg ring-2 ring-white/25")}
         <div class="min-w-0 flex-1">
           <div class="flex flex-wrap items-center gap-2">
-            <h3 class="font-bold text-base sm:text-lg leading-snug">${esc(e.Full_Name || id)}</h3>
-            <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-mono num">#${esc(e.Emp_ID || id)}</span>
+            <h3 class="font-bold text-base sm:text-lg leading-snug text-white">${esc(e.Full_Name || id)}</h3>
+            <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-mono num text-white">#${esc(e.Emp_ID || id)}</span>
           </div>
-          <div class="text-xs text-brand-100/90 mt-0.5">${esc([e.Job_Title, e.Department, e.Grade_Title].filter(Boolean).join(" · ") || "—")}</div>
+          <div class="text-xs text-brand-100 mt-0.5">${esc([e.Job_Title, e.Department, e.Grade_Title].filter(Boolean).join(" · ") || "—")}</div>
           <div class="flex flex-wrap items-center gap-1.5 mt-2">
-            <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">${esc(catMeta.lbl)}</span>
-            <span class="rounded-full ${isAct ? "bg-emerald-400/25 text-emerald-100" : "bg-rose-400/30 text-rose-100"} px-2.5 py-0.5 text-[11px] font-semibold">${isAct ? (e.Employment_Status || "ساري") : "موقوف"}</span>
-            ${e.Member_State ? `<span class="rounded-full bg-amber-400/25 text-amber-100 px-2.5 py-0.5 text-[11px] font-semibold">${esc(e.Member_State)}</span>` : ""}
-            ${editPerm ? `<span class="rounded-full bg-sky-400/25 text-sky-100 px-2.5 py-0.5 text-[11px] font-semibold">${ic("unlock", "inline !w-3 !h-3")} مصرح بالتعديل</span>` : ""}
+            <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold text-white">${esc(catMeta.lbl)}</span>
+            <span class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white" style="background:${isAct ? "rgba(16,185,129,.35)" : "rgba(244,63,94,.45)"}">${isAct ? (e.Employment_Status || "ساري") : "موقوف"}</span>
+            ${e.Member_State ? `<span class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white" style="background:rgba(245,158,11,.35)">${esc(e.Member_State)}</span>` : ""}
+            ${editPerm ? `<span class="rounded-full px-2.5 py-0.5 text-[11px] font-semibold text-white" style="background:rgba(56,189,248,.35)">${ic("unlock", "inline !w-3 !h-3")} مصرح بالتعديل</span>` : ""}
           </div>
         </div>
       </div>
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-3.5 border-t border-white/15 text-center">
-        <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">النسخ المحجوزة</div><div class="font-bold text-sm num mt-0.5">${fmt(sum(items, "Requested_Qty"))}</div></div>
-        <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">إجمالي الفواتير</div><div class="font-bold text-sm num mt-0.5">${fmt(billed)}</div></div>
+        <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">النسخ المحجوزة</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(sum(items, "Requested_Qty"))}</div></div>
+        <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">إجمالي الفواتير</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(billed)}</div></div>
         <div class="rounded-xl bg-white/10 px-2 py-2"><div class="text-[11px] text-brand-200">المسدد</div><div class="font-bold text-sm num text-emerald-200 mt-0.5">${fmt(paid)}</div></div>
-        <div class="rounded-xl ${rem ? "bg-rose-500/25 ring-1 ring-rose-300/40" : "bg-white/10"} px-2 py-2"><div class="text-[11px] text-brand-200">${overdue ? "المتبقي (متأخر)" : "المتبقي"}</div><div class="font-bold text-sm num mt-0.5">${fmt(rem)}</div></div>
+        <div class="rounded-xl px-2 py-2" style="background:${rem ? "rgba(244,63,94,.32)" : "rgba(255,255,255,.10)"}"><div class="text-[11px] text-brand-200">${overdue ? "المتبقي (متأخر)" : "المتبقي"}</div><div class="font-bold text-sm num text-white mt-0.5">${fmt(rem)}</div></div>
       </div>
     </div>
     <div class="scroll-x !mx-0 !px-0 pb-2.5 mb-3.5 border-b border-slate-200/80">${tab("info", "ملف الموارد البشرية", myPendingReqs.length || undefined)}${tab("res", "ملف الحجوزات", items.length)}${tab("inv", "الفواتير", invs.length)}${tab("inst", "الأقساط", insts.length)}${tab("pay", "الإيصالات", pays.filter(p => !isTrue(p.Is_Voided)).length)}${can("GET_AUDIT_LOG") ? tab("log", "السجل") : ""}</div>${body}`;
