@@ -3567,11 +3567,18 @@ on("override", async id => {
 });
 
 // ============================================================ التسليم والمرتجعات
+/** الرصيد الدائن السابق للموظف على فواتير أخرى (غير الفاتورة المستبعدة) */
+function empPriorCredit(empId, excludeInvId) {
+  const list = (A().empInvoices || []).filter(x => x.Emp_ID === empId && x.Emp_Inv_ID !== excludeInvId && n(x.Credit_Balance) > 0.004);
+  const total = Math.round(list.reduce((s, x) => s + n(x.Credit_Balance), 0) * 100) / 100;
+  return { total, list };
+}
 /** حالة الموظف في التسليم: ready = مسموح · nodown = لم يسدد المقدم · done = استلم كل المخصص */
 function delState(id, list) {
   const inv = A().empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || {};
   const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
-  return rem <= 0 ? "done" : n(inv.Total_Paid_Amount) >= n(inv.Down_Payment_Required) ? "ready" : "nodown";
+  const priorCr = empPriorCredit(id, inv.Emp_Inv_ID || "").total;
+  return rem <= 0 ? "done" : (n(inv.Total_Paid_Amount) + priorCr + 0.004) >= n(inv.Down_Payment_Required) ? "ready" : "nodown";
 }
 function delCounts() {
   const by = {}; phaseItems().filter(i => n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0).forEach(i => (by[i.Emp_ID] = by[i.Emp_ID] || []).push(i));
@@ -3587,10 +3594,11 @@ function deliveryList() {
   return `<div class="grid gap-3 sm:gap-4 xl:grid-cols-2">${ids.slice(0, q ? 60 : 30).map(id => {
     const list = byEmp[id], inv = d.empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || {};
     const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
-    const downOk = n(inv.Total_Paid_Amount) >= n(inv.Down_Payment_Required);
+    const priorCr = empPriorCredit(id, inv.Emp_Inv_ID || "").total;
+    const downOk = (n(inv.Total_Paid_Amount) + priorCr + 0.004) >= n(inv.Down_Payment_Required);
     return `<article class="card overflow-hidden">
       <div class="flex items-center gap-3 p-4 border-b border-slate-100">${UI.avatar(empName(e, id), "w-11 h-11 text-sm")}
-        <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 truncate">${esc(empName(e, id))}</div><div class="text-[12px] text-slate-500 num">${esc(id)} · فاتورة ${fmt(inv.Net_Final_Invoice_Amount)} · مسدد ${fmt(inv.Total_Paid_Amount)}</div></div>
+        <div class="flex-1 min-w-0"><div class="font-bold text-slate-900 truncate">${esc(empName(e, id))}</div><div class="text-[12px] text-slate-500 num">${esc(id)} · فاتورة ${fmt(inv.Net_Final_Invoice_Amount)} · مسدد ${fmt(inv.Total_Paid_Amount)}${priorCr > 0 ? ` · <span class="text-emerald-700 font-semibold">له رصيد سابق ${fmt(priorCr)}</span>` : ""}</div></div>
         ${rem > 0 ? (downOk ? pill("", "مسموح بالتسليم", "green") : pill("", planIsInst(inv) ? "لم يسدد المقدم" : "لم يسدد المبلغ", "red")) : pill("", "تم التسليم", "gray")}</div>
       <ul class="divide-y divide-slate-100">${list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty); return `<li class="flex items-center gap-3 px-4 py-2.5">
         <div class="flex-1 min-w-0"><div class="text-[13.5px] font-semibold text-slate-800 truncate">${esc(bookName(b, i.Book_ID))}</div>${bookSub(b, i.Book_ID)}<div class="text-[11.5px] text-slate-500 num">مخصص ${fmt(i.Allocated_Qty)} · مُسلَّم ${fmt(i.Delivered_Qty)}${n(i.Returned_Qty) ? ` · مرتجع ${fmt(i.Returned_Qty)}` : ""}</div></div>
@@ -3655,33 +3663,46 @@ function printDoc(no) {
 on("printDoc", id => printDoc(id));
 
 // ============================================================ شاشة يوم التسليم (شباك الخدمة)
-/** موظف واحد في كل مرة: ابحث برقمه ← حصّل ما عليه ← سلّم كتبه، مع عداد تقدّم اليوم */
+/** موظف واحد في كل مرة: ابحث برقمه ← حصّل الصافي عليه ← سلّم كتبه، مع خصم أي رصيد دائن سابق تلقائياً */
 function ddState(id) {
   const d = A(), list = phaseItems().filter(i => i.Emp_ID === id && (n(i.Allocated_Qty) > 0 || n(i.Delivered_Qty) > 0));
   const inv = d.empInvoices.find(x => x.Emp_Inv_ID === `EINV-${APP.phaseId}-${id}`) || null;
   const rem = list.reduce((s, i) => s + n(i.Allocated_Qty) - n(i.Delivered_Qty), 0);
-  const dueDown = inv ? Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) : 0;
+  const priorCr = empPriorCredit(id, inv ? inv.Emp_Inv_ID : "").total;
+  const grossDown = inv ? Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) : 0;
+  const dueDown = Math.max(0, Math.round((grossDown - priorCr) * 100) / 100);
+  const invRem = inv ? n(inv.Remaining_Balance) : 0;
+  const netRem = Math.max(0, Math.round((invRem - priorCr) * 100) / 100);
+  const creditApplied = Math.min(invRem, priorCr);
+  const needsSettle = priorCr > 0.004 && invRem > 0.004;
   const overdue = inv && inv.Invoice_Status === "Overdue";
-  return { list, inv, rem, dueDown, overdue, ok: rem > 0 && !dueDown && !overdue };
+  return { list, inv, rem, priorCr, grossDown, dueDown, invRem, netRem, creditApplied, needsSettle, overdue, ok: rem > 0 && !dueDown && !overdue };
 }
 function ddCard(id) {
   const { e, b } = maps(), emp = e[id];
   if (!emp) return `<div class="card card-pad text-center text-rose-600 font-semibold">لا يوجد موظف بالرقم ${esc(id)}</div>`;
   const s = ddState(id), inv = s.inv;
   if (!s.list.length) return `<div class="card card-pad">${UI.empty("package-x", empName(e, id), "لا توجد له كتب مخصصة في هذه المرحلة.")}</div>`;
-  const step = s.rem === 0 ? ["تم تسليم كل الكتب", "gray", "circle-check"] : s.dueDown ? [`يسدد ${downWord(s.inv)} أولاً: ${moneyTxt(s.dueDown)}`, "red", "hand-coins"] : s.overdue ? ["عليه أقساط متأخرة", "red", "triangle-alert"] : ["جاهز للتسليم", "green", "package-check"];
+  const step = s.rem === 0 ? ["تم تسليم كل الكتب", "gray", "circle-check"]
+    : s.dueDown ? [s.priorCr > 0 ? `يسدد الصافي أولاً: ${moneyTxt(s.dueDown)} (بعد خصم رصيد له ${moneyTxt(s.priorCr)} من أصل ${moneyTxt(s.grossDown)})` : `يسدد ${downWord(s.inv)} أولاً: ${moneyTxt(s.dueDown)}`, "red", "hand-coins"]
+    : s.overdue ? ["عليه أقساط متأخرة", "red", "triangle-alert"]
+    : s.needsSettle ? [`مغطى بالكامل من رصيده الدائن (${moneyTxt(s.priorCr)}) — جاهز للتسوية والتسليم`, "green", "package-check"]
+    : ["جاهز للتسليم", "green", "package-check"];
   const tone = { red: "bg-rose-50 text-rose-700 ring-rose-200", green: "bg-emerald-50 text-emerald-700 ring-emerald-200", gray: "bg-slate-50 text-slate-600 ring-slate-200" }[step[1]];
   return `<article class="card overflow-hidden">
     <div class="flex items-center gap-3 p-4">${UI.avatar(empName(e, id), "w-14 h-14 text-lg")}
       <div class="flex-1 min-w-0"><div class="font-display font-bold text-lg text-slate-900 truncate">${esc(empName(e, id))}</div>
       <div class="text-[13px] text-slate-500 num truncate">${esc(id)}${emp.Department ? " · " + esc(emp.Department) : ""}${emp.Mobile ? ` · <a class="text-brand-700" href="tel:${esc(emp.Mobile)}">${esc(emp.Mobile)}</a>` : ""}</div></div></div>
-    <div class="mx-4 rounded-2xl ring-1 ${tone} px-4 py-3 flex items-center gap-2 font-bold text-[15px]">${ic(step[2])} ${esc(step[0])}</div>
-    ${inv ? `<div class="grid grid-cols-3 gap-2 p-4">${UI.stat("الفاتورة", fmt(inv.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(inv.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="${n(inv.Remaining_Balance) > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(inv.Remaining_Balance)}</span>`)}</div>` : ""}
+    <div class="mx-4 rounded-2xl ring-1 ${tone} px-4 py-3 flex items-center gap-2 font-bold text-[14.5px] leading-snug">${ic(step[2])} <span>${esc(step[0])}</span></div>
+    ${inv ? (s.priorCr > 0
+      ? `<div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-4">${UI.stat("الفاتورة", fmt(inv.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(inv.Total_Paid_Amount))}${UI.stat("رصيد سابق (له)", `<span class="text-emerald-600">${fmt(s.priorCr)}</span>`)}${UI.stat("صافي المتبقي", `<span class="${s.netRem > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(s.netRem)}</span>`)}</div>`
+      : `<div class="grid grid-cols-3 gap-2 p-4">${UI.stat("الفاتورة", fmt(inv.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(inv.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="${s.invRem > 0 ? "text-rose-600" : "text-emerald-600"}">${fmt(s.invRem)}</span>`)}</div>`) : ""}
     <ul class="divide-y divide-slate-100 border-t border-slate-100">${(() => { const kids = empKids(emp); return s.list.map(i => { const r = n(i.Allocated_Qty) - n(i.Delivered_Qty), child = itemChildLabel(kids, b[i.Book_ID], i); return `<li class="flex items-center gap-3 px-4 py-2.5">
       <span class="w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${r > 0 ? "bg-brand-50 text-brand-700" : "bg-emerald-50 text-emerald-600"}">${r > 0 ? `<b class="num">${r}</b>` : ic("check")}</span>
       <div class="flex-1 min-w-0"><div class="text-[14px] font-semibold text-slate-800 truncate">${esc(bookName(b, i.Book_ID))}</div>${bookSub(b, i.Book_ID, `${i.Beneficiary ? ` · <span class="text-sky-700 font-semibold">لـ ${esc(i.Beneficiary)}</span>` : child ? ` · <span class="text-brand-700 font-semibold">لـ ${esc(child)}</span>` : ""}${n(i.Delivered_Qty) ? ` · سُلّم ${fmt(i.Delivered_Qty)}` : ""}`)}</div></li>`; }).join(""); })()}</ul>
     <div class="p-3 bg-slate-50/70 grid gap-2">
-      ${inv && n(inv.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn ${s.dueDown || s.overdue ? "btn-primary" : "btn-outline"} w-full !h-12" data-act="collect" data-id="${esc(inv.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل${s.dueDown ? " المقدم " + fmt(s.dueDown) : ""}</button>` : ""}
+      ${s.needsSettle && can("TRANSFER_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline !border-emerald-300 !text-emerald-700 !bg-emerald-50/60 w-full !h-11" data-act="settleCredit" data-id="${esc(id)}">${ic("arrow-left-right")} تسوية الرصيد السابق على الفاتورة (خصم ${fmt(s.creditApplied)} ج.م بلا نقدية)</button>` : ""}
+      ${inv && s.netRem > 0.004 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn ${s.dueDown || s.overdue ? "btn-primary" : "btn-outline"} w-full !h-12" data-act="collect" data-id="${esc(inv.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل${s.dueDown ? (s.priorCr > 0 ? " الصافي " : " المقدم ") + fmt(s.dueDown) + " ج.م" : ""}</button>` : ""}
       ${s.rem > 0 && can("EXECUTE_BOOK_DELIVERY") ? `<button class="btn ${s.ok ? "btn-success" : "btn-outline"} w-full !h-12" data-act="deliver" data-id="${esc(id)}">${ic("check-check")} تسليم ${fmt(s.rem)} نسخة وطباعة الإذن</button>` : ""}
       <button class="btn btn-ghost w-full" data-act="ddNext">${ic("arrow-right")} الموظف التالي</button></div></article>`;
 }
@@ -3739,17 +3760,25 @@ function finList() {
   return UI.table([
     { t: "الموظف", v: i => `<div class="flex items-center gap-2.5">${UI.avatar(empName(e, i.Emp_ID), "w-9 h-9 text-xs")}<div><div class="font-semibold text-slate-900">${empLink(i.Emp_ID, empName(e, i.Emp_ID))}</div><div class="text-[11.5px] text-slate-400 num">${esc(i.Emp_ID)}</div></div></div>` },
     { t: "الصافي", cls: "num", v: i => { const h = resHeaderOf(i.Res_ID), a = n(h.Invoice_Adjustment); return `<b>${fmt(i.Net_Final_Invoice_Amount)}</b>` + (a ? `<div class="text-[11px] ${a < 0 ? "text-emerald-600" : "text-amber-600"}" title="${esc(h.Adjustment_Reason)}">${a < 0 ? "خصم" : "إضافة"} ${fmt(Math.abs(a))}</div>` : ""); } }, { t: "المقدم", cls: "num", v: i => fmt(i.Down_Payment_Required) }, { t: "المسدد", cls: "num", v: i => `<span class="text-emerald-600">${fmt(i.Total_Paid_Amount)}</span>` },
-    { t: "المتبقي", cls: "num", v: i => `<b class="${n(i.Remaining_Balance) ? "text-rose-600" : "text-slate-400"}">${fmt(i.Remaining_Balance)}</b>` + (n(i.Credit_Balance) ? `<div class="text-emerald-600 text-[11px]">له ${fmt(i.Credit_Balance)}</div>` : "") },
+    { t: "المتبقي", cls: "num", v: i => {
+      const pcr = empPriorCredit(i.Emp_ID, i.Emp_Inv_ID).total, rem = n(i.Remaining_Balance), netR = Math.max(0, Math.round((rem - pcr) * 100) / 100);
+      if (pcr > 0 && rem > 0) return `<b class="${netR ? "text-rose-600" : "text-emerald-600"}">${fmt(netR)}</b><div class="text-[10.5px] text-emerald-700">فاتورة ${fmt(rem)} − له ${fmt(pcr)}</div>`;
+      return `<b class="${rem ? "text-rose-600" : "text-slate-400"}">${fmt(rem)}</b>` + (n(i.Credit_Balance) ? `<div class="text-emerald-600 text-[11px]">له ${fmt(i.Credit_Balance)}</div>` : "");
+    } },
     { t: "الخطة", v: i => esc(ar(i.Payment_Plan_Type)) + (n(i.Installments_Count) ? ` · ${i.Installments_Count}` : "") }, { t: "الحالة", v: i => pill(i.Invoice_Status) },
-    { t: "إجراءات", actions: true, v: i => `<div class="inline-flex items-center gap-1 whitespace-nowrap">`
-      + (n(i.Remaining_Balance) > 0 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
+    { t: "إجراءات", actions: true, v: i => {
+      const pcr = empPriorCredit(i.Emp_ID, i.Emp_Inv_ID).total, rem = n(i.Remaining_Balance), netR = Math.max(0, Math.round((rem - pcr) * 100) / 100);
+      return `<div class="inline-flex items-center gap-1 whitespace-nowrap">`
+      + (pcr > 0 && rem > 0 && can("TRANSFER_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline !border-emerald-300 !text-emerald-700 btn-xs" data-act="settleCredit" data-id="${esc(i.Emp_ID)}" title="تسوية الرصيد السابق">${ic("arrow-left-right")} تسوية</button>` : "")
+      + (netR > 0.004 && can("RECORD_EMPLOYEE_PAYMENT") ? `<button class="btn btn-primary btn-xs" data-act="collect" data-id="${esc(i.Emp_Inv_ID)}">${ic("hand-coins")} تحصيل</button>` : "")
       + (n(i.Credit_Balance) && can("REFUND_EMPLOYEE_CREDIT") ? `<button class="btn btn-outline btn-xs" data-act="refund" data-id="${esc(i.Emp_Inv_ID)}">${ic("undo-2")} رد الرصيد</button>` : "")
       + (can("CUSTOMIZE_EMP_INSTALLMENTS") ? `<button class="act-ic act-ic-copy" data-act="changePlan" data-id="${esc(i.Res_ID)}" title="تعديل خطة السداد" aria-label="تعديل خطة السداد">${ic("calendar-range")}</button>` : "")
       + `<button class="act-ic act-ic-edit" data-act="printInvA" data-id="${esc(i.Emp_Inv_ID)}" title="طباعة الفاتورة" aria-label="طباعة الفاتورة">${ic("printer")}</button>`
       + (can("ADJUST_EMP_INVOICE") ? `<button class="act-ic act-ic-brand" data-act="adjInv" data-id="${esc(i.Emp_Inv_ID)}" title="تعديل الفاتورة (خصم/إضافة)" aria-label="تعديل الفاتورة">${ic("pencil")}</button>` : "")
       + (can("SUBMIT_OR_UPDATE_RESERVATION") ? `<button class="act-ic act-ic-edit" data-act="resEdit" data-id="${esc(i.Emp_ID)}" title="تعديل حجز الكتب" aria-label="تعديل حجز الكتب">${ic("notebook-pen")}</button>` : "")
       + (can("DELETE_EMP_INVOICE") ? `<button class="act-ic act-ic-del" data-act="delInv" data-id="${esc(i.Emp_Inv_ID)}" title="حذف الفاتورة" aria-label="حذف الفاتورة">${ic("trash-2")}</button>` : "")
-      + `</div>` }
+      + `</div>`;
+    } }
   ], invs, { maxH: 680, emptyIcon: "receipt", empty: "لا فواتير", emptySub: "تصدر فواتير الموظفين بعد تشغيل التوزيع." });
 }
 Router.add("/a/collect", view => {
@@ -3757,7 +3786,7 @@ Router.add("/a/collect", view => {
   const invs = A().empInvoices.filter(i => i.Phase_ID === APP.phaseId);
   const billed = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount");
   view.innerHTML = UI.pageHead("التحصيل والفواتير", "تحصيل المقدمات والأقساط وإصدار الإيصالات")
-    + `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">${UI.kpi("فواتير المرحلة", money(billed), { icon: "receipt", tone: "brand", foot: invs.length + " فاتورة" })}${UI.kpi("المحصَّل", money(paid), { icon: "circle-check", tone: "green", pct: billed ? paid / billed * 100 : 0 })}${UI.kpi("المتبقي", money(sum(invs, "Remaining_Balance")), { icon: "hourglass", tone: "amber" })}${UI.kpi("لم يسددوا المقدم", fmt(invs.filter(i => n(i.Total_Paid_Amount) < n(i.Down_Payment_Required)).length), { icon: "circle-alert", tone: "red" })}</div>
+    + `<div class="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-4">${UI.kpi("فواتير المرحلة", money(billed), { icon: "receipt", tone: "brand", foot: invs.length + " فاتورة" })}${UI.kpi("المحصَّل", money(paid), { icon: "circle-check", tone: "green", pct: billed ? paid / billed * 100 : 0 })}${UI.kpi("المتبقي", money(sum(invs, "Remaining_Balance")), { icon: "hourglass", tone: "amber" })}${UI.kpi("لم يسددوا المقدم", fmt(invs.filter(i => (n(i.Total_Paid_Amount) + empPriorCredit(i.Emp_ID, i.Emp_Inv_ID).total + 0.004) < n(i.Down_Payment_Required)).length), { icon: "circle-alert", tone: "red" })}</div>
     <section class="card card-pad"><div class="flex flex-wrap items-center gap-3 mb-4">${searchBox("qFin", Q.fin, "بحث بالموظف")}
       <div class="scroll-x !mx-0 !px-0">${[["", "الكل"], ["down", "لم يسدد المقدم"], ["due", "عليه متبقٍ"], ["Overdue", "متأخر"], ["credit", "له رصيد"], ["Paid_In_Full", "مسدد بالكامل"]].map(f => `<button class="chip !h-9" data-act="finF" data-id="${f[0]}" aria-pressed="${(Q.finF || "") === f[0]}">${f[1]}</button>`).join("")}</div></div>
       <div id="finList">${finList()}</div></section>`;
@@ -3766,14 +3795,28 @@ on("qFin", v => { Q.fin = v.trim(); rerenderList("finList", finList); });
 on("finF", v => { Q.finF = v; Shell.rerender(); });
 on("collect", async id => {
   const i = A().empInvoices.find(x => x.Emp_Inv_ID === id), { e } = maps();
-  const dueDown = Math.max(0, n(i.Down_Payment_Required) - n(i.Total_Paid_Amount));
-  const v = await UI.form({ title: "تحصيل", sub: `${empName(e, i.Emp_ID)} · ${id}`,
-    fields: [{ name: "_s", type: "html", html: `<div class="grid grid-cols-3 gap-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(i.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="text-rose-600">${fmt(i.Remaining_Balance)}</span>`)}</div>` },
-      { name: "amount", label: dueDown ? `المبلغ (${planIsInst(i) ? "المقدم المتبقي" : "المطلوب كاملاً"} ${fmt(dueDown)})` : "المبلغ", type: "number", value: dueDown || n(i.Remaining_Balance), required: true },
-      { name: "method", label: "الوسيلة", type: "seg", value: "CASH", options: [["CASH", "نقدي"], ["INSTAPAY", "إنستاباي"], ["WALLET", "محفظة"], ["PAYROLL", "مرتب"]] },
-      { name: "ref", label: "رقم المرجع / التحويل", placeholder: "إلزامي للتحويلات" }], ok: "تحصيل وطباعة الإيصال", icon: "hand-coins" });
+  const priorCr = empPriorCredit(i.Emp_ID, i.Emp_Inv_ID).total;
+  const invRem = n(i.Remaining_Balance);
+  const creditApplied = Math.min(invRem, priorCr);
+  const grossDown = Math.max(0, n(i.Down_Payment_Required) - n(i.Total_Paid_Amount));
+  const netDown = Math.max(0, Math.round((grossDown - priorCr) * 100) / 100);
+  const netRem = Math.max(0, Math.round((invRem - priorCr) * 100) / 100);
+  if (priorCr > 0 && netRem <= 0.004) {
+    toast("الفاتورة مغطاة بالكامل من رصيد الموظف السابق — استخدم «تسوية الرصيد» بدون نقدية", "info");
+    if (ACTIONS.settleCredit) return ACTIONS.settleCredit(i.Emp_ID);
+    return;
+  }
+  const fields = [{ name: "_s", type: "html", html: priorCr > 0
+      ? `<div class="rounded-xl bg-emerald-50 ring-1 ring-emerald-200 p-3 text-xs text-emerald-900 mb-2 leading-relaxed">${ic("info", "inline -mt-0.5 text-emerald-600")} <b>تنبيه مالي:</b> لهذا الموظف رصيد دائن سابق (<b class="num">${fmt(priorCr)}</b> ج.م) — صافي المطلوب تحصيله نقداً هو <b class="num text-rose-700">${fmt(netRem)}</b> ج.م (من أصل <span class="num">${fmt(invRem)}</span> ج.م).</div>
+         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(i.Total_Paid_Amount))}${UI.stat("رصيد سابق", `<span class="text-emerald-600">${fmt(priorCr)}</span>`)}${UI.stat("صافي المطلوب", `<span class="text-rose-600">${fmt(netRem)}</span>`)}</div>`
+      : `<div class="grid grid-cols-3 gap-2">${UI.stat("الصافي", fmt(i.Net_Final_Invoice_Amount))}${UI.stat("المسدد", fmt(i.Total_Paid_Amount))}${UI.stat("المتبقي", `<span class="text-rose-600">${fmt(invRem)}</span>`)}</div>` },
+    { name: "amount", label: netDown ? `المبلغ (${priorCr > 0 ? "صافي المطلوب" : planIsInst(i) ? "المقدم المتبقي" : "المطلوب كاملاً"} ${fmt(netDown)})` : "المبلغ", type: "number", value: netDown || netRem, required: true },
+    { name: "method", label: "الوسيلة", type: "seg", value: "CASH", options: [["CASH", "نقدي"], ["INSTAPAY", "إنستاباي"], ["WALLET", "محفظة"], ["PAYROLL", "مرتب"]] },
+    { name: "ref", label: "رقم المرجع / التحويل", placeholder: "إلزامي للتحويلات" }];
+  if (creditApplied > 0.004) fields.push({ name: "autoSettle", label: `تسوية الرصيد السابق (${fmt(creditApplied)} ج.م) تلقائياً مع هذا التحصيل`, type: "check", value: true });
+  const v = await UI.form({ title: "تحصيل", sub: `${empName(e, i.Emp_ID)} · ${id}`, fields, ok: "تحصيل وطباعة الإيصال", icon: "hand-coins" });
   if (!v) return;
-  const r = await call("RECORD_EMPLOYEE_PAYMENT", { empInvId: id, amount: v.amount, paymentMethod: v.method, transactionRef: v.ref }, { block: true });
+  const r = await call("RECORD_EMPLOYEE_PAYMENT", { empInvId: id, amount: v.amount, paymentMethod: v.method, transactionRef: v.ref, autoSettleCredit: !!v.autoSettle }, { block: true });
   toast(r.message, r.success ? "success" : "danger");
   if (r.success) { await Admin.load(); printReceipt(r.receiptNo); }
 });
@@ -4481,8 +4524,8 @@ on("annNew", async () => {
 on("annDel", id => act("POST_ANNOUNCEMENT", { op: "delete", id }, { title: "حذف الإعلان", message: "حذف هذا الإعلان من عند الموظفين؟", ok: "حذف", tone: "danger" }));
 /** رسائل واتساب جاهزة للموظف من ملفه */
 const WA_TPL = {
-  ready: (e, x) => `أهلاً ${e}، كتبك جاهزة للتسليم 📦 في ${Brand.get().org}. برجاء الحضور لاستلامها ومعك ${x.inst ? "المقدم" : "المبلغ"}${x.down ? " (" + x.down + " ج.م)" : ""}.`,
-  inst: (e, x) => `أهلاً ${e}، تذكير ودي بقسط كتب أولادك${x.amount ? " بقيمة " + x.amount + " ج.م" : ""}${x.due ? " المستحق " + x.due : ""}. شكراً لتعاونك.`,
+  ready: (e, x) => `أهلاً ${e}، كتبك جاهزة للتسليم 📦 في ${Brand.get().org}. ${x.downNum > 0 ? `برجاء الحضور لاستلامها ومعك ${x.inst ? "صافي المقدم" : "صافي المبلغ"} (${x.down} ج.م).` : "لا يوجد مبلغ مطلوب — برجاء الحضور للاستلام مباشرة."}`,
+  inst: (e, x) => `أهلاً ${e}، تذكير ودي بقسط كتب أولادك${x.amountNum > 0 ? " بقيمة " + x.amount + " ج.م" : ""}${x.due ? " المستحق " + x.due : ""}. شكراً لتعاونك.`,
   open: e => `أهلاً ${e}، الحجز مفتوح الآن في ${Brand.get().platform} 🎉 احجز كتب أولادك بخصم العاملين من التطبيق.`,
   free: e => `أهلاً ${e}، `
 };
@@ -4490,6 +4533,9 @@ on("waEmp", key => {
   const [id, t] = key.split("|"), d = A(), e = maps().e[id] || {};
   if (!e.Mobile) return toast("لا يوجد رقم موبايل لهذا الموظف", "warning");
   const inv = d.empInvoices.filter(i => i.Emp_ID === id).pop() || {}, inst = d.installments.filter(i => i.Emp_ID === id && n(i.Remaining_Inst_Amount) > 0).sort((a, c) => String(a.Due_Date).localeCompare(String(c.Due_Date)))[0] || {};
+  const priorCr = empPriorCredit(id, inv.Emp_Inv_ID || "").total;
+  const netDown = Math.max(0, Math.round((Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount)) - priorCr) * 100) / 100);
+  const netInst = Math.max(0, Math.round((n(inst.Remaining_Inst_Amount) - priorCr) * 100) / 100);
   const first = String(e.Full_Name || "").split(" ")[0];
-  window.open(Brand.waLink(e.Mobile, WA_TPL[t](first, { inst: planIsInst(inv), down: fmt(Math.max(0, n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount))), amount: fmt(inst.Remaining_Inst_Amount), due: inst.Due_Date })), "_blank");
+  window.open(Brand.waLink(e.Mobile, WA_TPL[t](first, { inst: planIsInst(inv), downNum: netDown, down: fmt(netDown), amountNum: netInst, amount: fmt(netInst), due: inst.Due_Date })), "_blank");
 });
