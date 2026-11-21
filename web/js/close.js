@@ -626,10 +626,15 @@ function waList() {
   const d = A(), { e } = maps(), ph = APP.phaseId, emp = id => e[id] || {}, link = location.href.replace(/#.*$/, "");
   let rows = [];
   if (WA.aud === "ready") { const by = {}; d.resItems.filter(i => i.Phase_ID === ph && n(i.Allocated_Qty) > n(i.Delivered_Qty)).forEach(i => { by[i.Emp_ID] = 1; });
-    rows = Object.keys(by).map(id => { const inv = d.empInvoices.find(v => v.Emp_ID === id && v.Phase_ID === ph) || {}; return { id, amt: Math.max(n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount), 0) }; }); }
+    rows = Object.keys(by).map(id => { const inv = d.empInvoices.find(v => v.Emp_ID === id && v.Phase_ID === ph) || {}; const pcr = typeof empPriorCredit === "function" ? empPriorCredit(id, inv.Emp_Inv_ID || "").total : 0; return { id, amt: Math.max(0, Math.round((Math.max(n(inv.Down_Payment_Required) - n(inv.Total_Paid_Amount), 0) - pcr) * 100) / 100) }; }); }
   else if (WA.aud === "notBooked") { const booked = new Set(d.resItems.filter(i => i.Phase_ID === ph).map(i => i.Emp_ID)); rows = d.employees.filter(x => !booked.has(x.Emp_ID) && x.Mobile).map(x => ({ id: x.Emp_ID, amt: 0 })); }
-  else if (WA.aud === "due") rows = d.empInvoices.filter(v => n(v.Remaining_Balance) > 0).map(v => ({ id: v.Emp_ID, amt: n(v.Remaining_Balance) }));
-  else rows = d.empInvoices.filter(v => n(v.Credit_Balance) > 0).map(v => ({ id: v.Emp_ID, amt: n(v.Credit_Balance) }));
+  else if (WA.aud === "due") {
+    const byId = {}; d.empInvoices.forEach(v => { (byId[v.Emp_ID] = byId[v.Emp_ID] || []).push(v); });
+    rows = Object.keys(byId).map(id => ({ id, amt: Math.round(acctOf(byId[id]).net * 100) / 100 })).filter(r => r.amt > 0.004);
+  } else {
+    const byId = {}; d.empInvoices.forEach(v => { (byId[v.Emp_ID] = byId[v.Emp_ID] || []).push(v); });
+    rows = Object.keys(byId).map(id => ({ id, amt: Math.round(-acctOf(byId[id]).net * 100) / 100 })).filter(r => r.amt > 0.004);
+  }
   const merged = {}; rows.forEach(r => { merged[r.id] = merged[r.id] ? { id: r.id, amt: merged[r.id].amt + r.amt } : r; });
   return Object.values(merged).map(r => ({ ...r, name: emp(r.id).Full_Name || r.id, mobile: emp(r.id).Mobile || "", link })).filter(r => r.mobile);
 }

@@ -498,31 +498,37 @@ const nextInst = () => (APP.emp.myInstallments || []).filter(i => n(i.Remaining_
 const daysTo = d => Math.ceil((new Date(String(d).slice(0, 10) + "T12:00:00") - new Date()) / 864e5);
 const creditTotal = () => (APP.emp.myInvoices || []).reduce((s, i) => s + n(i.Credit_Balance), 0);
 
-// (1) ادفع الآن + (2) رصيد مستحق الرد + (3) تقويم الأقساط + (5) كشف حساب
+// (1) ادفع الآن + (2) رصيد مستحق الرد (صافي فقط) + (3) تقويم الأقساط + (5) كشف حساب صافي
 function payToolsHTML() {
-  const s = payS(), nx = nextInst(), cr = creditTotal(), rem = (APP.emp.myInvoices || []).reduce((t, i) => t + n(i.Remaining_Balance), 0);
-  const holder = s.CASH_ACCOUNT_HOLDER || "", insta = s.PAY_INSTAPAY || "", wallet = s.PAY_WALLET || "";
-  const due = nx ? n(nx.Remaining_Inst_Amount) : rem, d = nx ? daysTo(nx.Due_Date) : null;
+  const s = payS(), nx = nextInst();
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { alayh: (APP.emp.myInvoices || []).reduce((t, i) => t + n(i.Remaining_Balance), 0), lah: creditTotal(), net: 0, netDue: 0, netCredit: 0 };
+  const grossDue = nx ? n(nx.Remaining_Inst_Amount) : acc.alayh;
+  const due = acc.netDue > 0.004 ? Math.max(0, Math.min(acc.netDue, Math.round((grossDue - acc.lah) * 100) / 100)) : 0;
+  const d = nx ? daysTo(nx.Due_Date) : null;
   const when = d === null ? "" : d < 0 ? `<span class="text-rose-600 font-bold">متأخر ${-d} يوم</span>` : d === 0 ? "<b>النهارده</b>" : `بعد ${d} يوم`;
-  return `${due > 0 ? `<section class="card overflow-hidden mb-4 ring-2 ring-brand-200"><div class="p-4" style="background:linear-gradient(135deg,#f5f3ff,#fff)">
-      <div class="flex items-center gap-3"><span class="text-[30px]">💳</span><div class="flex-1"><div class="text-[12px] text-slate-500">${nx && planIsInst((APP.emp.myInvoices || []).find(v => v.Emp_Inv_ID === nx.Emp_Inv_ID)) ? "القسط الجاي " + (when ? "· " + when : "") : "المتبقي عليك"}</div><div class="font-display font-bold text-[22px] num text-brand-900">${fmt(due)} <span class="text-[12px]">ج.م</span></div>${nx ? `<div class="text-[11.5px] text-slate-500 num">${esc(day(nx.Due_Date))}</div>` : ""}</div>
+  return `${due > 0.004 ? `<section class="card overflow-hidden mb-4 ring-2 ring-brand-200"><div class="p-4" style="background:linear-gradient(135deg,#f5f3ff,#fff)">
+      <div class="flex items-center gap-3"><span class="text-[30px]">💳</span><div class="flex-1"><div class="text-[12px] text-slate-500">${nx && planIsInst((APP.emp.myInvoices || []).find(v => v.Emp_Inv_ID === nx.Emp_Inv_ID)) ? "صافي القسط الجاي " + (when ? "· " + when : "") : "صافي المتبقي عليك"}</div><div class="font-display font-bold text-[22px] num text-brand-900">${fmt(due)} <span class="text-[12px]">ج.م</span></div>${acc.lah > 0 ? `<div class="text-[11px] text-emerald-700 num">بعد خصم رصيد لك ${fmt(acc.lah)} ج.م</div>` : ""}${nx ? `<div class="text-[11.5px] text-slate-500 num">${esc(day(nx.Due_Date))}</div>` : ""}</div>
       <button class="btn btn-primary !h-11" data-act="payNow">${ic("send")} ادفع الآن</button></div>
       <div class="grid grid-cols-2 gap-2 mt-3">${(APP.emp.myInvoices || []).some(v => planIsInst(v) && n(v.Remaining_Balance) > 0) ? `<button class="btn btn-outline btn-sm" data-act="instIcs">${ic("calendar-check")} أضف الأقساط للتقويم</button>` : ""}<button class="btn btn-outline btn-sm" data-act="stmtPdf">${ic("file-text")} كشف حساب PDF</button></div></div></section>`
     : `<div class="grid grid-cols-1 gap-2 mb-4"><button class="btn btn-outline btn-sm" data-act="stmtPdf">${ic("file-text")} كشف حساب PDF</button></div>`}
-    ${cr > 0 ? `<section class="card p-4 mb-4 ring-1 ring-emerald-200 bg-emerald-50/50 flex items-center gap-3"><span class="text-[28px]">💰</span><div class="flex-1"><b class="text-emerald-800">ليك رصيد ${fmt(cr)} ج.م</b><div class="text-[12px] text-slate-600">فلوس زيادة عن قيمة كتبك (مرتجع أو إلغاء أو سداد زيادة).</div></div><button class="btn btn-success btn-sm" data-act="askRefund">اطلب استرداد</button></section>` : ""}`;
+    ${acc.netCredit > 0.004 ? `<section class="card p-4 mb-4 ring-1 ring-emerald-200 bg-emerald-50/50 flex items-center gap-3"><span class="text-[28px]">💰</span><div class="flex-1"><b class="text-emerald-800">صافي رصيدك المستحق لك: ${fmt(acc.netCredit)} ج.م</b><div class="text-[12px] text-slate-600">رصيد دائن زائد عن فواتيرك — يُخصم تلقائياً من فاتورتك القادمة أو يمكنك طلب استرداده.</div></div><button class="btn btn-success btn-sm" data-act="askRefund">اطلب استرداد</button></section>` : ""}`;
 }
 on("payNow", () => {
-  const s = payS(), nx = nextInst(), due = nx ? n(nx.Remaining_Inst_Amount) : 0, holder = s.CASH_ACCOUNT_HOLDER || "";
+  const s = payS(), nx = nextInst(), holder = s.CASH_ACCOUNT_HOLDER || "";
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { alayh: 0, lah: 0, netDue: 0 };
+  const grossDue = nx ? n(nx.Remaining_Inst_Amount) : acc.alayh;
+  const due = acc.netDue > 0.004 ? Math.max(0, Math.min(acc.netDue, Math.round((grossDue - acc.lah) * 100) / 100)) : 0;
   const row = (icon, t, v) => v ? `<div class="flex items-center gap-3 rounded-2xl ring-1 ring-slate-200 p-3"><span class="text-[22px]">${icon}</span><div class="flex-1 min-w-0"><div class="text-[12px] text-slate-500">${t}</div><b class="num text-[16px] select-all" dir="ltr">${esc(v)}</b></div><button class="btn btn-ghost btn-xs" data-copy="${esc(v)}">${ic("copy")} نسخ</button></div>` : "";
-  const msg = `السلام عليكم، حوّلت قسط مبادرة الكتب${due ? " بمبلغ " + due + " ج.م" : ""}\nالاسم: ${APP.user.fullName}\nالرقم: ${APP.user.empId}\n(مرفق صورة التحويل)`;
-  const m = UI.open(`<div class="text-center mb-3"><div class="text-[13px] text-slate-500">المطلوب الآن</div><div class="font-display font-bold text-[28px] num text-brand-900">${fmt(due)} <span class="text-[13px]">ج.م</span></div>${holder ? `<div class="text-[12px] text-slate-500">باسم: <b>${esc(holder)}</b></div>` : ""}</div>
+  const msg = `السلام عليكم، حوّلت صافي المطلوب في مبادرة الكتب${due ? " بمبلغ " + due + " ج.م" : ""}\nالاسم: ${APP.user.fullName}\nالرقم: ${APP.user.empId}\n(مرفق صورة التحويل)`;
+  const m = UI.open(`<div class="text-center mb-3"><div class="text-[13px] text-slate-500">الصافي المطلوب الآن</div><div class="font-display font-bold text-[28px] num text-brand-900">${fmt(due)} <span class="text-[13px]">ج.م</span></div>${acc.lah > 0 ? `<div class="text-[11.5px] text-emerald-700 num">بعد خصم رصيد لك ${fmt(acc.lah)} ج.م</div>` : ""}${holder ? `<div class="text-[12px] text-slate-500">باسم: <b>${esc(holder)}</b></div>` : ""}</div>
     <div class="grid gap-2">${row("⚡", "إنستاباي", s.PAY_INSTAPAY)}${row("📱", "محفظة إلكترونية", s.PAY_WALLET)}${!s.PAY_INSTAPAY && !s.PAY_WALLET ? `<div class="text-[13px] text-slate-600 text-center">ادفع نقداً للمسؤول، أو كلّمه ياخد منك التحويل.</div>` : ""}</div>
     <a class="btn btn-success w-full mt-4 !h-12" target="_blank" rel="noopener" href="${esc(Brand.waLink(Brand.get().whatsapp || Brand.get().phone, msg))}">${ic("message-circle")} بعد التحويل ابعت الصورة على واتساب</a>
     <p class="text-[11.5px] text-slate-500 text-center mt-2">الإيصال بيظهر هنا أول ما المسؤول يسجّل التحويل.</p>`, { title: "ادفع الآن" });
   $$("[data-copy]", m.root).forEach(b => b.addEventListener("click", () => { try { navigator.clipboard.writeText(b.dataset.copy); toast("اتنسخ 👌", "success"); } catch (_) {} }));
 });
 on("askRefund", () => {
-  const cr = creditTotal(), msg = `السلام عليكم، عندي رصيد ${cr} ج.م في مبادرة الكتب وعايز أسترده\nالاسم: ${APP.user.fullName}\nالرقم: ${APP.user.empId}`;
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { netCredit: creditTotal() };
+  const cr = acc.netCredit, msg = `السلام عليكم، عندي صافي رصيد ${cr} ج.م في مبادرة الكتب وعايز أسترده\nالاسم: ${APP.user.fullName}\nالرقم: ${APP.user.empId}`;
   window.open(Brand.waLink(Brand.get().whatsapp || Brand.get().phone, msg), "_blank");
 });
 on("instIcs", () => {
@@ -540,11 +546,12 @@ on("stmtPdf", () => {
   const instInv = new Set(invs.filter(planIsInst).map(i => i.Emp_Inv_ID));
   const pays = (r.myPayments || []).filter(p => !isTrue(p.Is_Voided)), inst = (r.myInstallments || []).filter(i => instInv.has(i.Emp_Inv_ID)).slice().sort((a, b) => String(a.Due_Date).localeCompare(b.Due_Date));
   const t = (h, rows) => `<table><thead><tr>${h.map(x => `<th>${x}</th>`).join("")}</tr></thead><tbody>${rows || `<tr><td colspan="${h.length}" class="c sub">—</td></tr>`}</tbody></table>`;
-  const net = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount"), rem = sum(invs, "Remaining_Balance");
+  const net = sum(invs, "Net_Final_Invoice_Amount"), paid = sum(invs, "Total_Paid_Amount");
+  const acc = typeof empNetAccount === "function" ? empNetAccount() : { alayh: sum(invs, "Remaining_Balance"), lah: sum(invs, "Credit_Balance"), netDue: sum(invs, "Remaining_Balance"), netCredit: 0 };
   const html = Doc.page(`${Doc.head("كشف حساب", APP.user.empId)}
     <div class="meta"><div class="box"><h4>العضو</h4>${Doc.kv("الاسم", esc(APP.user.fullName))}${Doc.kv("الرقم", `<span class="num">${esc(APP.user.empId)}</span>`)}</div>
-      <div class="box"><h4>الملخص</h4>${Doc.kv("إجمالي الفواتير", `<span class="num">${Doc.money(net)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(paid)}</span>`)}${Doc.kv("المتبقي", `<b class="num">${Doc.money(rem)}</b>`)}</div></div>
-    <h4 style="margin:2mm 0 1mm">الفواتير</h4>${t(["المرحلة", "الفاتورة", "الصافي", "المسدد", "المتبقي"], invs.map(i => `<tr><td>${esc(phName(i.Phase_ID))}</td><td class="num">${esc(i.Emp_Inv_ID)}</td><td class="l num">${Doc.money(i.Net_Final_Invoice_Amount)}</td><td class="l num">${Doc.money(i.Total_Paid_Amount)}</td><td class="l num"><b>${Doc.money(i.Remaining_Balance)}</b></td></tr>`).join(""))}
+      <div class="box"><h4>ملخص صافي الحساب</h4>${Doc.kv("إجمالي الفواتير", `<span class="num">${Doc.money(net)}</span>`)}${Doc.kv("المسدد", `<span class="num">${Doc.money(paid)}</span>`)}${acc.lah > 0 ? Doc.kv("رصيد دائن (لك)", `<span class="num" style="color:#047857">${Doc.money(acc.lah)}</span>`) : ""}${acc.netCredit > 0.004 ? Doc.kv("صافي رصيدك (لك)", `<b class="num" style="color:#047857">${Doc.money(acc.netCredit)}</b>`) : Doc.kv("صافي المتبقي عليك", `<b class="num" style="color:${acc.netDue > 0 ? "#be123c" : "#047857"}">${Doc.money(acc.netDue)}</b>`)}</div></div>
+    <h4 style="margin:2mm 0 1mm">الفواتير</h4>${t(["المرحلة", "الفاتورة", "الصافي", "المسدد", "عليه", "رصيد له"], invs.map(i => `<tr><td>${esc(phName(i.Phase_ID))}</td><td class="num">${esc(i.Emp_Inv_ID)}</td><td class="l num">${Doc.money(i.Net_Final_Invoice_Amount)}</td><td class="l num">${Doc.money(i.Total_Paid_Amount)}</td><td class="l num"><b>${Doc.money(i.Remaining_Balance)}</b></td><td class="l num" style="color:#047857">${n(i.Credit_Balance) ? Doc.money(i.Credit_Balance) : "—"}</td></tr>`).join(""))}
     ${inst.length ? "" : "<!--"}<h4 style="margin:2mm 0 1mm">الأقساط</h4>${t(["القسط", "الاستحقاق", "القيمة", "المسدد", "الباقي"], inst.map(i => `<tr><td>${esc(i.Admin_Custom_Notes || "قسط " + i.Installment_No)}</td><td class="c num">${esc(Doc.date(i.Due_Date))}</td><td class="l num">${Doc.money(i.Scheduled_Amount)}</td><td class="l num">${Doc.money(i.Paid_Amount)}</td><td class="l num">${Doc.money(i.Remaining_Inst_Amount)}</td></tr>`).join(""))}
     ${inst.length ? "" : "-->"}
     <h4 style="margin:2mm 0 1mm">الإيصالات</h4>${t(["الإيصال", "التاريخ", "الوسيلة", "المبلغ"], pays.map(p => `<tr><td class="num">${esc(p.Receipt_No)}</td><td class="c num">${esc(String(p.Payment_Date).slice(0, 10))}</td><td>${esc(ar(p.Payment_Method))}</td><td class="l num">${Doc.money(p.Amount)}</td></tr>`).join(""))}

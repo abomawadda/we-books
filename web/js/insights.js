@@ -314,8 +314,9 @@ function askRows() {
     if (ASK.stage) its = its.filter(i => (b[i.Book_ID] || {}).Stage === ASK.stage);
     if (ASK.grade) its = its.filter(i => (b[i.Book_ID] || {}).Grade === ASK.grade);
     const v = inv[e.Emp_ID] || {}, req = its.reduce((s, i) => s + n(i.Requested_Qty), 0), al = its.reduce((s, i) => s + n(i.Allocated_Qty), 0), dl = its.reduce((s, i) => s + n(i.Delivered_Qty), 0);
+    const pcr = typeof empPriorCredit === "function" ? empPriorCredit(e.Emp_ID, v.Emp_Inv_ID || "").total : 0;
     return { e, its, req, al, dl, amt: its.reduce((s, i) => s + n(i.Requested_Qty) * (n(i.Unit_Emp_Price) || n((b[i.Book_ID] || {}).Emp_Selling_Price)), 0), inv: v,
-      down: Math.max(0, n(v.Down_Payment_Required) - n(v.Total_Paid_Amount)), rem: n(v.Remaining_Balance), rel: its.some(i => i.Beneficiary) };
+      down: Math.max(0, Math.round((Math.max(0, n(v.Down_Payment_Required) - n(v.Total_Paid_Amount)) - pcr) * 100) / 100), rem: Math.max(0, Math.round((n(v.Remaining_Balance) - pcr) * 100) / 100), rel: its.some(i => i.Beneficiary) };
   }).filter(r => {
     const any = (ASK.stage || ASK.grade) ? r.req > 0 : (byEmp[r.e.Emp_ID] || []).length > 0;
     return { booked: any, none: !any && !(byEmp[r.e.Emp_ID] || []).length, down: any && r.inv.Emp_Inv_ID && r.down > 0, waiting: any && r.req > Math.max(r.al, r.dl), ready: r.al > r.dl, done: any && r.dl >= r.req, owes: r.rem > 0, rel: r.rel }[ASK.st];
