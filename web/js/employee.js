@@ -796,20 +796,20 @@ function gradePicker() {
   const stages = uniq([...(cat.grades || []).map(g => g.stage), "أخرى"]).filter(s => grades.some(g => guess(g) === s));
   const ks = myKids();
   const selGrades = Array.isArray(Emp.browseGrades) ? Emp.browseGrades : [];
-  const bMode = Emp.browseMode || "manual";
-  const modeCard = (id, emoji, ttl, sub) => `<button type="button" class="w-full text-right rounded-2xl px-3.5 py-2.5 ring-1 transition active:scale-[.99] flex items-center gap-3 ${bMode === id ? "bg-brand-700 text-white ring-brand-700 shadow-glow" : "bg-white text-slate-800 ring-slate-200 hover:ring-brand-300"}" data-act="browseMode" data-id="${id}" aria-pressed="${bMode === id}">
-    <span class="w-10 h-10 rounded-xl flex items-center justify-center text-[22px] shrink-0 ${bMode === id ? "bg-white/15" : "bg-slate-50"}">${emoji}</span>
-    <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14px]">${ttl}</b><span class="block text-[11.5px] mt-0.5 ${bMode === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></span>
-    <span class="shrink-0 ${bMode === id ? "text-gold-300" : "text-slate-300"}">${ic(bMode === id ? "circle-check" : "chevron-left")}</span></button>`;
+  const modeCard = (id, emoji, ttl, sub) => `<button type="button" class="w-full text-right rounded-2xl px-3.5 py-3 ring-1 ring-slate-200 bg-white hover:ring-brand-400 hover:bg-brand-50/40 text-slate-800 transition active:scale-[.99] flex items-center gap-3 shadow-2xs" data-act="browseDirect" data-id="${id}">
+    <span class="w-10 h-10 rounded-xl flex items-center justify-center text-[22px] shrink-0 bg-brand-50">${emoji}</span>
+    <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14px] text-slate-900">${ttl}</b><span class="block text-[11.5px] mt-0.5 text-slate-500">${sub}</span></span>
+    <span class="shrink-0 text-brand-600">${ic("chevron-left")}</span></button>`;
   const totalSelBooks = selGrades.reduce((s, g) => s + (cnt[g] || 0), 0);
   const closedBrowseBody = `<div class="space-y-4 pt-1">
     <div>
-      <div class="text-[12.5px] font-bold text-slate-700 mb-2">١. اختر طريقة التصفّح والمعاينة</div>
-      <div class="grid gap-2">${modeCard("manual", "🔍", "أختار بنفسي", "تصفّح كل الكتب مادة مادة — كتاب بكتاب")}${modeCard("bag", "🎒", "تجهيز الشنطة", "معاينة كتاب لكل مادة وحساب إجمالي الشنطة والتوفير")}${modeCard("series", "📚", "تصفّح بالسلسلة", "كتب كل ناشر مجمّعة (الأضواء، سلاح التلميذ، المعاصر...)")}</div>
+      <div class="text-[12.5px] font-bold text-slate-700 mb-2">تصفّح مباشر بأي طريقة</div>
+      <div class="grid gap-2">${modeCard("manual", "🔍", "أختار بنفسي", "افتح الكتالوج مباشرة — مادة مادة وكتاب بكتاب")}${modeCard("bag", "🎒", "تجهيز الشنطة", "افتح الشنطة مباشرة لمعاينة الكتب وحساب الإجمالي والتوفير")}${modeCard("series", "📚", "تصفّح بالسلسلة", "اعرض كتب كل ناشر مجمّعة مباشرة (الأضواء، سلاح التلميذ، المعاصر...)")}</div>
     </div>
+    <div class="flex items-center gap-2"><span class="h-px flex-1 bg-slate-200"></span><span class="text-[11.5px] font-bold text-slate-400">أو اختر مرحلة / صفاً أو أكثر</span><span class="h-px flex-1 bg-slate-200"></span></div>
     <div>
       <div class="flex items-center justify-between gap-2 mb-2">
-        <div class="text-[12.5px] font-bold text-slate-700">٢. اختر صفاً أو أكثر من مرحلة أو عدة مراحل</div>
+        <div class="text-[12.5px] font-bold text-slate-700">المراحل والصفوف</div>
         ${selGrades.length ? `<button type="button" class="text-[11.5px] font-bold text-rose-600 hover:underline" data-act="clearBrowseGrades">مسح التحديد (${selGrades.length})</button>` : ""}
       </div>
       ${stages.map(s => {
@@ -831,9 +831,9 @@ function gradePicker() {
         </section>`;
       }).join("")}
     </div>
-    <div class="pt-1">
-      <button type="button" class="btn btn-primary w-full !h-12" data-act="openBrowseGrades" ${selGrades.length ? "" : "disabled"}>${ic("library")} ${selGrades.length ? `عرض ${bMode === "bag" ? "الشنطة" : bMode === "series" ? "السلاسل" : "الكتب"} (${selGrades.length} ${selGrades.length === 1 ? "صف" : "صفوف"} · ${fmt(totalSelBooks)} كتاب)` : "اختر صفاً واحداً على الأقل للعرض"}</button>
-    </div>
+    ${selGrades.length ? `<div class="pt-1">
+      <button type="button" class="btn btn-primary w-full !h-12" data-act="openBrowseGrades">${ic("library")} عرض كتب الصفوف المختارة (${selGrades.length} ${selGrades.length === 1 ? "صف" : "صفوف"} · ${fmt(totalSelBooks)} كتاب)</button>
+    </div>` : ""}
   </div>`;
   const body = `${Emp.open() ? (ks.length ? `<div class="flex items-center gap-2 my-3"><span class="h-px flex-1 bg-slate-200"></span><span class="text-[12px] font-bold text-slate-500">أو احجز لصف تاني</span><span class="h-px flex-1 bg-slate-200"></span></div>` : "") : ""}
     ${Emp.open() ? `<button type="button" class="w-full mb-5 rounded-3xl p-4 text-right flex items-center gap-3 text-white shadow-soft active:scale-[.99] transition" style="background:linear-gradient(135deg,#552c83,#2e1650)" data-act="gbOpen"><span class="w-12 h-12 rounded-2xl bg-gold-400 text-brand-950 flex items-center justify-center text-[24px] shrink-0">📚</span><span class="flex-1"><b class="block text-[15px]">احجز بالصف الدراسي خطوة بخطوة</b><span class="block text-[12px] text-brand-200">المرحلة ← الصف ← نوع المدرسة — ${gTxt("وتقدر تضيف", "وتقدري تضيفي")} أكتر من صف</span></span>${ic("chevron-left")}</button>` : closedBrowseBody}`;
@@ -1035,7 +1035,24 @@ function bookModeTabs() {
     <div class="grid gap-2">${t("manual", "🔍", "أختار بنفسي", "كل الكتب مادة مادة — كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", open ? "كل مادة وكتبها — اختار لكل مادة بسرعة" : "معاينة كتاب لكل مادة وحساب إجمالي الشنطة", "bagOpen")}${t("series", "📚", open ? "حجز بالسلسلة" : "تصفّح بالسلسلة", open ? "كتب ناشر واحد بضغطة" : "كتب كل ناشر مجمّعة مع السعر والتوفير", "bookMode")}</div></section>`;
 }
 on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? (Emp.open() ? "" : "manual") : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
-on("browseMode", v => { Emp.browseMode = v || "manual"; Emp._browseOpen = true; Router.render(); });
+on("browseDirect", mode => {
+  const m = mode || "manual";
+  let gs = Array.isArray(Emp.browseGrades) && Emp.browseGrades.length ? Emp.browseGrades.slice() : [];
+  if (!gs.length) {
+    const kGrades = uniq(myKids().map(k => k.grade).filter(Boolean));
+    if (kGrades.length) gs = kGrades;
+  }
+  if (!gs.length) {
+    const firstG = ((APP.emp && APP.emp.books) || []).find(b => b.Grade && typeOk(b, Emp.filter.type));
+    if (firstG) gs = [firstG.Grade];
+  }
+  if (!gs.length) return toast("لا توجد كتب في الكتالوج حالياً", "info");
+  Emp.browseGrades = gs;
+  Emp.filter.grade = gs[0];
+  Emp.bookMode = m === "series" ? "series" : "manual";
+  Router.render();
+  if (m === "bag") setTimeout(() => ACTIONS.bagOpen(), 40);
+});
 on("toggleBrowseGrade", g => {
   Emp.browseGrades = Array.isArray(Emp.browseGrades) ? Emp.browseGrades.slice() : [];
   const i = Emp.browseGrades.indexOf(g);
@@ -1057,9 +1074,8 @@ on("openBrowseGrades", () => {
   const gs = Array.isArray(Emp.browseGrades) ? Emp.browseGrades : [];
   if (!gs.length) return toast("اختر صفاً واحداً على الأقل", "info");
   Emp.filter.grade = gs[0];
-  Emp.bookMode = Emp.browseMode === "series" ? "series" : "manual";
+  Emp.bookMode = "manual";
   Router.render();
-  if (Emp.browseMode === "bag") setTimeout(() => ACTIONS.bagOpen(), 40);
 });
 on("backBrowsePicker", () => { Emp.filter.grade = ""; Emp._browseOpen = true; Router.render(); });
 on("previewBundle", pub => {
