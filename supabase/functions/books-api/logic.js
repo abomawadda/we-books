@@ -3794,8 +3794,12 @@ const OperationsEngine = {
       const force = Util.str(payload.forceReason);
       if (force) Util.require(session.role === "Admin", "تجاوز شروط التسليم متاح للمدير فقط.");
 
-      const inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === "EINV-" + phaseId + "-" + empId);
+      let inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === "EINV-" + phaseId + "-" + empId);
       Util.require(inv, "لا توجد فاتورة للموظف في هذه المرحلة. شغّل التوزيع أولاً.");
+      if (Util.num(inv.Remaining_Balance) > 0.004) {
+        const settled = this.autoSettleEmployeeCredit_(session, inv);
+        if (settled > 0) inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === inv.Emp_Inv_ID) || inv;
+      }
       if (st.REQUIRE_DOWN_PAYMENT_BEFORE_DELIVERY && !force) {
         Util.require(Util.num(inv.Total_Paid_Amount) + 0.001 >= Util.num(inv.Down_Payment_Required),
           (inv.Payment_Plan_Type === "INSTALLMENT" ? "لم يُسدَّد المقدم المطلوب" : "لم يُسدَّد كامل المبلغ (دفع كاش مرة واحدة)") + " قبل التسليم (" + inv.Down_Payment_Required + " ج.م، المسدد " + inv.Total_Paid_Amount + "). وجّه الموظف للخزينة أولاً.");
@@ -3947,6 +3951,47 @@ const OperationsEngine = {
   // التحصيل والأقساط
   // --------------------------------------------------------------------------
 
+  /** تسوية تلقائية داخلية لأي رصيد دائن سابق للموظف على فاتورة أخرى مقابل متبقي الفاتورة المستهدفة (قيود متقابلة بلا نقدية) */
+  autoSettleEmployeeCredit_: function(session, targetInv) {
+    if (!targetInv) return 0;
+    const S = this.S(), empId = Util.str(targetInv.Emp_ID);
+    let due = FinancialEngine.roundCurrency(Util.num(targetInv.Remaining_Balance));
+    if (due <= 0.004) return 0;
+    const sources = DB_Engine.getAllRecords(S.EMP_INVOICES)
+      .filter(i => Util.str(i.Emp_ID) === empId && i.Emp_Inv_ID !== targetInv.Emp_Inv_ID && Util.num(i.Credit_Balance) > 0.004)
+      .sort((a, b) => String(a.Issue_Date || "").localeCompare(String(b.Issue_Date || "")));
+    if (!sources.length) return 0;
+    const now = Util.now(), by = Util.actor(session), rows = [], phases = {};
+    let totalSettled = 0, seq = 0;
+    sources.forEach(from => {
+      if (due <= 0.004) return;
+      const cr = FinancialEngine.roundCurrency(Util.num(from.Credit_Balance));
+      const amt = FinancialEngine.roundCurrency(Math.min(cr, due));
+      if (amt <= 0.004) return;
+      const no = Counter.next("CREDIT", "CRT"), t = new Date().getTime() + (++seq);
+      rows.push({
+        Payment_ID: "CREDIT_OUT-" + t, Receipt_No: no + "-OUT", Emp_ID: empId, Emp_Inv_ID: from.Emp_Inv_ID, Payment_Date: now,
+        Amount: -amt, Payment_Method: "CREDIT", Transaction_Ref: "تسوية رصيد تلقائية إلى " + targetInv.Emp_Inv_ID,
+        Collected_By: by, Is_Voided: false, Void_Reason: "", Voided_By: "", Payment_Type: "CREDIT_OUT"
+      });
+      rows.push({
+        Payment_ID: "CREDIT_IN-" + t, Receipt_No: no + "-IN", Emp_ID: empId, Emp_Inv_ID: targetInv.Emp_Inv_ID, Payment_Date: now,
+        Amount: amt, Payment_Method: "CREDIT", Transaction_Ref: "تسوية رصيد تلقائية من " + from.Emp_Inv_ID,
+        Collected_By: by, Is_Voided: false, Void_Reason: "", Voided_By: "", Payment_Type: "CREDIT_IN"
+      });
+      phases[from.Phase_ID] = true;
+      phases[targetInv.Phase_ID] = true;
+      due = FinancialEngine.roundCurrency(due - amt);
+      totalSettled = FinancialEngine.roundCurrency(totalSettled + amt);
+      DB_Engine.logAudit(session.userId, session.role, "Payments", "CREDIT_TRANSFER", no, null, { from: from.Emp_Inv_ID, to: targetInv.Emp_Inv_ID, amount: amt, auto: true });
+    });
+    if (rows.length) {
+      DB_Engine.insertRecordsBatch(S.EMP_PAYMENTS, rows);
+      Object.keys(phases).forEach(pid => this.syncEmployeeInvoicesForPhase_(pid));
+    }
+    return totalSettled;
+  },
+
   recordEmployeePayment: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
       const S = this.S();
@@ -3961,8 +4006,13 @@ const OperationsEngine = {
         const dup = DB_Engine.getAllRecords(S.EMP_PAYMENTS).find(p => !Util.bool(p.Is_Voided) && p.Payment_Method === method && Util.str(p.Transaction_Ref) === ref);
         Util.require(!dup, "رقم المرجع مسجَّل من قبل في الإيصال " + (dup ? dup.Receipt_No : "") + ".");
       }
-      const inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === invId);
+      let inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === invId);
       Util.require(inv, "فاتورة الموظف غير موجودة.");
+      let settled = 0;
+      if (Util.bool(payload.autoSettleCredit)) {
+        settled = this.autoSettleEmployeeCredit_(session, inv);
+        if (settled > 0) inv = DB_Engine.getAllRecords(S.EMP_INVOICES).find(i => i.Emp_Inv_ID === invId) || inv;
+      }
       Util.require(amount <= Util.num(inv.Remaining_Balance) + 0.001, "المبلغ أكبر من المتبقي على الفاتورة (" + inv.Remaining_Balance + " ج.م).");
       const receiptNo = Counter.next("RECEIPT", "RCP");
       const rec = {
@@ -3973,7 +4023,7 @@ const OperationsEngine = {
       DB_Engine.insertRecordsBatch(S.EMP_PAYMENTS, [rec]);
       this.syncEmployeeInvoicesForPhase_(inv.Phase_ID);
       DB_Engine.logAudit(session.userId, session.role, "Payments", "COLLECT", receiptNo, null, rec);
-      return { success: true, receiptNo: receiptNo, payment: rec, message: "تم تحصيل " + amount + " ج.م بإيصال رقم " + receiptNo + "." };
+      return { success: true, receiptNo: receiptNo, payment: rec, settledCredit: settled, message: (settled > 0 ? "تمت تسوية " + settled + " ج.م من رصيد الموظف السابق + " : "") + "تم تحصيل " + amount + " ج.م بإيصال رقم " + receiptNo + "." };
     });
   },
 
