@@ -280,4 +280,31 @@ ok(api('DELETE_EMPLOYEE', { empId: '55100' }, coord), 'delete clean employee suc
 assert.ok(!rows(S.EMPLOYEES).some(e => e.Emp_ID === '55100'), 'deleted employee removed');
 checks += 11;
 
+// ============================================================================
+// الاختبار الحادي عشر: الرقم القومي الكامل + تصريح التعديل للموظف + طلب التعديل وموافقة الإدارة
+// ============================================================================
+const hrFull = ok(api('SAVE_EMPLOYEE', {
+  origEmpId: '1001', empId: '1001', fullName: rows(S.EMPLOYEES).find(e => e.Emp_ID === '1001').Full_Name,
+  nationalId: '28805151204512', department: 'المنصورة شرق', jobTitle: 'أخصائي أول',
+  gradeTitle: 'الأولى', unionOrg: 'النقابة العامة', memberState: 'نشط', employmentStatus: 'ساري',
+  specialization: 'نظم معلومات', email: 'emp1001@example.com'
+}, coord), 'save full 14-digit nationalId').employee;
+assert.strictEqual(hrFull.National_ID, '28805151204512');
+assert.strictEqual(hrFull.National_ID_Last4, '4512');
+// منع إرسال طلب تعديل بدون تصريح من الإدارة
+fail(api('SUBMIT_EMP_CHANGE_REQUEST', { changes: { Address: 'المنصورة — شارع الجمهورية' } }, empTok), 'change request blocked without permit', /غير مصرح/);
+// منح التصريح للموظف
+ok(api('TOGGLE_EMP_EDIT_PERMIT', { empId: '1001', allowed: true }, coord), 'grant edit permit to 1001');
+const reqRes = ok(api('SUBMIT_EMP_CHANGE_REQUEST', { changes: { Address: 'المنصورة — شارع الجمهورية', Email: 'new1001@example.com' }, reason: 'تحديث العنوان والبريد' }, empTok), 'employee submits change request');
+assert.strictEqual(reqRes.request.Status, 'Pending');
+// قبل الاعتماد لا يتغير العنوان في 03_Employees
+assert.notStrictEqual(rows(S.EMPLOYEES).find(e => e.Emp_ID === '1001').Address, 'المنصورة — شارع الجمهورية');
+// اعتماد الإدارة يطبّق التعديلات فوراً
+ok(api('REVIEW_EMP_CHANGE_REQUEST', { reqId: reqRes.request.Req_ID, decision: 'Approved' }, coord), 'admin approves change request');
+const empPortal = ok(api('GET_EMPLOYEE_PORTAL_DATA', {}, empTok), 'employee portal reflects updated HR profile');
+assert.strictEqual(empPortal.employee.profile.address, 'المنصورة — شارع الجمهورية');
+assert.strictEqual(empPortal.employee.profile.email, 'new1001@example.com');
+assert.strictEqual(empPortal.employee.editPermitted, true);
+checks += 9;
+
 console.log(`BOOKS-PRO ALL PASSED: ${checks} checks (3000-book search: ${elapsedMs}ms)`);

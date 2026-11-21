@@ -1608,15 +1608,84 @@ Router.add("/e/pay", view => {
 
 // ============================================================ حسابي
 Router.add("/e/me", view => {
-  const r = APP.emp, u = APP.user;
+  const r = APP.emp, u = APP.user, p = (r.employee && r.employee.profile) || {};
+  const canReqEdit = !!(r.employee && r.employee.editPermitted);
+  const myReqs = (r.myChangeRequests || []).slice().sort((a, b) => String(b.Created_At || "").localeCompare(String(a.Created_At || "")));
+  const REQ_LBL = { Mobile: "الموبايل الأساسي", Mobile2: "موبايل إضافي", Email: "البريد الإلكتروني", Address: "العنوان", Qualification: "المؤهل", Specialization: "التخصص", Marital_Status: "الحالة الاجتماعية", Department: "جهة العمل", Job_Title: "الوظيفة" };
+  const row = (icon, lbl, val) => `<div class="flex items-center gap-3 px-4 py-3"><span class="w-9 h-9 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center shrink-0">${ic(icon, "!w-4 !h-4")}</span><span class="flex-1 text-slate-500 text-[13.5px]">${lbl}</span><span class="font-semibold text-slate-900 text-[13.5px] text-left break-words">${val}</span></div>`;
+  const reqsHtml = myReqs.length ? `<section class="card card-pad space-y-2">
+    <div class="text-xs font-bold text-slate-700 flex items-center gap-1.5">${ic("inbox", "text-brand-600 !w-4 !h-4")} طلبات تعديل بياناتي</div>
+    ${myReqs.slice(0, 5).map(rq => {
+      let ch = {}; try { ch = JSON.parse(rq.Changes_JSON || "{}"); } catch (_) {}
+      const stP = rq.Status === "Pending" ? pill("", "بانتظار موافقة الإدارة", "amber") : rq.Status === "Approved" ? pill("", "تم الاعتماد والتحديث", "green") : pill("", "مرفوض", "red");
+      return `<div class="rounded-xl bg-slate-50 ring-1 ring-slate-200/70 p-3 text-xs">
+        <div class="flex items-center justify-between gap-2 mb-1.5"><span class="text-slate-500 num">${esc(dt(rq.Created_At))}</span>${stP}</div>
+        <div class="flex flex-wrap gap-1.5">${Object.keys(ch).map(k => `<span class="rounded-lg bg-white ring-1 ring-slate-200 px-2 py-0.5"><b>${esc(REQ_LBL[k] || k)}:</b> ${esc((ch[k] && ch[k].to) || "—")}</span>`).join("")}</div>
+        ${rq.Review_Note ? `<div class="text-[11px] text-slate-600 mt-1.5">ملاحظة الإدارة: ${esc(rq.Review_Note)}</div>` : ""}
+      </div>`;
+    }).join("")}
+  </section>` : "";
+
   view.innerHTML = `
   <div class="max-w-2xl mx-auto space-y-4">
-    <section class="hero rounded-4xl text-white p-6 flex items-center gap-4 shadow-lift">${UI.avatar(u.fullName, "w-16 h-16 text-xl")}
-      <div class="min-w-0"><h1 class="font-bold leading-snug break-words" style="font-size:clamp(16px,4.6vw,22px)">${esc(u.fullName)}</h1><div class="text-brand-200 text-sm mt-0.5">رقم وظيفي ${esc(u.empId)}</div></div></section>
-    <section class="card divide-y divide-slate-100">
-      ${[["building-2", "الإدارة", u.department || "—"], ["calendar-check", "التقسيط", r.employee.installmentAllowed ? "مسموح" : "غير مسموح"], ["scale", "الحد الائتماني", moneyTxt(r.employee.creditLimit)], ["badge-percent", "خصم العاملين", fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT) + "%"], ["smartphone", "حساب التحويل", r.settings.CASH_ACCOUNT_HOLDER || "—"]]
-        .map(x => `<div class="flex items-center gap-3 px-4 py-3.5"><span class="w-10 h-10 rounded-xl bg-slate-50 text-slate-500 flex items-center justify-center">${ic(x[0])}</span><span class="flex-1 text-slate-600 text-[14px]">${x[1]}</span><span class="font-semibold text-slate-900 text-[14px]">${esc(x[2])}</span></div>`).join("")}
+    <section class="hero rounded-4xl text-white p-6 shadow-lift">
+      <div class="flex items-center gap-4">
+        ${UI.avatar(p.fullName || u.fullName, "w-16 h-16 text-xl !bg-white/15 !text-white ring-2 ring-white/25")}
+        <div class="min-w-0 flex-1">
+          <h1 class="font-bold leading-snug break-words" style="font-size:clamp(16px,4.6vw,22px)">${esc(p.fullName || u.fullName)}</h1>
+          <div class="text-brand-200 text-xs sm:text-sm mt-0.5">${esc([p.jobTitle || u.jobTitle, p.department || u.department].filter(Boolean).join(" · ") || "—")}</div>
+          <div class="flex flex-wrap items-center gap-1.5 mt-2">
+            <span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-mono num">رقم وظيفي ${esc(u.empId)}</span>
+            ${p.memberState ? `<span class="rounded-full bg-amber-400/25 text-amber-100 px-2.5 py-0.5 text-[11px] font-semibold">${esc(p.memberState)}</span>` : ""}
+            ${p.unionOrg ? `<span class="rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold">${esc(p.unionOrg)}</span>` : ""}
+          </div>
+        </div>
+      </div>
     </section>
+
+    <section class="card overflow-hidden">
+      <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 flex items-center justify-between gap-2">
+        <span class="font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("briefcase", "text-brand-600 !w-4 !h-4")} بياناتي الوظيفية والنقابية</span>
+        ${canReqEdit
+          ? `<button type="button" class="btn btn-primary btn-xs" data-act="empReqEdit">${ic("pencil")} طلب تعديل بياناتي</button>`
+          : `<span class="text-[11px] text-slate-400">${ic("lock", "inline !w-3 !h-3")} التعديل بتصريح من الإدارة</span>`}
+      </header>
+      <div class="divide-y divide-slate-100">
+        ${row("building-2", "جهة العمل / الإدارة", esc(p.department || u.department || "—"))}
+        ${row("briefcase", "الوظيفة", esc(p.jobTitle || u.jobTitle || "—"))}
+        ${p.gradeTitle ? row("award", "الدرجة الوظيفية", esc(p.gradeTitle)) : ""}
+        ${p.unionOrg ? row("users", "التنظيم النقابي", esc(p.unionOrg)) : ""}
+        ${p.memberState ? row("badge-check", "الحالة النقابية", esc(p.memberState)) : ""}
+        ${p.hireDate ? row("calendar", "تاريخ التعيين", `<span class="num font-mono">${esc(p.hireDate)}</span>`) : ""}
+        ${p.retirementDate ? row("calendar-clock", "تاريخ المعاش", `<span class="num font-mono">${esc(p.retirementDate)}</span>`) : ""}
+        ${p.insuranceNo ? row("shield", "الرقم التأميني", `<span class="num font-mono">${esc(p.insuranceNo)}</span>`) : ""}
+      </div>
+    </section>
+
+    <section class="card overflow-hidden">
+      <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("user", "text-brand-600 !w-4 !h-4")} بياناتي الشخصية والتواصل</header>
+      <div class="divide-y divide-slate-100">
+        ${row("phone", "الموبايل الأساسي", `<span class="num font-mono" dir="ltr">${esc(p.mobile || u.mobile || "—")}</span>`)}
+        ${p.mobile2 ? row("smartphone", "موبايل إضافي", `<span class="num font-mono" dir="ltr">${esc(p.mobile2)}</span>`) : ""}
+        ${p.email ? row("mail", "البريد الإلكتروني", `<span class="text-xs font-mono break-all" dir="ltr">${esc(p.email)}</span>`) : ""}
+        ${p.address ? row("map-pin", "العنوان", esc(p.address)) : ""}
+        ${p.qualification ? row("graduation-cap", "المؤهل الدراسي", esc(p.qualification + (p.specialization ? " — " + p.specialization : ""))) : ""}
+        ${p.maritalStatus ? row("heart", "الحالة الاجتماعية", esc(p.maritalStatus)) : ""}
+      </div>
+    </section>
+
+    ${reqsHtml}
+
+    <section class="card overflow-hidden">
+      <header class="px-4 py-3 bg-slate-50/90 border-b border-slate-100 font-bold text-xs text-slate-700 flex items-center gap-1.5">${ic("wallet", "text-brand-600 !w-4 !h-4")} إعدادات المبادرة</header>
+      <div class="divide-y divide-slate-100">
+        ${row("calendar-check", "التقسيط", r.employee.installmentAllowed ? "مسموح" : "غير مسموح")}
+        ${row("scale", "الحد الائتماني", moneyTxt(r.employee.creditLimit))}
+        ${row("badge-percent", "خصم العاملين", fmt(r.settings.UNIFIED_EMP_DISCOUNT_PCT) + "%")}
+        ${row("smartphone", "حساب التحويل", esc(r.settings.CASH_ACCOUNT_HOLDER || "—"))}
+      </div>
+    </section>
+
     <section class="card divide-y divide-slate-100">
       <button data-act="kidsEdit" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-gold-50 flex items-center justify-center text-xl">👦</span><span class="flex-1"><b class="block text-[14.5px] text-slate-800">أبنائي</b><span class="block text-[12px] text-slate-500">${myKids().length ? myKids().map((k, i) => esc(kidName(k, i)) + " (" + esc(gradeShort(k.grade)) + ")").join("، ") : "أضف أبناءك لحجز أسرع"}</span></span>${ic("chevron-left", "text-slate-300")}</button>
       <button data-act="faq" class="w-full flex items-center gap-3 px-4 py-3.5 text-right"><span class="w-10 h-10 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center">${ic("info")}</span><span class="flex-1 font-semibold">أسئلة شائعة</span>${ic("chevron-left", "text-slate-300")}</button>
@@ -1626,4 +1695,32 @@ Router.add("/e/me", view => {
       <button data-act="logout" class="w-full flex items-center gap-3 px-4 py-3.5 text-right text-rose-600"><span class="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">${ic("log-out")}</span><span class="flex-1 font-semibold">تسجيل الخروج</span></button>
     </section>
   </div>`;
+});
+on("empReqEdit", async () => {
+  const p = (APP.emp && APP.emp.employee && APP.emp.employee.profile) || {};
+  const v = await UI.form({
+    title: "طلب تعديل بياناتي",
+    intro: "عدّل الحقول التي تريد تحديثها فقط، وسيُرسل الطلب لمسؤول المبادرة للمراجعة والاعتماد قبل التطبيق.",
+    wide: true,
+    icon: "pencil",
+    ok: "إرسال الطلب للإدارة",
+    fields: [
+      { name: "Mobile", label: "الموبايل الأساسي", type: "tel", cols: 1, value: p.mobile || "" },
+      { name: "Mobile2", label: "موبايل إضافي", type: "tel", cols: 1, value: p.mobile2 || "" },
+      { name: "Email", label: "البريد الإلكتروني", cols: 1, value: p.email || "" },
+      { name: "Address", label: "العنوان", cols: 1, value: p.address || "" },
+      { name: "Qualification", label: "المؤهل الدراسي", cols: 1, value: p.qualification || "" },
+      { name: "Specialization", label: "التخصص", cols: 1, value: p.specialization || "" },
+      { name: "Marital_Status", label: "الحالة الاجتماعية", type: "select", cols: 1, value: p.maritalStatus || "", options: [["", "—"], ["أعزب", "أعزب"], ["متزوج", "متزوج"], ["مطلق", "مطلق"], ["أرمل", "أرمل"]] },
+      { name: "Department", label: "جهة العمل / الإدارة", cols: 1, value: p.department || "" },
+      { name: "Job_Title", label: "الوظيفة", cols: 1, value: p.jobTitle || "" },
+      { name: "reason", label: "ملاحظة أو سبب التعديل (اختياري)", placeholder: "مثلاً: تغيير رقم الموبايل أو العنوان" }
+    ]
+  });
+  if (!v) return;
+  const reason = v.reason || "";
+  delete v.reason;
+  const r = await call("SUBMIT_EMP_CHANGE_REQUEST", { changes: v, reason }, { block: true });
+  toast(r.message, r.success ? "success" : "danger");
+  if (r.success) { await Emp.load(); Shell.rerender(); }
 });
