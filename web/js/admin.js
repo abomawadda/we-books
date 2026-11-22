@@ -4541,10 +4541,10 @@ on("waEmp", key => {
 });
 
 // ============================================================ v3.46.0: طابور اعتماد التحويلات + أرشفة المراحل + النسخ الاحتياطي + بوابة المكتبة
-function _wrapA(path, fn) { const base = Router.routes[path]; if (!base) return; Router.add(path, view => { base(view); fn(view); }); }
+function _wrapAdm(path, fn) { const base = Router.routes[path]; if (!base) return; Router.add(path, view => { base(view); fn(view); }); }
 
 // 1) طابور اعتماد تحويلات إنستاباي والمحفظة داخل شاشة «التحصيل والفواتير» (/a/collect)
-_wrapA("/a/collect", view => {
+_wrapAdm("/a/collect", view => {
   const claims = (A().paymentClaims || []).filter(c => c.status === "Pending").slice().reverse();
   if (!claims.length) return;
   const rows = claims.map(c => `<li class="flex flex-wrap items-center gap-3 py-3">
@@ -4585,7 +4585,7 @@ on("reviewClaim", async arg => {
 });
 
 // 2) أرشفة المراحل المنتهية (/a/phases)
-_wrapA("/a/phases", view => {
+_wrapAdm("/a/phases", view => {
   if (!can("ARCHIVE_PHASE")) return;
   const donePh = (A().phases || []).filter(p => p.Phase_Status === "Completed" || p.Phase_Status === "Archived");
   if (!donePh.length) return;
@@ -4600,7 +4600,7 @@ on("archivePhase", async phaseId => {
 });
 
 // 3) النسخ الاحتياطي الشامل بضغطة واحدة (/a/settings)
-_wrapA("/a/settings", view => {
+_wrapAdm("/a/settings", view => {
   if (!can("EXPORT_FULL_BACKUP")) return;
   view.insertAdjacentHTML("beforeend", `<section class="card card-pad mt-4 flex flex-wrap items-center justify-between gap-3">
     <div><h3 class="card-title">${ic("database", "text-brand-600")} النسخ الاحتياطي الشامل</h3><p class="text-xs text-slate-500 mt-0.5">تحميل نسخة كاملة (JSON) من كافة بيانات المنظومة (الموظفون، الكتب، الحجوزات، الفواتير، الإيصالات، الإعدادات).</p></div>
@@ -4617,7 +4617,7 @@ on("fullBackup", async () => {
 });
 
 // 4) بوابة المكتبة المصغّرة (/a/suppliers)
-_wrapA("/a/suppliers", view => {
+_wrapAdm("/a/suppliers", view => {
   if (!can("CREATE_SUPPLIER_LINK") || !APP.phaseId) return;
   const sups = A().suppliers || [];
   if (!sups.length) return;
