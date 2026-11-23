@@ -205,6 +205,8 @@ function cancelBox(where) {
   const und = items.reduce((s, i) => s + Math.max(0, n(i.Requested_Qty) - n(i.Delivered_Qty)), 0);
   const cr = cancelRequestOf(), wrap = where === "home" ? "card p-4 mb-4" : "card p-4 mt-5";
   if (cr && cr.status === "Pending") return `<div class="${wrap} ring-1 ring-amber-200 bg-amber-50/60 text-[13px] text-amber-900 flex items-center gap-2">${ic("hourglass", "text-lg")}<div><b>طلب الإلغاء عند المسؤول</b><div class="text-[12px] opacity-80">اتسجّل ${esc(String(cr.at || "").slice(0, 10))} — طلبك فاضل زي ما هو لحد الرد.</div></div></div>`;
+  const partialMsg = cr && cr.status === "Partial" ? `<div class="${wrap} ring-1 ring-sky-200 bg-sky-50/60 text-[13px] text-sky-900 flex items-center gap-2">${ic("info", "text-lg")}<div><b>المسؤول وافق على إلغاء جزء من طلبك</b><div class="text-[12px] opacity-80">اتلغت ${esc(String(cr.cancelledQty || ""))} نسخة وباقي كتبك فاضلة في الحجز${cr.note ? " — " + esc(cr.note) : ""}. تفاصيلها في «حجوزاتي».</div></div></div>` : "";
+  if (partialMsg && (!und || st === "Completed")) return where !== "home" ? partialMsg : "";
   if (!und || st === "Completed") return cr && cr.status === "Rejected" && where !== "home" ? `<div class="${wrap} text-[13px] text-slate-600">${ic("info")} المسؤول ما وافقش على الإلغاء${cr.note ? ": " + esc(cr.note) : ""}.</div>` : "";
   const direct = ph.Booking_Open || !ph.Po_Frozen;
   const how = direct ? "الإلغاء فوري ومن غير أي التزام 👌" : st === "Delivering" ? "الإلغاء بموافقة المسؤول، واللي استلمته يتعامل كمرتجع." : "الكتب اتطلبت من المكتبة — الإلغاء بموافقة المسؤول.";
@@ -214,7 +216,8 @@ function cancelBox(where) {
     <div class="grid ${ph.Booking_Open ? "grid-cols-2" : "grid-cols-1"} gap-2 mt-3">${ph.Booking_Open ? `<a href="#/e/wiz" data-act="wizStart" class="btn btn-outline !h-11">${ic("pencil")} تعديل الحجز</a>` : ""}
       <button class="btn !h-11 bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100" data-act="empCancel">${ic("x")} ${direct ? "إلغاء الطلب" : "طلب إلغاء"}</button></div>
     <div class="text-[11.5px] text-slate-500 mt-2 text-center">${how}</div>
-    ${cr && cr.status === "Rejected" ? `<div class="text-[12px] text-slate-500 mt-2">${ic("info")} آخر طلب إلغاء اترفض${cr.note ? ": " + esc(cr.note) : ""}.</div>` : ""}</section>`;
+    ${cr && cr.status === "Rejected" ? `<div class="text-[12px] text-slate-500 mt-2">${ic("info")} آخر طلب إلغاء اترفض${cr.note ? ": " + esc(cr.note) : ""}.</div>` : ""}
+    ${cr && cr.status === "Partial" ? `<div class="text-[12px] text-sky-700 mt-2">${ic("info")} آخر طلب إلغاء اتوافق عليه جزئياً (${esc(String(cr.cancelledQty || ""))} نسخة)${cr.note ? ": " + esc(cr.note) : ""}.</div>` : ""}</section>`;
 }
 on("empCancel", async () => {
   const ph = APP.emp.activePhase || {}, direct = ph.Booking_Open || !ph.Po_Frozen;

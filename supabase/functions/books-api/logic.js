@@ -3807,20 +3807,27 @@ const OperationsEngine = {
   },
 
   /** إلغاء غير المُسلَّم من بنود الموظف في مرحلة (المخصص يتحرر لغيره، والفاتورة تُعاد حسابها؛ الزيادة المدفوعة تصبح رصيداً مستحق الرد) */
-  applyEmpCancel_: function(empId, pid, note) {
-    const S = this.S(), all = DB_Engine.getAllRecords(S.RES_ITEMS);
+  /** إلغاء غير المُسلَّم من حجز الموظف. sel (اختياري) = {Res_Item_ID: عدد النسخ المطلوب إلغاؤها} للاعتماد الجزئي؛ بدونه يُلغى كل غير المُسلَّم.
+   *  يرجّع عدد النسخ الملغاة. */
+  applyEmpCancel_: function(empId, pid, note, sel) {
+    const S = this.S(), all = DB_Engine.getAllRecords(S.RES_ITEMS); let cut = 0;
     all.filter(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === pid && !this.isCancelledItem_(i)).forEach(i => {
       const dl = Util.num(i.Delivered_Qty), before = Util.num(i.Requested_Qty);
       if (before <= dl) return;
-      i.Requested_Qty = dl; i.Allocated_Qty = Math.min(Util.num(i.Allocated_Qty), dl);
-      i.Allocation_Status = dl === 0 ? "Cancelled_By_Employee" : "Fully_Allocated";
+      const want = sel ? Math.min(Math.max(0, Math.floor(Util.num(sel[Util.str(i.Res_Item_ID)]))), before - dl) : before - dl;
+      if (!want) return;
+      const after = before - want;
+      i.Requested_Qty = after; i.Allocated_Qty = Math.min(Util.num(i.Allocated_Qty), after);
+      i.Allocation_Status = after === 0 ? "Cancelled_By_Employee" : Util.num(i.Allocated_Qty) >= after || dl >= after ? "Fully_Allocated" : Util.num(i.Allocated_Qty) > 0 ? "Partially_Allocated" : i.Allocation_Status;
       i.Unallocated_Reason = note;
       i.Net_Billable_Qty = Math.max(Util.num(i.Allocated_Qty), dl) - Util.num(i.Returned_Qty);
       i.Total_Emp_Line_Amount = i.Net_Billable_Qty * Util.num(i.Unit_Emp_Price);
-      DB_Engine.insertRecordsBatch(S.RES_AUDIT, [{ Log_ID: "RLOG-" + new Date().getTime() + "-" + i.Book_ID, Res_ID: i.Res_ID, Emp_ID: empId, Book_ID: i.Book_ID, Action_Type: "EMP_CANCEL", Old_Qty: before, New_Qty: dl, Priority_Timestamp_Applied: i.Priority_Timestamp, Action_Timestamp: Util.nowPrecise(), Rule_Applied: note }]);
+      cut += want;
+      DB_Engine.insertRecordsBatch(S.RES_AUDIT, [{ Log_ID: "RLOG-" + new Date().getTime() + "-" + i.Book_ID + "-" + cut, Res_ID: i.Res_ID, Emp_ID: empId, Book_ID: i.Book_ID, Action_Type: "EMP_CANCEL", Old_Qty: before, New_Qty: after, Priority_Timestamp_Applied: i.Priority_Timestamp, Action_Timestamp: Util.nowPrecise(), Rule_Applied: note + (i.Beneficiary ? " — لـ " + i.Beneficiary : "") }]);
     });
     DB_Engine.overwriteTableData(S.RES_ITEMS, all);
     this.syncEmployeeInvoicesForPhase_(pid);
+    return cut;
   },
   resolveCancelRequest: function(session, payload) {
     return DB_Engine.executeWithLock(() => {
@@ -3830,10 +3837,18 @@ const OperationsEngine = {
       const cur = (() => { try { return JSON.parse(h.Cancel_Request || "null"); } catch (e) { return null; } })();
       Util.require(cur && cur.status === "Pending", "لا يوجد طلب إلغاء معلّق.");
       const ok = !!payload.approve;
-      if (ok) this.applyEmpCancel_(empId, pid, "اعتمد المسؤول إلغاء الموظف: " + cur.reason);
-      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Cancel_Request: JSON.stringify(Object.assign(cur, { status: ok ? "Approved" : "Rejected", by: Util.actor(session), resolvedAt: Util.now(), note: Util.str(payload.note).slice(0, 200) })) });
-      DB_Engine.logAudit(session.userId, session.role, "Reservations", ok ? "APPROVE_CANCEL" : "REJECT_CANCEL", h.Res_ID, null, { note: payload.note });
-      return { success: true, message: ok ? "تم اعتماد الإلغاء: أُلغي غير المُسلَّم وأُعيد حساب الفاتورة (أي زيادة مدفوعة أصبحت رصيداً مستحق الرد)." : "تم رفض طلب الإلغاء." };
+      // اعتماد جزئي: items = {Res_Item_ID: عدد النسخ الملغاة} — الباقي يفضل في الحجز
+      const sel = ok && payload.items && typeof payload.items === "object" ? payload.items : null;
+      if (sel) Util.require(Object.keys(sel).some(k => Util.num(sel[k]) > 0), "اختر كتاباً واحداً على الأقل للإلغاء، أو ارفض الطلب.");
+      let cut = 0;
+      if (ok) cut = this.applyEmpCancel_(empId, pid, (sel ? "اعتمد المسؤول إلغاءً جزئياً: " : "اعتمد المسؤول إلغاء الموظف: ") + cur.reason, sel);
+      const left = ok && sel ? DB_Engine.getAllRecords(S.RES_ITEMS).filter(i => Util.str(i.Emp_ID) === empId && Util.str(i.Phase_ID) === pid && !this.isCancelledItem_(i) && Util.num(i.Requested_Qty) > Util.num(i.Delivered_Qty)).length : 0;
+      const status = !ok ? "Rejected" : left ? "Partial" : "Approved";
+      DB_Engine.updateRecordByPK(S.RES_HEADER, "Res_ID", h.Res_ID, { Cancel_Request: JSON.stringify(Object.assign(cur, { status: status, by: Util.actor(session), resolvedAt: Util.now(), note: Util.str(payload.note).slice(0, 200), cancelledQty: cut })) });
+      DB_Engine.logAudit(session.userId, session.role, "Reservations", !ok ? "REJECT_CANCEL" : sel ? "APPROVE_CANCEL_PARTIAL" : "APPROVE_CANCEL", h.Res_ID, null, { note: payload.note, items: sel || "ALL", cancelledQty: cut });
+      return { success: true, cancelledQty: cut, message: !ok ? "تم رفض طلب الإلغاء." : status === "Partial"
+        ? "تم الإلغاء الجزئي: أُلغيت " + cut + " نسخة وباقي الكتب فضلت في الحجز، وأُعيدت الفاتورة."
+        : "تم اعتماد الإلغاء: أُلغي غير المُسلَّم وأُعيد حساب الفاتورة (أي زيادة مدفوعة أصبحت رصيداً مستحق الرد)." };
     });
   },
 

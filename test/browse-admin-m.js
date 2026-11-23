@@ -35,6 +35,8 @@ api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1001').Emp_Inv_ID, amount: inv('
 api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1002').Emp_Inv_ID, amount: inv('1002').Net_Final_Invoice_Amount, paymentMethod: 'CASH' }, fin);
 api('RECORD_EMPLOYEE_PAYMENT', { empInvId: inv('1004').Emp_Inv_ID, amount: inv('1004').Down_Payment_Required, paymentMethod: 'WALLET', transactionRef: 'W-7001' }, fin);
 ['1001', '1002'].forEach(id => api('EXECUTE_BOOK_DELIVERY', { empId: id, phaseId: 'PH-01', receivedBy: 'الموظف' }, store));
+// CANCEL=1: طلب إلغاء معلّق بعد التجهيز (لقطة مراجعة طلب الإلغاء بالكتب والاعتماد الجزئي)
+if (process.env.CANCEL) api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01', reason: 'الولاد هيروحوا مدرسة تانية' }, E['1003']);
 }
 clock.now = process.env.OPEN ? new Date(2026, 10, 6, 10).getTime() : new Date(2027, 0, 8, 10).getTime();
 
@@ -67,7 +69,7 @@ const WEB = path.join(__dirname, '..', 'web'), OUT = process.argv[2] || '.', W =
   await p.waitForTimeout(800);
   for (const r of (process.argv[3] || 'res,collect,delivery,cash,alloc').split(process.argv[3] && process.argv[3].includes('js:') ? '|' : ',')) {
     if (r === 'reprice') { await p.evaluate(() => repriceDialog({ delivered: [{ empId: '1001', name: 'أحمد محمد عبد الرحمن', mobile: '01012345678', book: 'سلاح التلميذ — عربي — 4 ابتدائي', ben: 'عمر', qty: 2, oldPrice: 111, newPrice: 120, diff: 18, remaining: 18, credit: 0 }, { empId: '1003', name: 'سارة محمود', mobile: '01122334455', book: 'سلاح التلميذ — عربي — 4 ابتدائي', ben: '', qty: 1, oldPrice: 111, newPrice: 120, diff: 9, remaining: 0, credit: 0 }] })); await p.waitForTimeout(700); await p.screenshot({ path: path.join(OUT, 'am-reprice.png') }); continue; }
-    if (r.startsWith('act:')) { const [, act, id] = r.split(':'); await p.evaluate(([a, i]) => ACTIONS[a](i), [act, id]); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${act}-${id}.png`), fullPage: true }); await p.evaluate(() => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); }); continue; }
+    if (r.startsWith('act:')) { const [, act, id] = r.split(':'); await p.evaluate(([a, i]) => ACTIONS[a](i), [act, id]); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${act}-${id}.png`), fullPage: !process.env.VIEWPORT }); await p.evaluate(() => { while (UI._stack.length) UI.close(UI._stack[UI._stack.length - 1], true); }); continue; }
     if (r.startsWith('js:')) { const [, name, code] = r.split('~'); await p.evaluate(c => eval(c), code); await p.waitForTimeout(1800); await p.screenshot({ path: path.join(OUT, 'am-js-' + name + '.png') }); continue; }
     if (r.startsWith('rep:')) { await p.evaluate(x => { Rep.sel = x; location.hash = '#/a/dash'; setTimeout(() => location.hash = '#/a/reports', 50); }, r.slice(4)); await p.waitForTimeout(900); await p.screenshot({ path: path.join(OUT, `am-${r.replace(':', '-')}.png`), fullPage: true }); continue; }
     await p.evaluate(h => location.hash = h, '#/a/' + r); await p.waitForTimeout(700);

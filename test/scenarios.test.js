@@ -587,6 +587,24 @@ fail(api('WAITLIST_DECISION', { phaseId: 'PH-01', choice: 'maybe' }, e1), 'bad c
     const c2 = ok(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01', reason: 'ظروف' }, tok), 'emp cancel request pending');
     assert.ok(!c2.immediate); passed++;
     fail(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01' }, tok), 'duplicate pending request');
+    // اعتماد جزئي: نسخة واحدة من أول كتاب فقط — الباقي يفضل في الحجز
+    {
+      const live = () => rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp1.Emp_ID && i.Phase_ID === 'PH-01' && !String(i.Allocation_Status).startsWith('Cancelled') && Number(i.Requested_Qty) > Number(i.Delivered_Qty));
+      { const f0 = live()[0]; ctx.__DB.updateRecordByPK(S.RES_ITEMS, 'Res_Item_ID', f0.Res_Item_ID, { Requested_Qty: Number(f0.Delivered_Qty) + 3 }); } // تجهيز: 3 نسخ غير مُسلَّمة
+      const before = live(), total = before.reduce((a, i) => a + Number(i.Requested_Qty) - Number(i.Delivered_Qty), 0);
+      if (total >= 2) {
+        const first = before[0];
+        fail(api('RESOLVE_CANCEL_REQUEST', { empId: emp1.Emp_ID, phaseId: 'PH-01', approve: true, items: { [first.Res_Item_ID]: 0 } }, coord), 'partial with nothing selected', /اختر/);
+        const pr = ok(api('RESOLVE_CANCEL_REQUEST', { empId: emp1.Emp_ID, phaseId: 'PH-01', approve: true, items: { [first.Res_Item_ID]: 1 } }, coord), 'admin approves partial cancel');
+        assert.strictEqual(pr.cancelledQty, 1); passed++;
+        const after = live(), totalAfter = after.reduce((a, i) => a + Number(i.Requested_Qty) - Number(i.Delivered_Qty), 0);
+        assert.strictEqual(totalAfter, total - 1); passed++;
+        const h = rows(S.RES_HEADER).find(x => x.Emp_ID === emp1.Emp_ID && x.Phase_ID === 'PH-01');
+        assert.strictEqual(JSON.parse(h.Cancel_Request).status, 'Partial'); passed++;
+        // الموظف يقدر يطلب تاني، والمسؤول يعتمد الباقي كله
+        ok(api('EMP_CANCEL_REQUEST', { phaseId: 'PH-01', reason: 'ظروف 2' }, tok), 'emp re-requests after partial');
+      } else console.log('  (skip partial cancel: single copy)');
+    }
     ok(api('RESOLVE_CANCEL_REQUEST', { empId: emp1.Emp_ID, phaseId: 'PH-01', approve: true }, coord), 'admin approves cancel');
     assert.ok(rows(S.RES_ITEMS).filter(i => i.Emp_ID === emp1.Emp_ID && i.Phase_ID === 'PH-01' && !String(i.Allocation_Status).startsWith('Cancelled') && i.Allocation_Status !== 'Carried_Forward').every(i => Number(i.Requested_Qty) <= Number(i.Delivered_Qty))); passed++;
   } else console.log('  (skip pending cancel)');

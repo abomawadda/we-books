@@ -81,12 +81,58 @@ on("admWait", async v => {
 
 // ---------------------------------------------------------------- طلبات إلغاء الموظفين بعد طلب التوريد
 const cancelReqs = () => A().resHeaders.filter(h => { try { const c = JSON.parse(h.Cancel_Request || "null"); return c && c.status === "Pending"; } catch (_) { return false; } });
+/** بنود الحجز اللي ممكن تتلغي في طلب إلغاء: غير المُسلَّم فقط */
+const cancelItems = h => A().resItems.filter(i => i.Emp_ID === h.Emp_ID && i.Phase_ID === h.Phase_ID && !String(i.Allocation_Status || "").startsWith("Cancelled") && n(i.Requested_Qty) > n(i.Delivered_Qty));
 function cancelReqBox() {
   const list = cancelReqs(); if (!list.length) return "";
-  const { e } = maps();
-  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("x", "text-rose-500")} طلبات إلغاء من الموظفين (${fmt(list.length)})`, "بعد طلب التوريد — الاعتماد يلغي غير المُسلَّم فقط ويعيد حساب الفاتورة", `<ul class="divide-y divide-slate-100">${list.map(h => { const c = JSON.parse(h.Cancel_Request); return `<li class="flex flex-wrap items-center gap-2 py-2.5"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(h.Emp_ID, empName(e, h.Emp_ID))} <span class="text-[11px] text-slate-400 num">${esc(h.Phase_ID)}</span></div><div class="text-[12px] text-slate-500">${esc(c.reason)} · <span class="num">${esc(String(c.at).slice(0, 16))}</span></div></div>
-      <button class="btn btn-primary btn-xs" data-act="cancelRes" data-id="${esc(h.Emp_ID)}|${esc(h.Phase_ID)}|1">${ic("check")} اعتماد</button><button class="btn btn-outline btn-xs" data-act="cancelRes" data-id="${esc(h.Emp_ID)}|${esc(h.Phase_ID)}|0">رفض</button></li>`; }).join("")}</ul>`)}</div>`;
+  const { e, b } = maps();
+  return `<div class="mt-4 sm:mt-6">${UI.section(`${ic("x", "text-rose-500")} طلبات إلغاء من الموظفين (${fmt(list.length)})`, "راجع كتب الطلب: وافق على الكل أو على كتب/نسخ بعينها، أو ارفض — المُسلَّم لا يُلغى (مرتجع)", `<ul class="divide-y divide-slate-100">${list.map(h => { const c = JSON.parse(h.Cancel_Request), its = cancelItems(h);
+      const qty = its.reduce((a, i) => a + n(i.Requested_Qty) - n(i.Delivered_Qty), 0), val = its.reduce((a, i) => a + (n(i.Requested_Qty) - n(i.Delivered_Qty)) * n(i.Unit_Emp_Price), 0);
+      return `<li class="py-3"><div class="flex flex-wrap items-center gap-2"><div class="flex-1 min-w-0"><div class="font-semibold text-[13.5px]">${empLink(h.Emp_ID, empName(e, h.Emp_ID))} <span class="text-[11px] text-slate-400 num">${esc(h.Phase_ID)}</span></div>
+        <div class="text-[12px] text-slate-500">${esc(c.reason)} · <span class="num">${esc(String(c.at).slice(0, 16))}</span></div></div>
+        <button class="btn btn-primary btn-xs" data-act="cancelReview" data-id="${esc(h.Emp_ID)}|${esc(h.Phase_ID)}">${ic("list-checks")} مراجعة الطلب</button></div>
+      <div class="mt-2 rounded-xl bg-slate-50 ring-1 ring-slate-200 px-3 py-2 text-[12.5px]"><div class="text-slate-500 mb-1">${fmt(its.length)} كتاب · ${fmt(qty)} نسخة غير مُسلَّمة · <b class="num text-slate-700">${fmt(val)}</b> ج.م</div>
+        <ul class="space-y-0.5">${its.slice(0, 6).map(i => `<li class="flex gap-2"><span class="flex-1 min-w-0 truncate">${esc(bookName(b, i.Book_ID))}${i.Beneficiary ? ` <span class="text-slate-400">· ${esc(i.Beneficiary)}</span>` : ""}</span><span class="num text-slate-500">×${fmt(n(i.Requested_Qty) - n(i.Delivered_Qty))}</span></li>`).join("")}${its.length > 6 ? `<li class="text-slate-400">+ ${its.length - 6} كتب تانية — في المراجعة</li>` : ""}</ul></div></li>`; }).join("")}</ul>`)}</div>`;
 }
+/** نافذة مراجعة طلب الإلغاء: اختيار الكتب وعدد النسخ الملغاة لكل كتاب (الكل افتراضياً) */
+on("cancelReview", v => {
+  const [empId, phaseId] = v.split("|"), h = A().resHeaders.find(x => x.Emp_ID === empId && x.Phase_ID === phaseId); if (!h) return;
+  const c = JSON.parse(h.Cancel_Request || "{}"), its = cancelItems(h), { e, b } = maps();
+  const sel = {}; its.forEach(i => sel[i.Res_Item_ID] = n(i.Requested_Qty) - n(i.Delivered_Qty));
+  const max = i => n(i.Requested_Qty) - n(i.Delivered_Qty);
+  const tot = () => its.reduce((a, i) => ({ q: a.q + (sel[i.Res_Item_ID] || 0), v: a.v + (sel[i.Res_Item_ID] || 0) * n(i.Unit_Emp_Price) }), { q: 0, v: 0 });
+  const body = () => `<div class="rounded-2xl bg-amber-50 ring-1 ring-amber-200 px-3 py-2 text-[12.5px] text-amber-900 mb-3"><b>سبب الموظف:</b> ${esc(c.reason || "—")} · <span class="num">${esc(String(c.at || "").slice(0, 16))}</span></div>
+    <div class="flex items-center justify-between mb-2 text-[12.5px]"><span class="text-slate-500">اختر الكتب اللي هتتلغي وعدد النسخ — الباقي يفضل في حجزه</span>
+      <span class="flex gap-1.5"><button type="button" class="btn btn-outline btn-xs" data-cr="all">الكل</button><button type="button" class="btn btn-outline btn-xs" data-cr="none">ولا حاجة</button></span></div>
+    <ul class="space-y-2">${its.map(i => { const q = sel[i.Res_Item_ID] || 0, on = q > 0, dl = n(i.Delivered_Qty), al = n(i.Allocated_Qty);
+      return `<li class="rounded-2xl ring-1 ${on ? "ring-rose-300 bg-rose-50/50" : "ring-slate-200 bg-white"} p-2.5 flex items-center gap-2.5">
+        <button type="button" class="w-6 h-6 rounded-lg shrink-0 flex items-center justify-center ${on ? "bg-rose-600 text-white" : "ring-2 ring-slate-300"}" data-cr="t|${esc(i.Res_Item_ID)}" aria-pressed="${on}">${on ? ic("check", "!w-3.5 !h-3.5") : ""}</button>
+        <div class="flex-1 min-w-0 leading-tight"><b class="block text-[13px] text-slate-900 truncate">${esc(bookName(b, i.Book_ID))}</b>
+          <span class="block text-[11.5px] text-slate-500">${i.Beneficiary ? esc(i.Beneficiary) + " · " : ""}محجوز ${fmt(i.Requested_Qty)}${al ? " · مخصّص " + fmt(al) : ""}${dl ? " · مُسلَّم " + fmt(dl) + " (لا يُلغى)" : ""} · <span class="num">${fmt(i.Unit_Emp_Price)}</span> ج</span></div>
+        ${max(i) > 1 ? `<span class="flex items-center gap-1 shrink-0"><button type="button" class="w-7 h-7 rounded-lg bg-slate-100 font-bold disabled:opacity-40" data-cr="d|${esc(i.Res_Item_ID)}" ${q <= 0 ? "disabled" : ""}>−</button><b class="w-6 text-center num">${q}</b><button type="button" class="w-7 h-7 rounded-lg bg-slate-100 font-bold disabled:opacity-40" data-cr="u|${esc(i.Res_Item_ID)}" ${q >= max(i) ? "disabled" : ""}>+</button></span>` : ""}</li>`; }).join("")}</ul>`;
+  const foot = () => { const t = tot(), all = its.every(i => sel[i.Res_Item_ID] === max(i));
+    return `<div class="grid gap-2 w-full"><div class="text-[12.5px] text-slate-600 text-center">هيتلغي <b class="num">${fmt(t.q)}</b> نسخة بقيمة <b class="num">${fmt(t.v)}</b> ج.م${all ? " (الطلب كله)" : t.q ? " — إلغاء جزئي" : ""}</div>
+      <div class="grid grid-cols-2 gap-2"><button type="button" class="btn btn-primary" data-cr="ok" ${t.q ? "" : "disabled"}>${ic("check")} ${all ? "اعتماد الإلغاء كله" : "اعتماد المحدد"}</button><button type="button" class="btn btn-outline text-rose-600" data-cr="no">رفض الطلب</button></div></div>`; };
+  const m = UI.open(body(), { title: "طلب إلغاء — " + empName(e, empId), sub: phaseId + " · " + fmt(its.length) + " كتاب غير مُسلَّم", wide: true, footer: foot() });
+  const re = () => { m.body.innerHTML = body(); const f = m.root.querySelector("[data-cr=ok]"); if (f) f.closest(".grid.gap-2").outerHTML = foot(); };
+  m.root.addEventListener("click", async ev => {
+    const t = ev.target.closest("[data-cr]"); if (!t) return; const [k, id] = t.dataset.cr.split("|"), it = its.find(x => x.Res_Item_ID === id);
+    if (k === "all") its.forEach(i => sel[i.Res_Item_ID] = max(i));
+    else if (k === "none") its.forEach(i => sel[i.Res_Item_ID] = 0);
+    else if (k === "t" && it) sel[id] = sel[id] ? 0 : max(it);
+    else if (k === "u" && it) sel[id] = Math.min(max(it), (sel[id] || 0) + 1);
+    else if (k === "d" && it) sel[id] = Math.max(0, (sel[id] || 0) - 1);
+    else if (k === "ok" || k === "no") {
+      const ap = k === "ok", all = its.every(i => sel[i.Res_Item_ID] === max(i));
+      const f = await UI.form({ title: ap ? (all ? "اعتماد الإلغاء كله" : "اعتماد إلغاء جزئي") : "رفض الإلغاء", intro: ap ? "يُلغى المحدد فقط وتتحرر نسخه المخصصة للمنتظرين، ويُعاد حساب فاتورة الموظف (الزيادة المدفوعة رصيد مستحق الرد)." : "يبقى طلب الموظف كما هو.", fields: [{ name: "note", label: "ملاحظة للموظف (اختياري)" }], ok: ap ? "اعتماد" : "رفض", danger: ap });
+      if (!f) return; m.close();
+      const items = {}; if (ap && !all) its.forEach(i => { if (sel[i.Res_Item_ID]) items[i.Res_Item_ID] = sel[i.Res_Item_ID]; });
+      return act("RESOLVE_CANCEL_REQUEST", Object.assign({ empId, phaseId, approve: ap, note: f.note }, ap && !all ? { items } : {}));
+    } else return;
+    re();
+  });
+});
+// توافق: زر الاعتماد/الرفض المباشر القديم (لو اتنادى من مكان تاني)
 on("cancelRes", async v => {
   const [empId, phaseId, ap] = v.split("|");
   const f = await UI.form({ title: ap === "1" ? "اعتماد الإلغاء" : "رفض الإلغاء", intro: ap === "1" ? "يُلغى غير المُسلَّم من طلب الموظف، وتتحرر نسخه المخصصة للمنتظرين، ويُعاد حساب فاتورته. المُسلَّم يُعالج كمرتجع من صفحة التسليم." : "يبقى طلب الموظف كما هو.", fields: [{ name: "note", label: "ملاحظة للموظف (اختياري)" }], ok: ap === "1" ? "اعتماد" : "رفض", danger: ap === "1" });
