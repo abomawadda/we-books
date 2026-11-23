@@ -230,6 +230,17 @@ assert.strictEqual(relItems.find(i => i.Beneficiary === 'أحمد — ابن أ�
 assert.strictEqual(relItems.find(i => i.Beneficiary === '').Requested_Qty, 1);
 assert.strictEqual(new Set(relItems.map(i => i.Res_Item_ID)).size, relItems.length);
 fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 4, beneficiary: 'س' }], paymentMethod: 'CASH' }, e1), 'max per beneficiary', /أقصى عدد/);
+// ابنين للموظف في نفس المرحلة ونفس الكتاب: كل واحد له بنده (مش بيتدمجوا ولا بيلغوا بعض)، ومسموح حتى لو حجز الأقارب مقفول
+ctx.__DB.updateRecordByPK(S.SETTINGS, 'Setting_Key', 'ALLOW_RELATIVE_BOOKING', { Setting_Value: false });
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1, beneficiary: 'محمد — ابن' }, { bookId: 'BK-302', qty: 2, beneficiary: 'مريم — ابنة' }], paymentMethod: 'CASH' }, e1), 'two own kids same book');
+const kidItems = rows(S.RES_ITEMS).filter(i => i.Emp_ID === '1001' && i.Phase_ID === 'PH-03' && i.Requested_Qty > 0);
+assert.strictEqual(kidItems.find(i => i.Beneficiary === 'محمد — ابن').Requested_Qty, 1);
+assert.strictEqual(kidItems.find(i => i.Beneficiary === 'مريم — ابنة').Requested_Qty, 2); passed++;
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1, beneficiary: 'محمد — ابن' }, { bookId: 'BK-302', qty: 1, beneficiary: 'أحمد — ابن' }, { bookId: 'BK-302', qty: 2, beneficiary: 'مريم — ابنة' }], paymentMethod: 'CASH' }, e1), 'third kid keeps others');
+assert.strictEqual(rows(S.RES_ITEMS).filter(i => i.Emp_ID === '1001' && i.Phase_ID === 'PH-03' && i.Requested_Qty > 0).length, 3); passed++;
+fail(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1, beneficiary: 'أحمد — ابن أخ' }], paymentMethod: 'CASH' }, e1), 'relatives off', /أقارب/);
+ctx.__DB.updateRecordByPK(S.SETTINGS, 'Setting_Key', 'ALLOW_RELATIVE_BOOKING', { Setting_Value: true });
+ok(api('SUBMIT_OR_UPDATE_RESERVATION', { phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1 }, { bookId: 'BK-302', qty: 2, beneficiary: 'أحمد — ابن أخ' }], paymentMethod: 'CASH' }, e1), 'restore relative booking');
 // الإدارة تضيف حجزاً لموظف ثم تعدّله ثم تحذفه
 ok(api('SUBMIT_OR_UPDATE_RESERVATION', { empId: '1002', phaseId: 'PH-03', items: [{ bookId: 'BK-302', qty: 1 }], paymentMethod: 'CASH' }, coord), 'admin adds reservation');
 assert.ok(rows(S.RES_HEADER).find(h => h.Emp_ID === '1002' && h.Phase_ID === 'PH-03').Created_By);

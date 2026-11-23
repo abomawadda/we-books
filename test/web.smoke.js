@@ -76,6 +76,8 @@ const check = (cond, msg) => { if (!cond) throw new Error('CHECK FAILED: ' + msg
   { const g = w.eval('APP').emp.books.find(b => b.Book_ID === 'BK-101').Grade; w.eval('ACTIONS').fGrade(g); await settle(); }
   check(/تحجز الآن لـ/.test(view()), 'pinned «booking now for» bar for grade booking'); await click('[data-act="bookMode"][data-id="manual"]');
   check(d.querySelectorAll('#bookGrid article').length >= 1 && /الصف|رياض|تأسيس/.test(view()), 'grade books with clear title');
+  check(d.querySelector('[data-act="modeChange"]') && !d.querySelector('[data-act="bagOpen"]'), 'chosen method collapses to one line (no repeated choices)');
+  await click('[data-act="modeChange"]');
   await click('[data-act="bagOpen"]'); check(dialog() && /الشنطة/.test(dialog().textContent), 'bag sheet opened');
   { const before = Object.keys(w.eval('APP').cart).length; await click('[data-act="bagPick"]', dialog()); await click('[data-act="bagAdd"]', dialog()); await settle(); check(Object.keys(w.eval('APP').cart).length > before, 'bag added to cart'); w.eval('APP').cart = {}; w.eval('refreshCartViews')(); }
   w.eval('Emp').filter.q = 'BK'; w.eval('Emp').filter.grade = ''; w.eval('renderBookGrid')();

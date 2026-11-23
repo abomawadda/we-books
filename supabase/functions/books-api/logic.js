@@ -1375,7 +1375,9 @@ const OperationsEngine = {
           if (trk) trackOfKey[k] = trk;
         }
       });
-      const bens = {}; Object.keys(wanted).forEach(k => { if (benOf(k)) bens[benOf(k)] = 1; });
+      // أبناء الموظف («… — ابن/ابنة») ليسوا أقارب: لا يحتاجون إذن حجز الأقارب ولا يُحسبون في حده
+      const ownKid = b => /\s—\s(ابن|ابنة)$/.test(b);
+      const bens = {}; Object.keys(wanted).forEach(k => { if (benOf(k) && !ownKid(benOf(k))) bens[benOf(k)] = 1; });
       if (Object.keys(bens).length) {
         Util.require(allowRel || !isEmpPortal, "الحجز للأقارب غير متاح حالياً.");
         Util.require(Object.keys(bens).length <= (settings.MAX_RELATIVES || 5), "الحد الأقصى للأقارب " + (settings.MAX_RELATIVES || 5) + ".");

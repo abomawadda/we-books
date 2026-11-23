@@ -947,7 +947,7 @@ on("wlSaveBag", () => {
   const sel = (typeof BAG !== "undefined" && BAG.rows ? BAG.rows : []).filter(r => r.on);
   if (!sel.length) return toast("اختر كتاباً واحداً على الأقل", "info");
   const wl = wlMap(); let added = 0;
-  sel.forEach(r => { if (r.pick) { wl[r.pick] = Math.max(wl[r.pick] || 0, r.qty || 1); added++; } });
+  sel.forEach(r => Object.keys(r.sel || {}).forEach(id => { wl[id] = Math.max(wl[id] || 0, r.sel[id]); added++; }));
   wlPersist();
   if (typeof BAG !== "undefined" && BAG.m) { BAG.m.close(); BAG.m = null; }
   toast(`⭐ تم حفظ ${booksWord(added)} من الشنطة في قائمتك للمرحلة القادمة`, "success");
