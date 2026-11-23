@@ -483,14 +483,18 @@ const gradeTracks = g => (((APP.emp && APP.emp.settings) || {}).GRADE_TRACKS || 
 const myKids = () => ((APP.emp && APP.emp.employee && APP.emp.employee.kids) || []).filter(k => k.grade);
 const kidEmoji = k => k.rel ? "🧒" : k.gender === "g" ? "👧" : "👦";
 const kidName = (k, i) => k.name || (k.gender === "g" ? "ابنتي" : "ابني") + (i ? " " + (i + 1) : "");
-/** اسم المستفيد في الحجز: فارغ لأبناء الموظف، و«الاسم — الصلة» للقريب */
-const kidBen = k => k && k.rel ? String(k.name).trim() + " — " + k.rel : "";
+/** اسم المستفيد في الحجز «الاسم — الصلة»: للقريب بصلته، ولأبناء الموظف «— ابن/ابنة» (بدون اسم: «ابني/بنتي + الصف»)
+ *  — كده ابنين في نفس المرحلة يبقى لكل واحد حجزه حتى لو نفس الكتاب. الحجوزات القديمة بمستفيد فارغ تتطابق بالصف (توافق). */
+const kidBen = k => !k ? "" : k.rel ? String(k.name).trim() + " — " + k.rel
+  : (String(k.name || "").trim() || (k.gender === "g" ? "بنتي" : "ابني") + " " + gradeShort(k.grade)) + " — " + (k.gender === "g" ? "ابنة" : "ابن");
+/** هل سطر السلة/الحجز ده يخص الفرد ده؟ (بالمستفيد، أو للقديم الفارغ: ابن الموظف بنفس الصف) */
+const kidOwns = (k, ben, grade) => ben ? ben === kidBen(k) : !k.rel && grade === k.grade;
 const RELS = ["ابن أخ", "ابنة أخ", "ابن أخت", "ابنة أخت", "حفيد", "حفيدة", "أخ", "أخت", "ابن عم", "ابنة عم", "ابن خال", "ابنة خال", "أخرى"];
 /** النوع من صلة القرابة تلقائياً (ابن/أخ/حفيد ← ولد، ابنة/أخت/حفيدة ← بنت)؛ «أخرى» يختارها الموظف */
 const relGender = r => /^(ابنة|بنت|أخت|حفيدة)/.test(String(r || "")) ? "g" : r && r !== "أخرى" ? "b" : null;
 const kidTypeTxt = t => t ? "مدارس " + t : "كل المدارس";
 /** كم كتاب في السلة لصف هذا الابن */
-const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && (k.rel ? bn(id) === kidBen(k) : b.Grade === k.grade && !bn(id)); }).reduce((s, id) => s + APP.cart[id], 0);
+const kidCartCount = k => Object.keys(APP.cart || {}).filter(id => { const b = (APP.emp.books || []).find(x => x.Book_ID === bk(id)); return b && kidOwns(k, bn(id), b.Grade); }).reduce((s, id) => s + APP.cart[id], 0);
 const kidAvail = k => (APP.emp.books || []).filter(b => b.Grade === k.grade && typeOk(b, k.type, k.track || "")).length;
 function openKid(i) { const k = myKids()[i]; if (!k) return; Emp.filter.grade = k.grade; Emp.filter.type = k.type || ""; Emp.filter.track = k.track || ""; Emp.filter.q = ""; Emp.kidIx = i;
   Emp.ben = kidBen(k); if (Emp.ben && !Emp.bens.includes(Emp.ben)) Emp.bens.push(Emp.ben); if (Router.current !== "/e/books") Router.go("/e/books"); else Shell.rerender(); scrollTo({ top: 0 }); }
@@ -646,8 +650,8 @@ on("kdDel", async () => {
   const same = x => (x.name || "") === (k.name || "") && (x.rel || "") === (k.rel || "") && x.grade === k.grade && (x.gender || "b") === (k.gender || "b");
   const saved = (r.employee.kids || []).some(same);
   // كتب الابن تُعرف بالصف (أبناؤك) أو بالاسم (القريب) — لو فاضل ابن تاني بنفس الصف تفضل كتب الصف له
-  const sharedGrade = !ben && KD.list.some((x, ix) => ix !== KD.i && !x.rel && x.grade === k.grade);
-  const mine = (bid, b2) => ben ? b2 === ben : (!b2 && (bm[bid] || {}).Grade === k.grade);
+  const sharedGrade = false; // كل ابن له مستفيد خاص به («الاسم — ابن») فكتبه لا تُشارك مع أخ في نفس الصف
+  const mine = (bid, b2) => kidOwns(k, b2, (bm[bid] || {}).Grade);
   const its = (r.myReservationItems || []).filter(i => mine(i.Book_ID, i.Beneficiary) && !String(i.Allocation_Status).startsWith("Cancelled") && i.Allocation_Status !== "Carried_Forward" && n(i.Requested_Qty) > 0);
   const cur = its.filter(i => i.Phase_ID === APP.phaseId), old = its.filter(i => i.Phase_ID !== APP.phaseId);
   const keys = k.grade && !sharedGrade ? Object.keys(APP.cart || {}).filter(key => mine(bk(key), bn(key))) : [];
@@ -683,13 +687,16 @@ on("kdSave", async () => {
   const noName = kids.findIndex(k => k.rel && !k.name); if (noName >= 0) { KD.i = KD.list.indexOf(KD.list.filter(k => k.grade)[noName]); kdRender(); return toast("اكتب اسم القريب", "warning"); }
   const seen = {}, dup = kids.find(k => { const key = (k.name + "|" + k.rel).trim(); if (k.name && seen[key]) return true; seen[key] = 1; return false; });
   if (dup) return toast(`الاسم «${dup.name}» متكرر — غيّر واحد منهم`, "warning");
+  const sameG = {}, clash = kids.find(k => { if (k.rel) return false; const key = k.grade + "|" + (k.name || "") + "|" + k.gender; if (sameG[key]) return true; sameG[key] = 1; return false; });
+  if (clash) { KD.i = KD.list.findIndex(k => !k.rel && k.grade === clash.grade && !(k.name || "").trim()); if (KD.i < 0) KD.i = 0; kdRender();
+    return toast(`عندك أكتر من ${clash.gender === "g" ? "بنت" : "ابن"} في ${gradeShort(clash.grade)} — اكتب اسم كل واحد علشان كل واحد ياخد كتبه`, "warning"); }
   // تغيير صف فرد مسجّل: كتب صفه القديم في السلة (المرحلة المفتوحة) تتشال — بعد ما نعرّفه
   const bm0 = Emp.bookMap(), gradeChg = KD.list.filter(k => k._saved && k._origGrade && k.grade && k.grade !== k._origGrade);
   const dropKeys = [];
   gradeChg.forEach(k => { const shared = !k.rel && KD.list.some(x => x !== k && !x.rel && x.grade === k._origGrade);
     if (shared) return;
     Object.keys(APP.cart || {}).forEach(key => { const b = bm0[bk(key)] || {}; if (b.Grade !== k._origGrade) return;
-      if (k.rel ? bn(key) === k._origBen : !bn(key)) dropKeys.push(key); }); });
+      if (bn(key) ? bn(key) === k._origBen : !k.rel) dropKeys.push(key); }); });
   if (dropKeys.length) {
     const nm = gradeChg.map(k => (k.name || (k.rel ? "القريب" : k.gender === "g" ? "بنتك" : "ابنك")) + ": " + gradeShort(k._origGrade) + " ← " + gradeShort(k.grade)).join("\n");
     const cnt = dropKeys.reduce((a, key) => a + n(APP.cart[key]), 0);
@@ -893,41 +900,50 @@ function bagBuild() {
   const series = Object.keys(cover).sort((a, b) => cover[b].size - cover[a].size || (pr[b] || 0) - (pr[a] || 0))[0];
   return Object.keys(bySub).sort((a, b) => subjRank(a) - subjRank(b) || a.localeCompare(b, "ar")).map(s => {
     const opts = bySub[s].slice().sort((a, b) => (a.Publisher === series ? -1 : 0) - (b.Publisher === series ? -1 : 0) || (pr[b.Publisher] || 0) - (pr[a.Publisher] || 0) || ((a.Book_Status === "Pricing") - (b.Book_Status === "Pricing")) || n(a.Emp_Selling_Price) - n(b.Emp_Selling_Price));
-    const inCart = opts.find(b => APP.cart[ck(b.Book_ID, Emp.ben)]);
-    return { s, opts, pick: inCart ? inCart.Book_ID : "", on: !!inCart, had: !!inCart, qty: inCart ? APP.cart[ck(inCart.Book_ID, Emp.ben)] : 1 }; // لا اختيار مسبق: الموظف يختار بنفسه من كل كتب المادة
+    const sel = {}; opts.forEach(b => { const q = APP.cart[ck(b.Book_ID, Emp.ben)]; if (q) sel[b.Book_ID] = q; });
+    return bagRow(s, opts, sel); // لا اختيار مسبق: الموظف يختار بنفسه — ممكن أكتر من كتاب للمادة (شرح + تدريبات) وكل كتاب بعدد نسخه
   });
 }
+/** صف مادة في الشنطة: sel = {كود الكتاب: عدد النسخ}؛ on = فيه اختيار */
+function bagRow(s, opts, sel) {
+  const r = { s, opts, sel: sel || {}, had: Object.keys(sel || {}).length > 0 };
+  Object.defineProperty(r, "on", { get() { return Object.keys(this.sel).length > 0; } });
+  return r;
+}
+/** يطبّق اختيارات صف الشنطة على السلة: المختار بعدده، وغير المختار من كتب المادة يتشال */
+function bagApplyRow(r) { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (r.sel[o.Book_ID]) APP.cart[k] = r.sel[o.Book_ID]; else delete APP.cart[k]; }); }
 function bagHTML() {
-  const m = Emp.bookMap(), sel = BAG.rows.filter(r => r.on && m[r.pick]), tot = sel.reduce((a, r) => a + n(m[r.pick].Emp_Selling_Price) * (r.qty || 1), 0), cov = sel.reduce((a, r) => a + n(m[r.pick].Cover_Price) * (r.qty || 1), 0);
-  const opt = (r, i, o) => { const on = r.on && o.Book_ID === r.pick, lg = pubLogo(o.Publisher);
+  const m = Emp.bookMap(), sel = []; BAG.rows.forEach(r => Object.keys(r.sel).forEach(id => { if (m[id]) sel.push({ b: m[id], qty: r.sel[id] }); }));
+  const tot = sel.reduce((a, x) => a + n(x.b.Emp_Selling_Price) * x.qty, 0), cov = sel.reduce((a, x) => a + n(x.b.Cover_Price) * x.qty, 0);
+  const opt = (r, i, o) => { const on = !!r.sel[o.Book_ID], lg = pubLogo(o.Publisher);
     return `<button class="w-full flex items-center gap-2.5 rounded-xl px-2.5 py-2 text-right ring-1 transition active:scale-[.99] ${on ? "bg-brand-50 ring-2 ring-brand-600" : "bg-white ring-slate-200"}" data-act="bagPick" data-id="${i}|${esc(o.Book_ID)}" aria-pressed="${on}">
       <span class="w-5 h-5 rounded-full shrink-0 flex items-center justify-center ${on ? "bg-brand-600 text-white" : "ring-2 ring-slate-300"}">${on ? ic("check", "!w-3 !h-3") : ""}</span>
       ${lg ? `<span class="w-9 h-7 rounded-md bg-white ring-1 ring-slate-100 p-0.5 shrink-0 flex items-center justify-center"><img src="${esc(lg)}" alt="" class="max-w-full max-h-full object-contain" loading="lazy"></span>` : ""}
       <span class="flex-1 min-w-0 leading-tight"><b class="block text-[13.5px] text-slate-900 truncate">${esc(o.Publisher)}</b>${o.Book_Part ? `<span class="block text-[11px] text-slate-500 truncate">${esc(o.Book_Part)}</span>` : ""}</span>
       <span class="text-left shrink-0">${o.Book_Status === "Pricing" ? `<span class="text-[11px] font-bold text-amber-700">🚚 يتسعّر مع الشحنة</span>` : `<b class="block num text-brand-800 text-[13.5px]">${fmt(o.Emp_Selling_Price)}</b><span class="block text-[10.5px] text-slate-400 line-through num">${fmt(o.Cover_Price)}</span>`}</span></button>`; };
-  const nSub = BAG.rows.length, nOn = BAG.rows.filter(r => r.on).length, copies = sel.reduce((a, r) => a + (r.qty || 1), 0);
+  const nSub = BAG.rows.length, nOn = BAG.rows.filter(r => r.on).length, copies = sel.reduce((a, x) => a + x.qty, 0);
   return `<div class="relative overflow-hidden rounded-3xl p-4 mb-4 text-white shadow-soft" style="background:linear-gradient(135deg,#0f3d63 0%,#1d5f8f 60%,#2f7fb5 100%)">
     <span class="absolute -left-6 -top-6 w-28 h-28 rounded-full bg-white/10"></span><span class="absolute left-10 -bottom-10 w-24 h-24 rounded-full bg-gold-400/20"></span>
     <div class="relative flex items-start gap-3"><span class="w-12 h-12 rounded-2xl bg-white/15 ring-1 ring-white/25 flex items-center justify-center text-[26px] shrink-0">🎒</span>
       <div class="flex-1 min-w-0"><div class="text-[11px] font-semibold tracking-wide text-gold-200">شنطة ${esc(gradeTitle(Emp.filter.grade))}</div>
-        <div class="font-display font-bold text-[17px] leading-snug mt-0.5">${gTxt("اختار كتاب لكل مادة", "اختاري كتاب لكل مادة")}</div>
-        <div class="text-[12px] text-brand-100 mt-1 leading-relaxed">تحت كل مادة كل الكتب المتاحة منها · ${gTxt("حدد", "حددي")} عدد النسخ بـ − و + · الضغط مرة تانية يلغي الاختيار</div></div></div>
+        <div class="font-display font-bold text-[17px] leading-snug mt-0.5">${gTxt("اختار كتب كل مادة", "اختاري كتب كل مادة")}</div>
+        <div class="text-[12px] text-brand-100 mt-1 leading-relaxed">تحت كل مادة كل كتبها · ${gTxt("تقدر تختار", "تقدري تختاري")} أكتر من كتاب للمادة (شرح + تدريبات) · عدد النسخ لكل كتاب بـ − و + · الضغط مرة تانية يلغي</div></div></div>
     <div class="relative mt-3.5"><div class="flex justify-between text-[11.5px] text-brand-100 mb-1.5"><span>تم اختيار <b class="num text-white">${nOn}</b> من <span class="num">${nSub}</span> مادة</span><span>${copies ? `<b class="num text-white">${copies}</b> نسخة` : ""}</span></div>
       <div class="h-2 rounded-full bg-white/15 overflow-hidden"><span class="block h-full rounded-full bg-gold-400 transition-all" style="width:${nSub ? Math.round(nOn / nSub * 100) : 0}%"></span></div></div></div>
   <div class="space-y-3">${BAG.rows.map((r, i) => { const [c1] = toneOf(r.s); return `<section class="rounded-2xl ring-1 ring-slate-200 bg-slate-50/60 p-3">
-    <div class="flex items-center gap-2 mb-2"><span class="w-1.5 h-6 rounded-full" style="background:${c1}"></span><b class="text-[15px] text-slate-900 flex-1">${esc(r.s)}</b><span class="text-[11.5px] ${r.on ? "font-bold text-emerald-700" : "text-slate-400"}">${r.on ? "✓ تم الاختيار" : r.opts.length + (r.opts.length > 2 ? " كتب" : r.opts.length === 2 ? " كتابين" : " كتاب")}</span></div>
+    <div class="flex items-center gap-2 mb-2"><span class="w-1.5 h-6 rounded-full" style="background:${c1}"></span><b class="text-[15px] text-slate-900 flex-1">${esc(r.s)}</b><span class="text-[11.5px] ${r.on ? "font-bold text-emerald-700" : "text-slate-400"}">${r.on ? "✓ " + (Object.keys(r.sel).length > 1 ? Object.keys(r.sel).length + " كتب" : "تم الاختيار") : r.opts.length + (r.opts.length > 2 ? " كتب" : r.opts.length === 2 ? " كتابين" : " كتاب")}</span></div>
     <div class="grid sm:grid-cols-2 gap-1.5">${r.opts.map(o => opt(r, i, o)).join("")}</div>
-    ${r.on ? `<div class="mt-2.5 flex items-center justify-between gap-2 rounded-2xl px-3 py-2.5 text-white shadow-soft" style="background:linear-gradient(135deg,#552c83 0%,#7a45b8 55%,#c99a2e 130%)"><span class="flex items-center gap-2 text-[13px] font-bold"><span class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">${ic("copy", "!w-4 !h-4")}</span>عدد النسخ</span>
-      <span class="flex items-center gap-1.5 rounded-xl bg-white/15 ring-1 ring-white/25 p-1"><button type="button" class="w-9 h-9 rounded-lg bg-white/90 text-brand-800 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|-1" aria-label="أقل" ${(r.qty || 1) <= 1 ? "disabled" : ""}>−</button>
-        <b class="w-8 text-center num text-[17px] text-white">${r.qty || 1}</b>
-        <button type="button" class="w-9 h-9 rounded-lg bg-gold-400 text-brand-950 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|1" aria-label="أكثر" ${(r.qty || 1) >= 10 ? "disabled" : ""}>+</button></span></div>` : ""}</section>`; }).join("")}</div>
+    ${Object.keys(r.sel).map(id => { const o = r.opts.find(x => x.Book_ID === id) || {}, q = r.sel[id]; return `<div class="mt-2 flex items-center justify-between gap-2 rounded-2xl px-3 py-2 text-white shadow-soft" style="background:linear-gradient(135deg,#552c83 0%,#7a45b8 55%,#c99a2e 130%)"><span class="flex-1 min-w-0 text-[12.5px] font-bold leading-tight"><span class="block truncate">${esc(o.Publisher || id)}</span>${o.Book_Part ? `<span class="block text-[11px] font-normal text-brand-100 truncate">${esc(o.Book_Part)}</span>` : ""}</span>
+      <span class="flex items-center gap-1.5 rounded-xl bg-white/15 ring-1 ring-white/25 p-1 shrink-0"><button type="button" class="w-9 h-9 rounded-lg bg-white/90 text-brand-800 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|${esc(id)}|-1" aria-label="أقل" ${q <= 1 ? "disabled" : ""}>−</button>
+        <b class="w-8 text-center num text-[17px] text-white">${q}</b>
+        <button type="button" class="w-9 h-9 rounded-lg bg-gold-400 text-brand-950 text-lg font-bold active:scale-90 transition disabled:opacity-40" data-act="bagQty" data-id="${i}|${esc(id)}|1" aria-label="أكثر" ${q >= 10 ? "disabled" : ""}>+</button></span></div>`; }).join("")}</section>`; }).join("")}</div>
   <div class="rounded-2xl bg-slate-50 p-3.5 mt-3 text-[13.5px] space-y-1">
     <div class="flex justify-between text-slate-500"><span>${booksWord(copies)} قبل الخصم</span><span class="line-through num">${moneyTxt(cov)}</span></div>
     <div class="flex justify-between text-emerald-600 font-semibold"><span>توفيرك</span><span class="num">${moneyTxt(cov - tot)}</span></div>
     <div class="flex justify-between items-baseline pt-1 border-t border-slate-200"><b>إجمالي الشنطة</b><span class="text-xl font-bold text-brand-800 num">${money(tot)}</span></div></div>`;
 }
-const bagRender = () => { if (BAG.inline && $("#wzBag")) return bagRenderInline(); if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.filter(r => r.on).length, b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
-on("bagOpen", () => { BAG.inline = false; BAG._for = "";
+const bagRender = () => { if (BAG.inline && $("#wzBag")) return bagRenderInline(); if (!BAG.m) return; BAG.m.body.innerHTML = bagHTML(); const c = BAG.rows.reduce((a, r) => a + Object.keys(r.sel).length, 0), b = BAG.m.root.querySelector("[data-act=bagAdd]"); if (b) { b.disabled = !c; b.innerHTML = `${ic("shopping-cart")} أضف ${c ? booksWord(c) : ""} للسلة`; } };
+on("bagOpen", () => { BAG.inline = false; BAG._for = ""; Emp.modePick = false;
   if (!Emp.filter.grade && !(Emp.browseGrades && Emp.browseGrades.length)) return toast("اختر الصف أولاً", "info");
   BAG.rows = bagBuild();
   if (!BAG.rows.length) return toast("لا توجد كتب مسعّرة لهذا الاختيار بعد", "info");
@@ -939,12 +955,12 @@ on("bagOpen", () => { BAG.inline = false; BAG._for = "";
       : `<div class="grid gap-2 w-full"><button type="button" class="btn btn-primary w-full" data-act="wlSaveBag">⭐ احفظ الشنطة لقائمتي القادمة</button><div class="text-[11.5px] text-slate-500 text-center">معاينة وتجهيز — تتحول لحجز بضغطة فور فتح المرحلة</div></div>` });
   bagRender();
 });
-on("bagQty", v => { const [i, d] = String(v).split("|"), r = BAG.rows[+i]; r.qty = Math.min(10, Math.max(1, (r.qty || 1) + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
-on("bagPick", v => { const [i, id] = String(v).split("|"), r = BAG.rows[+i]; if (r.on && r.pick === id) r.on = false; else { r.pick = id; r.on = true; } bagRender(); });
+on("bagQty", v => { const [i, id, d] = String(v).split("|"), r = BAG.rows[+i]; if (!r.sel[id]) return; r.sel[id] = Math.min(10, Math.max(1, r.sel[id] + +d)); bagRender(); if (navigator.vibrate) navigator.vibrate(6); });
+on("bagPick", v => { const [i, id] = String(v).split("|"), r = BAG.rows[+i]; if (r.sel[id]) delete r.sel[id]; else r.sel[id] = 1; bagRender(); });
 on("bagAdd", () => {
   if (!Emp.open()) return toast("الحجز مغلق حالياً", "warning");
-  const sel = BAG.rows.filter(r => r.on); let added = 0;
-  sel.forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k] && r.had) delete APP.cart[k]; }); const k = ck(r.pick, Emp.ben); if (APP.cart[k] !== (r.qty || 1)) { added += (r.qty || 1) - (APP.cart[k] || 0) > 0 ? (r.qty || 1) - (APP.cart[k] || 0) : 0; APP.cart[k] = r.qty || 1; } });
+  let added = 0;
+  BAG.rows.forEach(r => { r.opts.forEach(o => { const q = r.sel[o.Book_ID] || 0, k = ck(o.Book_ID, Emp.ben); if (q > (APP.cart[k] || 0)) added += q - (APP.cart[k] || 0); }); if (r.on || r.had) bagApplyRow(r); });
   Emp.dirty = true; if (BAG.m) BAG.m.close(); BAG.m = null;
   renderBookGrid(); refreshCartViews();
   toast(added ? `🎒 الشنطة جاهزة! اتضاف ${booksWord(added)} للسلة` : "الشنطة في السلة بالفعل ✅", "success");
@@ -1031,10 +1047,16 @@ function bookModeTabs() {
     <span class="w-11 h-11 rounded-xl flex items-center justify-center text-[24px] shrink-0 ${m === id ? "bg-white/15" : "bg-slate-50"}">${e}</span>
     <span class="flex-1 min-w-0 leading-tight"><b class="block text-[14.5px]">${ttl}</b><span class="block text-[12px] mt-0.5 ${m === id ? "text-brand-100" : "text-slate-500"}">${sub}</span></span>
     <span class="shrink-0 ${m === id ? "text-gold-300" : "text-slate-300"}">${ic(m === id ? "circle-check" : "chevron-left")}</span></button>`;
+  // بعد اختيار الطريقة: سطر واحد مختصر بدل تكرار الاختيارات الثلاثة
+  if (m && !Emp.modePick) { const L = { manual: ["🔍", "أختار بنفسي"], series: ["📚", open ? "حجز بالسلسلة" : "تصفّح بالسلسلة"] }[m] || ["🔍", m];
+    return `<section class="mb-3"><div class="flex items-center gap-2 rounded-2xl bg-brand-50 ring-1 ring-brand-200 px-3 py-2"><span class="text-[20px]">${L[0]}</span>
+      <span class="flex-1 min-w-0 text-[13px] text-slate-600">${open ? "طريقة الحجز" : "طريقة التصفّح"}: <b class="text-brand-800">${L[1]}</b></span>
+      <button type="button" class="text-[12px] font-bold px-3 py-1.5 rounded-xl bg-white ring-1 ring-brand-200 text-brand-700" data-act="modeChange">تغيير</button></div></section>`; }
   return `<section class="mb-4"><div class="text-[13px] font-bold text-slate-700 mb-2">${open ? gTxt("تحب تحجز إزاي؟", "تحبي تحجزي إزاي؟") : "طريقة التصفّح والمعاينة"}</div>
     <div class="grid gap-2">${t("manual", "🔍", "أختار بنفسي", "كل الكتب مادة مادة — كتاب بكتاب", "bookMode")}${t("bag", "🎒", "جهّز الشنطة", open ? "كل مادة وكتبها — اختار لكل مادة بسرعة" : "معاينة كتاب لكل مادة وحساب إجمالي الشنطة", "bagOpen")}${t("series", "📚", open ? "حجز بالسلسلة" : "تصفّح بالسلسلة", open ? "كتب ناشر واحد بضغطة" : "كتب كل ناشر مجمّعة مع السعر والتوفير", "bookMode")}</div></section>`;
 }
-on("bookMode", v => { Emp.bookMode = Emp.bookMode === v ? (Emp.open() ? "" : "manual") : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
+on("modeChange", () => { Emp.modePick = true; renderBookGrid(); });
+on("bookMode", v => { Emp.modePick = false; Emp.bookMode = Emp.bookMode === v ? (Emp.open() ? "" : "manual") : v; renderBookGrid(); const g = $("#bookGrid"); if (Emp.bookMode && g) { const y = g.getBoundingClientRect().top + scrollY - 140; if (y < scrollY) scrollTo({ top: y, behavior: "smooth" }); } });
 on("browseDirect", mode => {
   const m = mode || "manual";
   let gs = Array.isArray(Emp.browseGrades) && Emp.browseGrades.length ? Emp.browseGrades.slice() : [];
@@ -1119,7 +1141,7 @@ function renderBookGrid() {
     </div>` : "";
     const groups = []; sorted.forEach(b => { const key = multi ? `${b.Grade} · ${b.Subject}` : b.Subject; let g = groups.find(x => x.k === key); if (!g) groups.push(g = { k: key, sub: b.Subject, grade: b.Grade, items: [] }); g.items.push(b); });
     el.innerHTML = !list.length ? multiBar + Art.empty("books", "لا توجد كتب لهذا الاختيار", f.type ? (curKid() ? "مفيش كتب مسجّلة لمدارس " + f.type + " في الصف ده لسه." : "جرّب «كل المدارس».") : "", f.type ? `<button class="btn btn-outline mt-4" data-act="fTypeAll">${ic("layout-grid")} اعرض كتب كل المدارس</button>` : "")
-      : multiBar + bookModeTabs() + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? `<div id="cartDiv">${cartDivider()}</div>` : Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.sub === "__p" ? "#f59e0b" : toneOf(g.sub)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
+      : multiBar + (Emp.wzManual ? "" : bookModeTabs()) + (Emp.open() && !Emp.wzManual && !Emp.bookMode ? `<div id="cartDiv">${cartDivider()}</div>` : Emp.bookMode === "series" ? bundles(list) + `<div id="cartDiv">${cartDivider()}</div>` : groups.map(g => `<section class="mb-5 scroll-mt-48" id="sub_${esc(g.k)}"><div class="subj-head sticky z-[19] mb-2.5 flex items-center gap-2 rounded-2xl px-2 py-1.5 ring-1 shadow-sm" style="top:var(--subjTop,8.5rem);--tc:${g.sub === "__p" ? "#f59e0b" : toneOf(g.sub)[0]};background:linear-gradient(to left,color-mix(in srgb,var(--tc) 18%,#fff) 0%,#fff 80%);--tw-ring-color:color-mix(in srgb,var(--tc) 30%,#fff)">
           <span class="w-7 h-7 rounded-full flex items-center justify-center text-white shrink-0 shadow-soft" style="background:var(--tc)">${ic("book-open", "!w-3.5 !h-3.5")}</span><h3 class="font-display font-bold text-slate-900 text-[14.5px] flex-1 min-w-0 truncate">${g.sub === "__p" ? "قريباً (جاري التسعير)" : esc(g.sub)}<span class="font-sans font-semibold text-[12px] text-slate-500"> — ${esc(gradeShort(g.grade || Emp.filter.grade || ""))}</span></h3><span class="text-[12px] text-slate-400 num">${g.items.length}</span>
           ${g.sub !== "__p" && subjRank(g.sub) < 8 ? `<span class="text-[10.5px] font-bold text-brand-600 bg-brand-50 rounded-full px-2 py-0.5">مادة أساسية</span>` : ""}</div>
         <div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">${g.items.map(bookCard).join("")}</div></section>`).join("") + `<div id="nextKid">${nextKidCard()}</div><div id="cartDiv">${cartDivider()}</div>`);
@@ -1364,7 +1386,7 @@ function wzFamily() {
         </div>
       </section>`;
   }
-  const wzMemberLines = m => { const b = kidBen(m); return cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade)); };
+  const wzMemberLines = m => cartLines().filter(l => kidOwns(m, l.ben, l.grade));
   const ms = wzMembers();
   const pickCard = (k, i) => {
     const mIdx = ms.findIndex(x => !x._temp && x._ix === i);
@@ -1448,7 +1470,7 @@ function wzMember() {
   // الأشهر أو السلسلة: قائمة مقترحة قابلة للتعديل
   if (!BAG._for || BAG._for !== WZ.i + "|" + mode + "|" + (WZ.pub[WZ.i] || "")) {
     BAG.rows = bagBuild(); BAG._for = WZ.i + "|" + mode + "|" + (WZ.pub[WZ.i] || "");
-    if (mode === "series") BAG.rows.forEach(r => { const o = r.opts.find(x => x.Publisher === WZ.pub[WZ.i]); if (o) { r.pick = o.Book_ID; r.on = true; } else r.on = r.had; });
+    if (mode === "series") BAG.rows.forEach(r => { const o = r.opts.find(x => x.Publisher === WZ.pub[WZ.i]); if (o && !r.on) r.sel[o.Book_ID] = 1; });
   }
   BAG.inline = true;
   return head + (BAG.rows.length ? `<div id="wzBag">${bagHTML()}</div>` : Art.empty("books", "لا توجد كتب مسعّرة لهذا الصف بعد", gTxt("تقدر تكمل لباقي الأفراد", "تقدري تكمّلي لباقي الأفراد")))
@@ -1458,7 +1480,7 @@ function wzMember() {
 }
 function wzAfterMemberHTML() {
   const ms = wzMembers(), m = ms[WZ.i]; if (!m) return wzReviewHTML();
-  const b = kidBen(m), lines = cartLines().filter(l => b ? l.ben === b : (!l.ben && l.grade === m.grade));
+  const lines = cartLines().filter(l => kidOwns(m, l.ben, l.grade));
   const rem = ms.map((x, idx) => ({ m: x, idx })).filter(x => x.idx !== WZ.i && !wzSt("done", x.idx) && !wzSt("later", x.idx) && !wzSt("noBooks", x.idx));
   return `
     <div class="rounded-3xl p-5 bg-white ring-1 ring-emerald-200 shadow-sm space-y-4 text-center">
@@ -1578,8 +1600,7 @@ on("wzModeReset", () => { delete WZ.mode[WZ.i]; delete WZ.pub[WZ.i]; BAG._for = 
 on("wzPub", p => { WZ.pub[WZ.i] = p; BAG._for = ""; wzSave(); Shell.rerender(); });
 const wzNextUnbooked = () => { const ms = wzMembers(); return ms.findIndex((_, idx) => idx !== WZ.i && !wzSt("done", idx) && !wzSt("later", idx) && !wzSt("noBooks", idx)); };
 on("wzNext", () => {
-  BAG.rows.filter(r => r.on).forEach(r => { r.opts.forEach(o => { const k = ck(o.Book_ID, Emp.ben); if (o.Book_ID !== r.pick && APP.cart[k]) delete APP.cart[k]; }); APP.cart[ck(r.pick, Emp.ben)] = r.qty || 1; });
-  BAG.rows.filter(r => !r.on).forEach(r => r.opts.forEach(o => { delete APP.cart[ck(o.Book_ID, Emp.ben)]; }));
+  BAG.rows.forEach(bagApplyRow);
   wzSet("done", WZ.i, true); wzSet("later", WZ.i, false); wzSet("noBooks", WZ.i, false);
   Emp.dirty = true; refreshCartViews(); BAG._for = ""; BAG.inline = false; wzGo("afterMember", WZ.i);
 });
